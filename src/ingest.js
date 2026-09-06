@@ -59,8 +59,17 @@ export async function runIngest(env, db, opts = {}) {
   const bridgeRow = rows.find((r) => r.hash === bridge);
 
   // --- 2. Bisherigen Stand laden ---------------------------------------
+  //
+  // Auch die Stammdaten aus `addresses` mitladen. Sie werden hier nicht
+  // gebraucht, um sie anzuzeigen, sondern um VERGLEICHEN zu koennen: nur was
+  // sich wirklich geaendert hat, wird spaeter geschrieben. Siehe die
+  // Schreibbudget-Begruendung weiter unten.
   const prevRes = await db
-    .prepare("SELECT address, balance_wei, etn, rank_pos, tier, tx_count, updated_at FROM current_balances")
+    .prepare(
+      "SELECT c.address, c.balance_wei, c.etn, c.rank_pos, c.tier, c.tx_count, c.updated_at," +
+        " c.in_top_n, a.checksum_hash, a.is_contract, a.contract_name, a.impl_name, a.ens_name" +
+        " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address"
+    )
     .all();
   const prev = new Map((prevRes.results ?? []).map((r) => [r.address, r]));
   const bootstrap = prev.size === 0;
@@ -133,18 +142,37 @@ export async function runIngest(env, db, opts = {}) {
     const p = prev.get(r.hash);
     const tier = tierFor(r.etn).key;
 
-    stmts.push(
-      upsertAddr.bind(
-        r.hash,
-        r.checksum,
-        takenAt,
-        takenAt,
-        r.is_contract,
-        r.contract_name,
-        r.impl_name,
-        r.ens_name
-      )
-    );
+    // SCHREIBBUDGET: D1 erlaubt im Gratis-Tarif 100.000 geschriebene Zeilen
+    // pro Tag. Vorher lief hier ein Upsert fuer JEDE Adresse bei JEDEM
+    // Snapshot - 3.000 Zeilen alle 30 Minuten, also 144.000 taeglich, nur um
+    // last_seen fortzuschreiben. Zusammen mit dem touchCurrent weiter unten
+    // waren es rund 289.000 Zeilen taeglich; das Limit wurde entsprechend
+    // jeden Tag gerissen und die Jobs brachen ab.
+    //
+    // Tatsaechlich aendern sich pro Snapshot etwa NEUN von 3.000 Adressen.
+    // Darum wird hier nur noch geschrieben, was sich wirklich unterscheidet.
+    const stammdatenNeu =
+      !p ||
+      p.checksum_hash !== r.checksum ||
+      (p.is_contract ?? 0) !== (r.is_contract ?? 0) ||
+      (r.contract_name && p.contract_name !== r.contract_name) ||
+      (r.impl_name && p.impl_name !== r.impl_name) ||
+      (r.ens_name && p.ens_name !== r.ens_name);
+
+    if (stammdatenNeu) {
+      stmts.push(
+        upsertAddr.bind(
+          r.hash,
+          r.checksum,
+          takenAt,
+          takenAt,
+          r.is_contract,
+          r.contract_name,
+          r.impl_name,
+          r.ens_name
+        )
+      );
+    }
 
     const balanceChanged = !p || p.balance_wei !== r.balance_wei;
 
@@ -219,7 +247,12 @@ export async function runIngest(env, db, opts = {}) {
           });
         }
       }
-    } else {
+    } else if (p.rank_pos !== r.rank_pos || p.in_top_n === 0) {
+      // Balance unveraendert: nur anfassen, wenn sich der RANG verschoben hat
+      // (jemand anderes hat sich bewegt) oder das Wallet aus den Top N
+      // zurueckgekehrt ist. Sonst waeren das ~2.990 ueberfluessige Zeilen pro
+      // Lauf. last_snapshot wird dabei bewusst nicht mehr fortgeschrieben -
+      // die Spalte wird nirgends gelesen.
       stmts.push(touchCurrent.bind(r.rank_pos, snapId, r.hash));
     }
 
@@ -234,8 +267,16 @@ export async function runIngest(env, db, opts = {}) {
   }
 
   // --- 5. Aus den Top N gefallen ---------------------------------------
+  //
+  // Nur die, die BISHER drin waren (in_top_n = 1). Ohne diese Bedingung wird
+  // jede einmal herausgefallene Adresse bei JEDEM weiteren Lauf erneut als
+  // gefallen markiert und loest erneut ein rank_exit-Ereignis aus - dauerhaft,
+  // fuer immer. Bei 7.000 alten Adressen waren das 14.000 ueberfluessige
+  // Schreibvorgaenge pro Lauf und eine Ereignisliste voller Wiederholungen.
   const seen = new Set(rows.map((r) => r.hash));
-  const dropped = [...prev.keys()].filter((a) => !seen.has(a));
+  const dropped = [...prev.entries()]
+    .filter(([a, p]) => !seen.has(a) && p.in_top_n !== 0)
+    .map(([a]) => a);
   for (const a of dropped) {
     stmts.push(markDropped.bind(a));
     if (!bootstrap) {
