@@ -1,0 +1,35 @@
+name: ETN Exchange Detection
+
+# Erkennt automatisch, welche Top-Wallets sich wie eine Boerse/ein Dienst
+# verhalten (Score, siehe src/exchange-detect.js) - NICHT welche Boerse das
+# konkret ist, das bleibt Handarbeit ueber labels.json. Monatlich wie Census
+# und Cluster-Analyse; jederzeit auch per Knopf im Dashboard.
+on:
+  schedule:
+    - cron: "0 5 1 * *" # am 1. jedes Monats, 05:00 UTC (nach Census 03:30, Clusters 04:00)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Nur die groessten N ungelabelten Wallets pruefen (leer = Standard: Top 500)"
+        required: false
+        default: ""
+
+concurrency:
+  group: etn-exchange-detect
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Boersen-Erkennung
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/exchange-detect-remote.mjs "${{ github.event.inputs.limit }}"

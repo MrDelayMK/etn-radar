@@ -1,0 +1,2192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ETN Radar</title>
+<meta name="description" content="Whale and migration tracking for the Electroneum Smart Chain">
+<style>
+:root{
+  --bg:#080b12; --bg2:#0d1220; --card:#111827; --card2:#151d2e; --card3:#1a2436;
+  /* Border-Farben angehoben (waren 1.2:1 / 1.4:1 gegen --card, kaum sichtbar);
+     Tabellen-/Kartenraender sollen erkennbar bleiben, ohne grell zu wirken. */
+  --line:#263a54; --line2:#3d5474;
+  /* tx2/tx3 nochmal angehoben: die erste Korrektur war zwar WCAG-AA-konform
+     (5.7-6.7:1), wirkte bei 10-11px Grossbuchstaben-Labels aber weiterhin
+     "blass" - Kontrastzahl allein erklaert die Lesbarkeit nicht, Gewicht und
+     Groesse zaehlen mit (siehe die font-weight-Ergaenzungen unten bei .kpi .k,
+     .fact .k, h2 etc). Jetzt 6.0-9.6:1, durchgehend AA, meist AAA. */
+  --tx:#e8eef8; --tx2:#a6b6cc; --tx3:#94a1bd;
+  --up:#22d3a7; --down:#f4635e; --warn:#fbbf24; --acc:#5b9cff; --acc2:#a78bfa;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1100px 520px at 12% -8%, #14224a 0%, transparent 60%),
+    radial-gradient(900px 460px at 88% 0%, #0f2f3d 0%, transparent 55%),
+    var(--bg);
+  color:var(--tx); font:15px/1.55 var(--sans); min-height:100vh; padding:0 0 80px;
+}
+.wrap{max-width:1360px;margin:0 auto;padding:0 22px}
+a{color:inherit;text-decoration:none}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.up{color:var(--up)} .down{color:var(--down)} .dim{color:var(--tx2)} .dim3{color:var(--tx3)}
+
+/* ---------- Header ---------- */
+header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+.brand{display:flex;align-items:center;gap:15px}
+.brand .logo{font-size:46px;line-height:1;filter:drop-shadow(0 0 18px #5b9cff70)}
+.brand h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
+.brand .sub{font-size:12.5px;color:var(--tx3);margin-top:2px}
+.hspace{flex:1}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
+  background:var(--card);border:1px solid var(--line);border-radius:9px;
+  font-size:12.5px;color:var(--tx2)
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 9px var(--up)}
+
+/* ---------- Tabs ---------- */
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{
+  background:none;border:0;border-bottom:2px solid transparent;color:var(--tx2);
+  padding:13px 20px;font:620 14.5px var(--sans);cursor:pointer;white-space:nowrap;
+  border-radius:0;transition:.15s;display:flex;align-items:center;gap:9px
+}
+nav button .ic{font-size:19px}
+nav button:hover{color:var(--tx)}
+nav button.on{color:var(--tx);border-bottom-color:var(--acc)}
+.page{display:none}
+.page.on{display:block;animation:ein .18s ease-out}
+@keyframes ein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* ---------- Building blocks ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:19px}
+.grid{display:grid;gap:14px}
+section{margin-top:26px}
+/* Kontrastzahl allein macht kleine Grossbuchstaben-Labels nicht lesbar -
+   font-weight:700 traegt hier mehr zur wahrgenommenen Klarheit bei als jede
+   weitere Aufhellung der Farbe. Gilt fuer alle .k/.nm-span/label-Klassen unten. */
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--tx2);
+   margin-bottom:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);font-weight:400}
+
+/* ---------- Migration block ---------- */
+.mig{
+  background:linear-gradient(160deg,#151f38 0%,#111827 48%,#171227 100%);
+  border:1px solid #2b3a5c;border-radius:20px;padding:26px 26px 22px
+}
+.mig .head{display:flex;align-items:flex-start;gap:26px;flex-wrap:wrap;margin-bottom:22px}
+.mig .lbl{font-size:12.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--warn);
+          display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mig .lbl .ic{font-size:26px}
+.pill{background:#fbbf2418;border:1px solid #fbbf2440;color:var(--warn);
+      padding:4px 11px;border-radius:20px;font-size:11px;letter-spacing:.05em}
+.mig .big{font-size:clamp(42px,6.4vw,68px);font-weight:690;letter-spacing:-.04em;line-height:1}
+.mig .bigsub{margin-top:9px;font-size:15px;color:var(--tx2)}
+.mig .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:13px;flex:1;min-width:300px}
+.fact{background:#0b111e99;border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.fact .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
+.fact .v{font-size:23px;font-weight:650;margin-top:5px;letter-spacing:-.025em}
+.chartcard{background:#0a0f1bb0;border:1px solid var(--line);border-radius:14px;padding:16px 16px 8px}
+.chartcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.conc-legend{display:flex;gap:16px;flex-wrap:wrap}
+.conc-legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)}
+.conc-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.chartholder{position:relative;cursor:crosshair}
+svg.chart{width:100%;display:block}
+.tip{
+  position:absolute;top:10px;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:#0a1120f5;border:1px solid var(--line2);border-radius:10px;padding:9px 13px;
+  font-size:12.5px;line-height:1.5;white-space:nowrap;z-index:5;box-shadow:0 10px 30px #000a
+}
+.tip.on{opacity:1}
+.tip b{display:block;font-size:15px;color:var(--warn)}
+.tip span{display:block;color:var(--tx3);font-size:11.5px}
+.warnbar{
+  margin-top:16px;background:#f4635e12;border:1px solid #f4635e33;border-left:3px solid var(--down);
+  border-radius:10px;padding:13px 16px;font-size:13.5px;color:#ffd4d2
+}
+.projbig{
+  margin-top:18px;background:linear-gradient(120deg,#f4635e1c,#fbbf2414);
+  border:1px solid #f4635e40;border-left:4px solid var(--down);border-radius:14px;
+  padding:18px 22px;font-size:16.5px;line-height:1.55;color:#ffe1df
+}
+.projbig b{color:#fff;font-weight:700}
+.migbar{height:10px;background:#0a0f1b;border-radius:6px;overflow:hidden;margin-top:14px;
+        border:1px solid var(--line);display:flex}
+.migbar i{display:block;height:100%}
+.migbar .done{background:linear-gradient(90deg,#22d3a7,#4ade80)}
+.migbar .rest{background:linear-gradient(90deg,#f4635e,#fbbf24);flex:1}
+.migbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tx2);margin-top:7px}
+.migbar-lbl b{color:var(--tx)}
+
+/* ---------- Big migration events ---------- */
+.evday{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 19px;margin-bottom:11px}
+.evday:last-child{margin-bottom:0}
+.evday .head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:2px}
+.evday .date{font-size:12.5px;color:var(--tx2);font-weight:600}
+.evday .out{text-align:right}
+.evday .out b{font-size:19px;font-weight:660;display:block;color:var(--down)}
+.evday .out span{font-size:11px;color:var(--tx2)}
+.evday .shape{margin-top:8px;font-size:12px;color:var(--tx2)}
+.evday .shape b{color:var(--tx)}
+.evday .incomplete{margin-top:8px;font-size:12px;color:var(--warn)}
+.evrecip{display:flex;align-items:center;gap:11px;padding:7px 0;border-top:1px solid var(--line)}
+.evrecip .id{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evrecip .val{flex-shrink:0;font-size:12.5px;font-weight:600}
+
+/* ---------- KPI ---------- */
+.kpis{grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
+.kpi .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);
+        display:flex;align-items:center;gap:9px}
+.kpi .k .ic{font-size:20px}
+.kpi .v{font-size:28px;font-weight:660;margin:8px 0 3px;letter-spacing:-.028em}
+.kpi .s{font-size:12px;color:var(--tx2)}
+
+/* ---------- Tier rows ---------- */
+.tierrow{
+  display:flex;align-items:center;gap:14px;padding:11px 14px;background:var(--card2);
+  border:1px solid var(--line);border-radius:12px;transition:.15s
+}
+.tierrow:hover{border-color:var(--line2);transform:translateX(2px)}
+.tierrow .e{font-size:34px;line-height:1;width:44px;text-align:center;flex-shrink:0}
+.tierrow .nm{flex:1;min-width:0}
+.tierrow .nm b{font-size:14.5px;font-weight:600;display:block}
+.tierrow .nm span{font-size:12px;font-weight:560;color:var(--tx2);font-family:var(--mono)}
+.tierrow .bars{flex:2;min-width:90px}
+.tierrow .bar{height:7px;background:#0a0f1b;border-radius:4px;overflow:hidden;margin-bottom:4px}
+.tierrow .bar i{display:block;height:100%;border-radius:4px}
+.tierrow .barlbl{font-size:11px;color:var(--tx2)}
+.tierrow .cnt{text-align:right;flex-shrink:0;min-width:96px}
+.tierrow .cnt b{font-size:17px;font-weight:660;display:block}
+.tierrow .cnt span{font-size:11px;color:var(--tx2)}
+.tiersfoot{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;flex-wrap:wrap}
+.tiersfoot button{padding:9px 16px;font-size:12.5px}
+.activitybar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.activitybar button{padding:8px 15px;font-size:12.5px}
+
+/* ---------- Cluster cards ---------- */
+.clustergroup{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px 19px}
+.clustergroup .head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.clustergroup .src{font-size:12.5px;color:var(--tx2)}
+.clustergroup .src b{color:var(--tx);font-family:var(--mono);font-weight:600}
+.clustergroup .combo{text-align:right}
+.clustergroup .combo b{font-size:19px;font-weight:660;display:block}
+.clustergroup .combo span{font-size:11px;color:var(--tx2)}
+.clustergroup .confbar{height:5px;background:#0a0f1b;border-radius:3px;overflow:hidden;margin:12px 0 13px}
+.clustergroup .confbar i{display:block;height:100%;background:linear-gradient(90deg,var(--warn),var(--acc2));border-radius:3px}
+.cmember{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line)}
+.cmember:first-of-type{border-top:0}
+.cmember .em{font-size:20px;flex-shrink:0}
+.cmember .id{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmember .id b{font-family:var(--sans);color:var(--tx);font-weight:560}
+.cmember .val{text-align:right;flex-shrink:0}
+.cmember .val b{font-size:13px;display:block}
+.cmember .val span{font-size:11px;color:var(--tx2)}
+
+/* ---------- Inputs ---------- */
+.searchrow{display:flex;gap:10px;flex-wrap:wrap}
+input[type=text]{
+  flex:1;min-width:250px;background:#0a0f1b;border:1px solid var(--line2);border-radius:11px;
+  padding:13px 15px;color:var(--tx);font:14px var(--mono);outline:none;transition:.15s
+}
+input[type=text]:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+button{
+  background:var(--acc);color:#04101f;border:0;border-radius:11px;padding:13px 22px;
+  font:600 14px var(--sans);cursor:pointer;transition:.15s
+}
+button:hover{filter:brightness(1.12)}
+button:disabled{opacity:.35;cursor:default;filter:none}
+button.ghost{background:transparent;color:var(--tx2);border:1px solid var(--line2)}
+button.ghost:hover:not(:disabled){color:var(--tx);border-color:var(--acc)}
+button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{padding:6px 13px;font-size:12.5px;border-radius:8px}
+
+.sharebar{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.sharebar button,.sharebar a{padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center}
+
+/* ---------- Modal (Share-Dialog) ---------- */
+.modalbg{
+  position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;
+  padding:20px;background:#020610d0;backdrop-filter:blur(3px)
+}
+.modalbg.on{display:flex}
+.modal{
+  background:var(--card2);border:1px solid var(--line2);border-radius:16px;padding:22px;
+  width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px #000b
+}
+.modal .mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+.modal .mhead b{font-size:17px;font-weight:650}
+.modal .x{background:none;border:0;color:var(--tx2);font-size:22px;line-height:1;padding:2px 8px;cursor:pointer}
+.modal .x:hover{color:var(--tx)}
+.switchrow{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:var(--tx);user-select:none}
+.switchrow input{width:17px;height:17px;accent-color:var(--acc);cursor:pointer;flex-shrink:0}
+.sharepreview{
+  margin:15px 0 17px;background:#0a0f1b;border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;font-size:13px;line-height:1.62;color:var(--tx2);white-space:pre-wrap;
+  word-break:break-word
+}
+.modalfoot{display:flex;gap:10px;flex-wrap:wrap}
+.modalfoot button{flex:1;min-width:170px;justify-content:center;font-size:13.5px}
+
+.result{margin-top:15px;display:none}
+.result.show{display:block}
+.progress{height:10px;background:#0a0f1b;border-radius:5px;overflow:hidden;margin:12px 0 8px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:5px}
+
+/* ---------- Movers ---------- */
+.movergrid{grid-template-columns:1fr 1fr}
+.mv{display:flex;align-items:center;gap:13px;padding:11px 0;border-bottom:1px solid var(--line)}
+.mv:last-child{border-bottom:0}
+.mv .em{font-size:29px;line-height:1;flex-shrink:0}
+.mv .id{flex:1;min-width:0}
+.mv .id b{font-size:13.5px;font-weight:560;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv .id span{font-size:11.5px;color:var(--tx2)}
+.mv .val{text-align:right;flex-shrink:0}
+.mv .val b{font-size:14px;display:block}
+.mv .val span{font-size:11.5px;color:var(--tx2)}
+
+/* ---------- Table ---------- */
+.tablewrap{overflow-x:auto;border-radius:13px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:860px}
+th{
+  background:var(--card3);text-align:left;padding:12px 13px;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--tx2);font-weight:700;
+  position:sticky;top:0;white-space:nowrap;border-bottom:1px solid var(--line2)
+}
+td{padding:13px;border-top:1px solid var(--line)}
+td.tiercell{font-size:22px;line-height:1;white-space:nowrap}
+td.tiercell span{font-size:12.5px;color:var(--tx2);vertical-align:middle;margin-left:5px}
+/* Zebrastreifen: leichter Helligkeitswechsel ist beim Scannen einer breiten
+   Tabelle wirksamer als ein duennerer Rahmen. */
+tbody tr:nth-child(even){background:#0000001a}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:#ffffff10}
+tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
+.r{text-align:right}
+.addr{font-family:var(--mono);font-size:13px;color:var(--tx2)}
+.rk{font-size:12.5px;font-family:var(--mono)}
+.tag{
+  display:inline-block;padding:2px 8px;border-radius:6px;font-size:10.5px;
+  background:#5b9cff1c;color:#9dc4ff;border:1px solid #5b9cff33;margin-left:7px;white-space:nowrap
+}
+.tag.ex{background:#fbbf241c;color:#fcd34d;border-color:#fbbf2433}
+.tag.br{background:#a78bfa1c;color:#c4b5fd;border-color:#a78bfa33}
+.tag.sleep{background:#64748b1c;color:#cbd5e1;border-color:#64748b44;font-size:13px;padding:1px 7px}
+.tag.maybe{background:#a78bfa1c;color:#c4b5fd;border-color:#a78bfa33;cursor:help}
+
+/* ---------- Info popup (small "i" instead of always-on text) ---------- */
+.infoBtn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:50%;background:var(--card2);
+  border:1px solid var(--line2);color:var(--tx2);font:700 10.5px var(--sans);
+  cursor:pointer;flex-shrink:0;vertical-align:middle;padding:0;line-height:1
+}
+.infoBtn:hover{color:var(--tx);border-color:var(--acc)}
+.infopop{
+  position:fixed;z-index:60;background:var(--card2);border:1px solid var(--line2);
+  border-radius:10px;padding:12px 14px;box-shadow:0 12px 32px #000a;max-width:300px;
+  font-size:12.5px;line-height:1.55;color:var(--tx2)
+}
+
+/* ---------- Right-click context menu ---------- */
+.ctxmenu{
+  position:fixed;z-index:50;background:var(--card2);border:1px solid var(--line2);
+  border-radius:10px;padding:5px;box-shadow:0 12px 32px #000a;min-width:200px
+}
+.ctxmenu button{
+  display:block;width:100%;text-align:left;background:none;color:var(--tx);
+  border:0;padding:9px 11px;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer
+}
+.ctxmenu button:hover{background:var(--acc);color:#04101f}
+
+/* ---------- Leaderboard: range filter + page jump ---------- */
+.rangebar{display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+.rangeinput{
+  width:118px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
+  padding:8px 11px;color:var(--tx);font:13px var(--mono);outline:none
+}
+.rangeinput:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+.pagejump{
+  width:56px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
+  padding:7px 9px;color:var(--tx);font:13px var(--mono);outline:none;text-align:center
+}
+.pagejump:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+.pager{display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap}
+.pager .info{font-size:12.5px;color:var(--tx2);font-family:var(--mono)}
+
+/* ---------- Exchange net-flow ---------- */
+.flowhead{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+.flowhead .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
+.flowhead .v{font-size:31px;font-weight:670;letter-spacing:-.03em;margin:5px 0 3px}
+.flowhead .s{font-size:12.5px;color:var(--tx2)}
+.flowsplit{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;flex:1;min-width:290px}
+.flowsplit .fact .v{font-size:19px;margin-top:4px}
+.flowex{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.flowex:first-child{border-top:0}
+.flowex .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flowex .nm b{font-weight:560}
+.flowex .val{flex-shrink:0;font-weight:600}
+
+/* ---------- Feeds ---------- */
+.feedgrid{grid-template-columns:1fr 1fr}
+.ev{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.ev:last-child{border-bottom:0}
+.ev .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:19px;flex-shrink:0}
+.ev .tx{flex:1;min-width:0}
+.ev .tx b{font-size:13px;font-weight:560}
+.ev .tx div{font-size:11.5px;color:var(--tx2);margin-top:2px}
+.ev .when{font-size:11px;color:var(--tx3);white-space:nowrap;flex-shrink:0}
+
+.empty{color:var(--tx2);font-size:13.5px;padding:22px;text-align:center}
+.skel{background:linear-gradient(90deg,#141c2c,#1d2739,#141c2c);background-size:200% 100%;
+      animation:sh 1.3s infinite;border-radius:7px;height:15px}
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
+       font-size:12px;color:var(--tx3);display:flex;flex-wrap:wrap;gap:14px}
+
+@media(max-width:1000px){ .movergrid,.feedgrid{grid-template-columns:1fr} }
+@media(max-width:640px){
+  .tierrow{flex-wrap:wrap;gap:9px}
+  .tierrow .bars{flex:1 0 100%;order:3}
+  .tierrow .cnt{min-width:0}
+}
+@media(max-width:560px){
+  .wrap{padding:0 14px}
+  .mig{padding:18px}
+  nav button{padding:11px 13px;font-size:13.5px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="logo">🐋</div>
+    <div>
+      <h1>ETN Radar</h1>
+      <div class="sub">Whale &amp; migration tracking &middot; Electroneum Smart Chain</div>
+    </div>
+  </div>
+  <div class="hspace"></div>
+  <div class="chip"><span class="dot"></span><span id="snapTime">loading&hellip;</span></div>
+  <div class="chip">ETN <b class="num" id="price" style="color:var(--tx)">&mdash;</b></div>
+</header>
+
+<nav id="nav">
+  <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
+  <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
+  <button data-p="activity"><span class="ic">⚡</span>Activity</button>
+  <button data-p="clusters"><span class="ic">🔍</span>Clusters</button>
+  <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
+</nav>
+
+<!-- ================= OVERVIEW ================= -->
+<div class="page on" id="page-overview">
+
+  <section style="margin-top:22px">
+    <div class="mig">
+      <div class="head">
+        <div style="min-width:280px">
+          <div class="lbl">
+            <span class="ic">🌉</span><span>Migration Watch</span>
+            <span class="pill" id="deadlinePill">&mdash;</span>
+          </div>
+          <div class="big num" id="bridgeEtn">&mdash;</div>
+          <div class="bigsub" id="bridgeSub">legacy supply not yet migrated</div>
+        </div>
+        <div class="stats">
+          <div class="fact"><div class="k">Outflow / day</div><div class="v num up" id="perDay">&mdash;</div></div>
+          <div class="fact"><div class="k">Days to deadline</div><div class="v num" id="daysLeft">&mdash;</div></div>
+          <div class="fact"><div class="k">Circulating</div><div class="v num" id="circ">&mdash;</div></div>
+          <div class="fact"><div class="k">Total supply</div><div class="v num" id="supply">&mdash;</div></div>
+        </div>
+      </div>
+
+      <div class="chartcard">
+        <div class="top">
+          <div>
+            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Bridge balance over time</div>
+            <div style="font-size:12px;color:var(--tx3)" id="chartRange">&mdash;</div>
+          </div>
+          <div class="r">
+            <div style="font-size:12.5px;color:var(--tx2)">Change over period</div>
+            <div class="num up" style="font-size:18px;font-weight:650" id="chartDelta">&mdash;</div>
+          </div>
+        </div>
+        <div class="chartholder" id="chartHolder">
+          <svg class="chart" id="bridgeChart"></svg>
+          <div class="tip" id="chartTip"></div>
+        </div>
+        <div class="dim3" style="font-size:11px;margin-top:8px">
+          Y-axis zoomed to the recent range so the trend stays readable — gridlines show the % of total supply that value represents.
+        </div>
+      </div>
+
+      <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i></div>
+      <div class="migbar-lbl">
+        <span>Migrated: <b id="migDoneLbl">&mdash;</b></span>
+        <span>Still in bridge: <b id="migRestLbl">&mdash;</b></span>
+      </div>
+
+      <div class="projbig" id="projection">Loading projection&hellip;</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🌉 Big migration events
+      <button class="infoBtn" data-info="Flags days where bridge outflow was more than 3x the recent median, then traces the bridge's internal transactions to find out which wallets received the ETN that day.">ⓘ</button>
+    </h2>
+    <div class="card" id="bridgeEventsCard">
+      <div id="bridgeEvents" class="empty">Loading&hellip;</div>
+      <div class="tiersfoot" style="margin-top:14px">
+        <div class="dim3" style="font-size:11.5px">Runs monthly, or any time via the button.</div>
+        <button class="ghost" id="bridgeBtn">🔍 Scan for events now</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid kpis">
+      <div class="card kpi"><div class="k"><span class="ic">🐳</span>Wallets ≥ 10M ETN</div>
+        <div class="v num" id="k10m">&mdash;</div><div class="s" id="k10ms">&mdash;</div></div>
+      <div class="card kpi"><div class="k"><span class="ic">😴</span>Sleepers ≥ 90 days</div>
+        <div class="v num" id="kSleep">&mdash;</div><div class="s" id="kSleepS">&mdash;</div></div>
+      <div class="card kpi"><div class="k"><span class="ic">📊</span>Top 100 share</div>
+        <div class="v num" id="kConc">&mdash;</div><div class="s" id="kConcS">&mdash;</div></div>
+      <div class="card kpi"><div class="k"><span class="ic">👛</span>Wallets tracked</div>
+        <div class="v num" id="kAddr">&mdash;</div><div class="s" id="kAddrS">&mdash;</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="chartcard">
+      <div class="top">
+        <div>
+          <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Concentration over time</div>
+          <div style="font-size:12px;color:var(--tx3)" id="concRange">&mdash;</div>
+        </div>
+        <div class="conc-legend">
+          <span><i style="background:#f4635e"></i>Top 10</span>
+          <span><i style="background:#fbbf24"></i>Top 100</span>
+          <span><i style="background:#5b9cff"></i>Top 1000</span>
+        </div>
+      </div>
+      <div class="chartholder" id="concHolder">
+        <svg class="chart" id="concChart"></svg>
+        <div class="tip" id="concTip"></div>
+      </div>
+      <div class="dim3" style="font-size:11px;margin-top:8px" id="concNote"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div style="font-size:13.5px;color:var(--tx2);margin-bottom:11px">
+        🔍 Look up a wallet &mdash; tier, rank and distance to the next level
+      </div>
+      <div class="searchrow">
+        <input type="text" id="q" placeholder="0x… address, label or .etn name" spellcheck="false">
+        <button id="goBtn">Check</button>
+      </div>
+      <div class="result" id="searchResult"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Holder tiers <span class="hint">thresholds fixed in ETN, so a falling price never demotes anyone</span></h2>
+    <div class="grid" style="gap:9px" id="tiers"></div>
+    <div class="tiersfoot">
+      <div class="dim3" style="font-size:11.5px" id="tiersNote"></div>
+      <button class="ghost" id="censusBtn">🔄 Run full census now</button>
+    </div>
+  </section>
+</div>
+
+<!-- ================= LEADERBOARD ================= -->
+<div class="page" id="page-board">
+  <section style="margin-top:22px">
+    <h2>Leaderboard
+      <div class="tabs" id="lbPeriods"></div>
+      <div class="tabs" style="margin-left:auto">
+        <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
+        <button class="ghost" id="exchangesBtn" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
+      </div>
+    </h2>
+    <div class="rangebar">
+      <input type="text" id="lbSearch" class="rangeinput" style="width:260px" placeholder="0x… address, label or .etn name" spellcheck="false">
+      <button class="ghost" id="lbSearchBtn">Go to wallet</button>
+      <span class="info" style="margin-left:6px">balance</span>
+      <div class="tabs" id="etnPresets"></div>
+    </div>
+    <div class="dim3" id="lbSearchMsg" style="font-size:12px;margin:-10px 0 14px;display:none"></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th style="width:56px">#</th><th style="width:70px">Rank Δ</th><th>Wallet</th><th>Tier</th>
+          <th class="r">Balance</th><th class="r" id="thDelta">Δ 7D</th><th class="r">Δ %</th>
+          <th class="r">Last moved</th>
+        </tr></thead>
+        <tbody id="lbBody"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <button class="ghost" id="prevPage">← Previous</button>
+      <button class="ghost" id="nextPage">Next →</button>
+      <span class="info" id="pageInfo">&mdash;</span>
+      <span class="info">page</span>
+      <input type="text" inputmode="numeric" id="pageJump" class="pagejump" placeholder="1">
+      <button class="ghost" id="pageJumpBtn">Go</button>
+      <div class="tabs" style="margin-left:auto">
+        <span class="info" style="align-self:center;margin-right:4px">rows</span>
+        <button class="ghost" data-n="25">25</button>
+        <button class="ghost on" data-n="50">50</button>
+        <button class="ghost" data-n="100">100</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= ACTIVITY ================= -->
+<div class="page" id="page-activity">
+  <section style="margin-top:22px">
+    <div class="activitybar">
+      <span class="dim3" id="activityAsOf">&mdash;</span>
+      <button class="ghost" id="activityRefresh">🔄 Refresh</button>
+    </div>
+    <h2>Top movers<div class="tabs" id="moverTabs"></div></h2>
+    <div class="grid movergrid">
+      <div class="card"><div style="font-size:12.5px;color:var(--up);margin-bottom:9px;font-weight:560">▲ Largest inflows</div>
+        <div id="gainers"></div></div>
+      <div class="card"><div style="font-size:12.5px;color:var(--down);margin-bottom:9px;font-weight:560">▼ Largest outflows</div>
+        <div id="losers"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>💱 Exchange net-flow
+      <button class="infoBtn" data-info="Daily balance changes of the exchange wallets we know. ETN moving ONTO exchanges is often read as willingness to sell; ETN moving OFF is often read as moving into self-custody. That reading is a convention, not a rule, and this only covers labelled wallets — exchanges we haven't identified are missing entirely.">ⓘ</button>
+      <div class="tabs" id="flowPeriods"></div>
+    </h2>
+    <div class="card">
+      <div class="flowhead">
+        <div>
+          <div class="k">Net flow, last <span id="flowPeriodLbl">30d</span></div>
+          <div class="v num" id="flowNet">&mdash;</div>
+          <div class="s" id="flowDir">&mdash;</div>
+        </div>
+        <div class="flowsplit">
+          <div class="fact"><div class="k">Onto exchanges</div><div class="v num down" id="flowIn">&mdash;</div></div>
+          <div class="fact"><div class="k">Off exchanges</div><div class="v num up" id="flowOut">&mdash;</div></div>
+        </div>
+      </div>
+      <div class="chartholder" id="flowHolder">
+        <svg class="chart" id="flowChart"></svg>
+        <div class="tip" id="flowTip"></div>
+      </div>
+      <div id="flowPerEx" style="margin-top:14px"></div>
+      <div class="tiersfoot" style="margin-top:12px">
+        <div class="dim3" style="font-size:11.5px" id="flowCoverage">&mdash;</div>
+        <button class="ghost" id="flowAuto">+ Include detected candidates</button>
+      </div>
+    </div>
+  </section>
+  <section>
+    <div class="grid feedgrid">
+      <div>
+        <h2>😴 Sleeper Watch <span class="hint">dormant for a long time &mdash; waking up is the strongest signal</span></h2>
+        <div class="card" id="sleepers"></div>
+      </div>
+      <div>
+        <h2>⚡ Latest events</h2>
+        <div class="card" id="events"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= CLUSTERS (experimental) ================= -->
+<div class="page" id="page-clusters">
+  <section style="margin-top:22px">
+    <div class="warnbar" style="margin-top:0" id="clustersWarn">
+      <b>⚠ Guesses, not proof.</b> Wallets below share a detectable funding
+      source — that <em>can</em> mean the same person or team, but often
+      doesn't (e.g. payouts to several real employees from one treasury
+      wallet). EVM chains like this one have no reliable way to prove common
+      ownership the way Bitcoin's UTXO model sometimes allows. Treat every
+      group here as a pattern worth a second look, never as an identification.
+      Source: this chain's own explorer only — nothing from any third party.
+    </div>
+  </section>
+  <section>
+    <h2>Funding-source clusters
+      <div class="tabs" style="margin-left:auto">
+        <button class="ghost" id="clustersBtn">🔍 Run cluster analysis now</button>
+      </div>
+    </h2>
+    <div class="dim3" style="font-size:11.5px;margin-bottom:12px" id="clustersNote"></div>
+    <div class="grid" id="clusters"></div>
+  </section>
+</div>
+
+<!-- ================= INVESTIGATE (Wallet detail) ================= -->
+<div class="page" id="page-investigate">
+  <section style="margin-top:22px">
+    <h2>Investigate a wallet</h2>
+    <div class="card">
+      <div class="searchrow">
+        <input type="text" id="invQ" placeholder="0x… address, label or .etn name" spellcheck="false">
+        <button id="invGoBtn">Check</button>
+      </div>
+    </div>
+  </section>
+  <section id="invResultWrap" style="display:none">
+    <div class="card" id="invHead"></div>
+  </section>
+  <section id="invChartWrap" style="display:none">
+    <h2>Balance over time</h2>
+    <div class="card">
+      <div class="chartholder" id="invChartHolder">
+        <svg class="chart" id="invChart"></svg>
+        <div class="tip" id="invChartTip"></div>
+      </div>
+    </div>
+  </section>
+  <section id="invClusterWrap" style="display:none">
+    <h2>Cluster relationships <span class="hint">from the funding-source analysis - a pattern, not proof</span></h2>
+    <div class="card" id="invCluster"></div>
+  </section>
+  <section id="invEventsWrap" style="display:none">
+    <h2>Events for this wallet</h2>
+    <div class="card" id="invEvents"></div>
+  </section>
+  <div class="empty" id="invEmpty" style="display:none">Search for a wallet above to see its full profile.</div>
+</div>
+
+<footer>
+  <span>Data: Blockscout (blockexplorer.electroneum.com) &middot; snapshot every 30&nbsp;min</span>
+  <span>Not affiliated with Electroneum Ltd. &middot; not financial advice</span>
+</footer>
+
+</div>
+
+<!-- ================= SHARE DIALOG ================= -->
+<div class="modalbg" id="shareModal">
+  <div class="modal">
+    <div class="mhead">
+      <b>📢 Share your rank</b>
+      <button class="x" id="shareClose" aria-label="Close">&times;</button>
+    </div>
+
+    <label class="switchrow">
+      <input type="checkbox" id="shareHideAddr" checked>
+      <span>Keep my wallet address private</span>
+    </label>
+    <div class="dim3" id="sharePrivacyNote" style="font-size:12px;margin-top:7px"></div>
+
+    <div class="sharepreview" id="sharePreview"></div>
+
+    <div class="modalfoot">
+      <button id="shareGoX">𝕏&nbsp; Post on X</button>
+      <button class="ghost" id="shareGoTG">✈️ Send on Telegram</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Formatting ----------
+const LOC = "en-US";
+const nf = (n, d = 0) =>
+  n == null || !isFinite(n) ? "—"
+  : new Intl.NumberFormat(LOC, { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
+
+/** Shorten large ETN amounts so they stay readable. */
+function kurz(n, plus) {
+  if (n == null || !isFinite(n)) return "—";
+  const s = n < 0 ? "-" : plus ? "+" : "";
+  const a = Math.abs(n);
+  if (a >= 1e9) return s + nf(a / 1e9, 2) + "B";
+  if (a >= 1e6) return s + nf(a / 1e6, 2) + "M";
+  if (a >= 1e3) return s + nf(a / 1e3, 1) + "K";
+  return s + nf(a, 0);
+}
+const pct = (n) => (n == null || !isFinite(n) ? "—" : (n > 0 ? "+" : "") + nf(n, 2) + "%");
+
+/**
+ * Percentages become meaningless when the starting balance was near zero
+ * (e.g. +47,619,047,619,047% for a freshly funded wallet). Say "new" instead.
+ */
+function pctSafe(p, vorher) {
+  if (p == null || !isFinite(p)) return "—";
+  if (vorher != null && vorher < 1) return "new";
+  if (Math.abs(p) >= 100000) return "new";
+  return pct(p);
+}
+const kurzAdr = (a) => (a ? a.slice(0, 8) + "…" + a.slice(-6) : "—");
+const EXPLORER = "https://blockexplorer.electroneum.com/address/";
+
+const PERIODEN = [
+  { k: "24h", t: "24H" }, { k: "7d", t: "7D" }, { k: "30d", t: "30D" },
+  { k: "90d", t: "90D" }, { k: "6m", t: "6M" },
+];
+
+function ruheText(t) {
+  if (t == null) return "—";
+  if (t < 1) return "today";
+  if (t === 1) return "yesterday";
+  if (t < 60) return t + " days";
+  if (t < 730) return nf(t / 30.4, 0) + " mo";
+  return nf(t / 365, 1) + " yr";
+}
+function zeitHer(iso) {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 3600) return Math.round(s / 60) + " min";
+  if (s < 86400) return Math.round(s / 3600) + " h";
+  return Math.round(s / 86400) + " d";
+}
+const el = (id) => document.getElementById(id);
+
+// Der Header-Chip ("snapshot X ago") wurde bisher nur beim Laden von Overview
+// gesetzt - ein Refresh auf der Activity-Seite konnte dadurch neuere Daten
+// zeigen als der Header, obwohl beide vom selben Snapshot stammen sollten.
+// Jetzt zentral: jede Stelle, die einen snapshot-Zeitstempel bekommt, ruft
+// das hier auf, und nur der jeweils NEUESTE bekannte Stand gewinnt.
+let letzterBekannterSnapshot = null;
+function setSnapTime(iso) {
+  if (!iso) return;
+  if (!letzterBekannterSnapshot || Date.parse(iso) > Date.parse(letzterBekannterSnapshot)) {
+    letzterBekannterSnapshot = iso;
+  }
+  el("snapTime").textContent = "snapshot " + zeitHer(letzterBekannterSnapshot) + " ago";
+}
+const esc = (s) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+/**
+ * Betreiber-Token fuer die "Run now"-Knoepfe.
+ *
+ * Die loesen GitHub-Actions-Laeufe aus - auf einer oeffentlichen Seite darf
+ * das nicht jeder. Einmal mit ?admin=TOKEN aufrufen, danach liegt es lokal im
+ * Browser und die Knoepfe erscheinen. Fuer alle anderen sind sie unsichtbar.
+ * Ohne gesetztes ADMIN_TOKEN im Worker bleibt alles offen wie bisher.
+ */
+const ADMIN = {
+  token: (() => {
+    const u = new URL(location.href);
+    const ausUrl = u.searchParams.get("admin");
+    if (ausUrl) {
+      try { localStorage.setItem("etnAdminToken", ausUrl); } catch { /* privater Modus */ }
+      u.searchParams.delete("admin"); // nicht in der Adresszeile stehen lassen
+      history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
+      return ausUrl;
+    }
+    try { return localStorage.getItem("etnAdminToken"); } catch { return null; }
+  })(),
+};
+const adminKopf = () => (ADMIN.token ? { "X-Admin-Token": ADMIN.token } : {});
+
+async function hole(pfad, bust) {
+  // bust=true haengt einen Cache-Buster an: der Worker cached Antworten bis
+  // zu 2 Minuten ueber die Cloudflare Cache API, gekeyt auf die exakte URL.
+  // Der manuelle Refresh-Knopf soll wirklich neu laden, nicht aus diesem Cache.
+  const url = bust ? pfad + (pfad.includes("?") ? "&" : "?") + "_=" + Date.now() : pfad;
+  const r = await fetch(url, { headers: adminKopf() });
+  if (!r.ok) throw new Error(pfad + " → HTTP " + r.status);
+  return r.json();
+}
+
+function periodTabs(host, aktiv, onChange) {
+  host.innerHTML = PERIODEN.map((p) =>
+    '<button class="ghost' + (p.k === aktiv ? " on" : "") + '" data-p="' + p.k + '">' + p.t + "</button>"
+  ).join("");
+  host.onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    [...host.children].forEach((x) => x.classList.toggle("on", x === b));
+    onChange(b.dataset.p);
+  };
+}
+
+// ---------- Chart ----------
+//
+// Die SVG-Koordinaten entsprechen exakt den Bildschirmpixeln: viewBox wird auf
+// die gemessene Containerbreite gesetzt statt auf einen festen Wert. Sonst
+// skaliert der Browser die Grafik - und mit ihr die Schrift, weshalb die
+// Achsenbeschriftung vorher auf ~6px zusammengeschrumpft und unlesbar war.
+// Als Nebeneffekt braucht die Maus-Zuordnung keine Umrechnung mehr.
+
+function zeichneChart(svg, punkte, totalSupply) {
+  // Zustand haengt am SVG-Element, NICHT an einer gemeinsamen Variable:
+  // dieselbe Funktion zeichnet den Bridge-Verlauf (Overview) und den
+  // Wallet-Verlauf (Investigate). Mit einem gemeinsamen Zustand landete beim
+  // Zurueckwechseln zur Overview die zuletzt angesehene Wallet-Historie im
+  // Bridge-Chart - also schlicht falsche Daten.
+  if (punkte) svg._punkte = punkte;
+  if (totalSupply != null) svg._totalSupply = totalSupply;
+  const daten = svg._punkte;
+  const holder = svg.parentElement;
+  const tip = holder.querySelector(".tip");
+  // Auf einem versteckten Reiter ist die Breite 0. Dann NICHT zeichnen: sonst
+  // brennt sich die Mindestbreite (320) in das viewBox ein und der Chart
+  // bleibt beim Zurueckwechseln winzig. Der ResizeObserver zeichnet neu,
+  // sobald das Element wieder eine echte Breite hat.
+  if (holder.clientWidth === 0) return;
+  const W = Math.max(320, Math.round(holder.clientWidth));
+  const H = W < 640 ? 240 : 320;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.style.height = H + "px";
+
+  if (!daten || daten.length < 2) {
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
+      'text-anchor="middle">not enough history yet</text>';
+    return;
+  }
+
+  const PT = 18, PB = 34, PL = svg._totalSupply ? 104 : 74, PR = 14;
+  const ys = daten.map((p) => p.etn);
+  const min = Math.min(...ys), max = Math.max(...ys);
+  const spanne = max - min || Math.abs(max) * 0.02 || 1;
+  const lo = min - spanne * 0.12, hi = max + spanne * 0.12;
+
+  const X = (i) => PL + (i / (daten.length - 1)) * (W - PL - PR);
+  const Y = (v) => H - PB - ((v - lo) / (hi - lo)) * (H - PT - PB);
+
+  let d = "";
+  daten.forEach((p, i) => { d += (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.etn).toFixed(1); });
+  const flaeche = d + "L" + X(daten.length - 1) + " " + (H - PB) + "L" + PL + " " + (H - PB) + "Z";
+
+  // Werteachse links, ausserhalb der Zeichenflaeche - dadurch ueberlagert die
+  // Beschriftung die Kurve nicht mehr.
+  const linien = [0, .25, .5, .75, 1].map((f) => {
+    const y = PT + f * (H - PT - PB);
+    const wert = hi - f * (hi - lo);
+    const pctLbl = svg._totalSupply ? " (" + nf(wert / svg._totalSupply * 100, 1) + "%)" : "";
+    return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
+      '" stroke="#1e293b" stroke-width="1"/>' +
+      '<text x="' + (PL - 10) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12.5" ' +
+      'text-anchor="end" font-family="ui-monospace,monospace">' + kurz(wert) + pctLbl + "</text>";
+  }).join("");
+
+  // Datumsachse: so viele Marken, wie bei der aktuellen Breite lesbar sind.
+  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
+  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
+    const i = Math.round((n / marken) * (daten.length - 1));
+    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
+    return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
+      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
+      new Date(daten[i].day).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>";
+  }).join("");
+
+  svg.innerHTML =
+    '<defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="#fbbf24" stop-opacity=".3"/>' +
+    '<stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/></linearGradient></defs>' +
+    linien + datumTexte +
+    '<path d="' + flaeche + '" fill="url(#gr)"/>' +
+    '<path d="' + d + '" fill="none" stroke="#fbbf24" stroke-width="2.4" ' +
+    'stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<g id="cross" style="display:none">' +
+    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#fbbf24" stroke-width="1" ' +
+    'stroke-dasharray="4 4" opacity=".7"/>' +
+    '<circle r="6" fill="#fbbf24" stroke="#0b111e" stroke-width="2.5"/></g>' +
+    '<circle cx="' + X(daten.length - 1) + '" cy="' + Y(ys[ys.length - 1]) + '" r="4.5" fill="#fbbf24"/>';
+
+  const cross = svg.querySelector("#cross");
+  const linie = cross.querySelector("line");
+  const punkt = cross.querySelector("circle");
+
+  function zeige(ev) {
+    const r = holder.getBoundingClientRect();
+    const x = ev.clientX - r.left;
+    const i = Math.max(0, Math.min(daten.length - 1,
+      Math.round(((x - PL) / (W - PL - PR)) * (daten.length - 1))));
+    const p = daten[i];
+
+    cross.style.display = "";
+    linie.setAttribute("x1", X(i)); linie.setAttribute("x2", X(i));
+    punkt.setAttribute("cx", X(i)); punkt.setAttribute("cy", Y(p.etn));
+
+    tip.innerHTML =
+      '<b class="num">' + nf(p.etn, 0) + " ETN</b>" +
+      "<span>" + new Date(p.day).toLocaleDateString(LOC,
+        { year: "numeric", month: "short", day: "numeric" }) + "</span>" +
+      (i > 0
+        ? '<span class="num ' + (p.etn - daten[i - 1].etn < 0 ? "down" : "up") + '">' +
+          kurz(p.etn - daten[i - 1].etn, true) + " vs. previous point</span>"
+        : "");
+    tip.classList.add("on");
+    const links = X(i) > W * 0.6;
+    tip.style.left = links ? "auto" : X(i) + 14 + "px";
+    tip.style.right = links ? W - X(i) + 14 + "px" : "auto";
+  }
+  const verstecke = () => { cross.style.display = "none"; tip.classList.remove("on"); };
+  holder.onmousemove = zeige;
+  holder.onmouseleave = verstecke;
+  holder.ontouchmove = (e) => { if (e.touches[0]) zeige(e.touches[0]); };
+  holder.ontouchend = verstecke;
+}
+
+// Wie viel der zirkulierenden Supply die groessten N Wallets halten, ueber
+// die Zeit - drei Linien (Top 10/100/1000) statt der einen Bridge-Kurve
+// oben, sonst dieselbe Achsen-/Tooltip-Logik wie zeichneChart.
+const KONZ_CHART = { punkte: null };
+const KONZ_SERIEN = [
+  { feld: "top10_share", farbe: "#f4635e", label: "Top 10" },
+  { feld: "top100_share", farbe: "#fbbf24", label: "Top 100" },
+  { feld: "top1000_share", farbe: "#5b9cff", label: "Top 1000" },
+];
+
+function zeichneKonzChart(svg, punkte) {
+  if (punkte) KONZ_CHART.punkte = punkte;
+  const alleTage = KONZ_CHART.punkte ?? [];
+  // Nur Tage mit mindestens einem belastbaren Anteil zeichnen (fruehe Tage vor
+  // dem ersten Snapshot waeren sonst eine Null-Linie am Boden).
+  const daten = alleTage.filter((p) => KONZ_SERIEN.some((s) => p[s.feld] != null));
+  const holder = svg.parentElement;
+  const tip = el("concTip");
+  if (holder.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
+  const W = Math.max(320, Math.round(holder.clientWidth));
+  const H = W < 640 ? 240 : 320;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.style.height = H + "px";
+
+  if (daten.length < 2) {
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
+      'text-anchor="middle">not enough history yet</text>';
+    return;
+  }
+
+  const PT = 18, PB = 34, PL = 50, PR = 14;
+  const werte = daten.flatMap((p) => KONZ_SERIEN.map((s) => p[s.feld]).filter((v) => v != null));
+  const min = Math.min(...werte), max = Math.max(...werte);
+  const spanne = max - min || 0.02;
+  const lo = Math.max(0, min - spanne * 0.15), hi = Math.min(1, max + spanne * 0.15);
+
+  const X = (i) => PL + (i / (daten.length - 1)) * (W - PL - PR);
+  const Y = (v) => H - PB - ((v - lo) / (hi - lo || 1)) * (H - PT - PB);
+
+  const linien = [0, .25, .5, .75, 1].map((f) => {
+    const y = PT + f * (H - PT - PB);
+    return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
+      '" stroke="#1e293b" stroke-width="1"/>' +
+      '<text x="' + (PL - 8) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12" ' +
+      'text-anchor="end" font-family="ui-monospace,monospace">' + nf((hi - f * (hi - lo)) * 100, 0) + "%</text>";
+  }).join("");
+
+  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
+  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
+    const i = Math.round((n / marken) * (daten.length - 1));
+    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
+    return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
+      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
+      new Date(daten[i].day).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>";
+  }).join("");
+
+  const pfade = KONZ_SERIEN.map((s) => {
+    let d = "", begonnen = false;
+    daten.forEach((p, i) => {
+      const v = p[s.feld];
+      if (v == null) { begonnen = false; return; } // Luecke statt falsch interpolierter Linie
+      d += (begonnen ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1);
+      begonnen = true;
+    });
+    return '<path d="' + d + '" fill="none" stroke="' + s.farbe + '" stroke-width="2.2" ' +
+      'stroke-linejoin="round" stroke-linecap="round"/>';
+  }).join("");
+
+  const punkteEnde = KONZ_SERIEN.map((s) => {
+    for (let i = daten.length - 1; i >= 0; i--) {
+      if (daten[i][s.feld] != null) {
+        return '<circle cx="' + X(i) + '" cy="' + Y(daten[i][s.feld]) + '" r="4" fill="' + s.farbe + '"/>';
+      }
+    }
+    return "";
+  }).join("");
+
+  svg.innerHTML = linien + datumTexte + pfade + punkteEnde +
+    '<g id="konzCross" style="display:none">' +
+    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#7d8ba3" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>' +
+    "</g>";
+
+  const cross = svg.querySelector("#konzCross");
+  const linie = cross.querySelector("line");
+
+  function zeige(ev) {
+    const r = holder.getBoundingClientRect();
+    const x = ev.clientX - r.left;
+    const i = Math.max(0, Math.min(daten.length - 1,
+      Math.round(((x - PL) / (W - PL - PR)) * (daten.length - 1))));
+    const p = daten[i];
+
+    cross.style.display = "";
+    linie.setAttribute("x1", X(i)); linie.setAttribute("x2", X(i));
+
+    tip.innerHTML =
+      "<span>" + new Date(p.day).toLocaleDateString(LOC,
+        { year: "numeric", month: "short", day: "numeric" }) + "</span>" +
+      KONZ_SERIEN.map((s) => p[s.feld] != null
+        ? '<b class="num" style="color:' + s.farbe + '">' + s.label + ": " + nf(p[s.feld] * 100, 1) + "%</b>"
+        : ""
+      ).join("");
+    tip.classList.add("on");
+    const links = X(i) > W * 0.6;
+    tip.style.left = links ? "auto" : X(i) + 14 + "px";
+    tip.style.right = links ? W - X(i) + 14 + "px" : "auto";
+  }
+  const verstecke = () => { cross.style.display = "none"; tip.classList.remove("on"); };
+  holder.onmousemove = zeige;
+  holder.onmouseleave = verstecke;
+  holder.ontouchmove = (e) => { if (e.touches[0]) zeige(e.touches[0]); };
+  holder.ontouchend = verstecke;
+}
+
+// Pixelgenaues Zeichnen heisst: bei Groessenaenderung neu zeichnen.
+//
+// Zusaetzlich zum ResizeObserver ein Nachzieher auf visibilitychange/resize:
+// ein Chart, der bei Breite 0 uebersprungen wurde (verstecktes Fenster,
+// minimierter Tab), bekommt sonst unter Umstaenden nie eine zweite Chance -
+// der Observer feuert in dem Zustand nicht zuverlaessig.
+function alleChartsNachziehen() {
+  if (el("bridgeChart")._punkte) zeichneChart(el("bridgeChart"));
+  if (el("invChart")._punkte) zeichneChart(el("invChart"));
+  if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart"));
+  if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
+}
+function beobachte(holderId, zeichnen) {
+  let timer;
+  new ResizeObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(zeichnen, 120);
+  }).observe(el(holderId));
+}
+beobachte("concHolder", () => { if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart")); });
+beobachte("chartHolder", () => { if (el("bridgeChart")._punkte) zeichneChart(el("bridgeChart")); });
+beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
+window.addEventListener("resize", alleChartsNachziehen);
+
+// ---------- Overview ----------
+async function ladeOverview() {
+  const d = await hole("/api/overview");
+  if (d.leer) {
+    el("bridgeEtn").textContent = "no data";
+    el("projection").textContent = "No snapshot yet.";
+    return;
+  }
+  setSnapTime(d.snapshot.taken_at);
+  el("price").textContent = "$" + nf(d.preis, 6);
+  TELEGRAM_BOT = d.telegram_bot || null;
+
+  el("bridgeEtn").innerHTML = kurz(d.bridge_etn) +
+    ' <span style="font-size:.4em;color:var(--tx2);font-weight:500">ETN</span>';
+  el("bridgeSub").innerHTML =
+    "<b>" + nf(d.bridge_anteil * 100, 1) + "%</b> of total supply still sits in the bridge";
+
+  const m = d.migration;
+  el("deadlinePill").textContent = "Deadline " +
+    new Date(m.deadline).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
+  el("perDay").textContent = "−" + kurz(m.abfluss_pro_tag);
+  el("daysLeft").textContent = m.tage_bis_deadline ?? "—";
+  el("circ").textContent = kurz(d.zirkulierend);
+  el("supply").textContent = kurz(d.total_supply);
+
+  const v = d.bridge_verlauf ?? [];
+  zeichneChart(el("bridgeChart"), v, d.total_supply);
+  if (v.length >= 2) {
+    el("chartRange").textContent =
+      new Date(v[0].day).toLocaleDateString(LOC) + " – " +
+      new Date(v[v.length - 1].day).toLocaleDateString(LOC);
+    const diff = v[v.length - 1].etn - v[0].etn;
+    const c = el("chartDelta");
+    c.textContent = kurz(diff, true) + " ETN";
+    c.className = "num " + (diff < 0 ? "up" : "down"); // a shrinking bridge is good news
+  }
+
+  const migrPct = d.bridge_anteil != null ? Math.max(0, Math.min(100, (1 - d.bridge_anteil) * 100)) : 0;
+  el("migDone").style.width = migrPct.toFixed(1) + "%";
+  el("migDoneLbl").textContent = nf(migrPct, 1) + "%";
+  el("migRestLbl").textContent = d.bridge_anteil != null ? nf(d.bridge_anteil * 100, 1) + "%" : "—";
+
+  el("projection").innerHTML = m.rest_bei_deadline != null
+    ? "At the current pace of <b>" + kurz(m.abfluss_pro_tag) + " ETN/day</b>, <b>" +
+      kurz(m.rest_bei_deadline) + " ETN</b> (" + nf(m.anteil_bei_deadline * 100, 1) +
+      "% of supply) would still be unmigrated on " + new Date(m.deadline).toLocaleDateString(LOC) + "."
+    : "Projection appears once several days of history exist.";
+
+  el("k10m").textContent = nf(d.holder.ueber_10m);
+  el("k10ms").textContent = nf(d.holder.ueber_5m) + " ≥ 5M · " + nf(d.holder.ueber_1m) + " ≥ 1M";
+  const s = d.schlaefer ?? {};
+  el("kSleep").textContent = nf(s.anzahl);
+  el("kSleepS").textContent = kurz(s.etn) + " ETN locked up";
+  el("kConc").textContent = d.holder.top100_anteil != null ? nf(d.holder.top100_anteil * 100, 1) + "%" : "—";
+  el("kConcS").textContent = d.holder.top10_anteil != null
+    ? "top 10 hold " + nf(d.holder.top10_anteil * 100, 1) + "%" : "—";
+  el("kAddr").textContent = nf(d.snapshot.addr_count);
+  el("kAddrS").textContent = "in the latest snapshot";
+
+  const kz = (d.verlauf ?? []).filter((p) => p.top10_share != null || p.top100_share != null || p.top1000_share != null);
+  zeichneKonzChart(el("concChart"), d.verlauf ?? []);
+  if (kz.length >= 2) {
+    el("concRange").textContent =
+      new Date(kz[0].day).toLocaleDateString(LOC) + " – " +
+      new Date(kz[kz.length - 1].day).toLocaleDateString(LOC);
+  }
+  // Diese Reihe waechst erst ab dem ersten eigenen Snapshot - der Backfill
+  // liefert sie nicht rueckwirkend. Lieber dazuschreiben, als eine Linie aus
+  // drei Punkten wie eine Aussage aussehen zu lassen.
+  el("concNote").textContent = kz.length < 8
+    ? "Only " + kz.length + " day(s) of history so far — this line gets meaningful after a couple of weeks of snapshots."
+    : "";
+
+  zeichneTiers(d.tiers, d.zirkulierend, d.tier_info);
+}
+
+async function ladeBridgeEvents() {
+  const box = el("bridgeEvents");
+  try {
+    const d = await hole("/api/bridge-events");
+    const tage = d.ereignisse ?? [];
+    if (!tage.length) {
+      box.className = "empty";
+      box.textContent = "No scan has run yet — click \"Scan for events now\" below to check the last 90 days (runs automatically once a month otherwise).";
+      return;
+    }
+    box.className = "";
+    box.innerHTML = tage.map((t) => {
+      const datum = new Date(t.day).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
+      if (t.unvollstaendig) {
+        return '<div class="evday"><div class="head">' +
+          '<div class="date">' + datum + '</div>' +
+          '<div class="out"><b>−' + kurz(t.outflow_etn) + ' ETN</b><span>bridge outflow</span></div>' +
+          '</div><div class="incomplete">⏳ Recipient search hasn\'t reached this far back yet — run the scan again to dig deeper.</div></div>';
+      }
+      const empf = t.top_empfaenger ?? [];
+      const form = empf.length <= 1
+        ? "single large transfer"
+        : empf.length + "+ separate recipients";
+      return '<div class="evday"><div class="head">' +
+        '<div class="date">' + datum + '</div>' +
+        '<div class="out"><b>−' + kurz(t.outflow_etn) + ' ETN</b><span>bridge outflow</span></div>' +
+        '</div><div class="shape">' +
+        (t.recipient_count === 1
+          ? 'One <b>single</b> recipient — looks like one large migration, not many small ones.'
+          : '<b>' + nf(t.recipient_count) + '</b> different recipients that day (' + form + ').') +
+        '</div>' +
+        empf.map((r) =>
+          '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
+            '<div class="id">' + kurzAdr(r.address) + '</div>' +
+            '<div class="val num">' + kurz(r.etn) + ' ETN</div></a>'
+        ).join("") +
+        "</div>";
+    }).join("");
+  } catch (e) {
+    box.className = "empty";
+    box.textContent = "Error: " + esc(e.message);
+  }
+}
+
+const TIERFARBEN = {
+  humpback: "#a78bfa", whale: "#5b9cff", shark: "#22d3a7", dolphin: "#4ade80",
+  fish: "#fbbf24", octopus: "#fb923c", crab: "#f97316", shrimp: "#f4635e",
+  // Faelt bewusst zu Grau aus: ab hier zaehlt nur noch die woechentliche
+  // Zaehlung, nicht der 6h-Snapshot - die Farbe soll das mit andeuten.
+  plankton: "#94a3b8", microbe: "#64748b", dust: "#475569",
+};
+
+/**
+ * Tier-Liste.
+ *
+ * Der Balken zeigt bewusst den SUPPLY-ANTEIL, nicht die Wallet-Zahl. Ein Balken
+ * nach Anzahl waere nutzlos: Plankton stellt 99,6 % aller Wallets, alles andere
+ * waere ein unsichtbarer Strich. Der Supply-Anteil dreht das Bild um und ist die
+ * eigentliche Aussage — wenige Wallets halten fast alles.
+ */
+function zeichneTiers(tiers, zirkulierend, tierInfo) {
+  // Genau eine Stufe (Dust) hat keine eigene ETN-Summe - sie waere nur ueber
+  // eine Zaehlung bis auf 0 ETN zu bekommen, was niemand braucht. Ihr Anteil
+  // ergibt sich stattdessen als Rest: zirkulierend minus allem, wofuer eine
+  // echte Summe vorliegt.
+  const etnBekannt = tiers.filter((t) => t.etn != null).reduce((s, t) => s + t.etn, 0);
+  // Gegen die Chain-Gesamtzahl rechnen, NICHT gegen die Summe der sichtbaren
+  // Stufen: vor dem ersten Census-Lauf waeren Crab..Dust null, und "% of
+  // wallets" wuerde faelschlich nur die oberen ~2.000 Wallets als Grundgesamtheit
+  // nehmen - Octopus zeigte dann "44,7%" statt der tatsaechlichen ~0,04%.
+  const walletsGesamt = tierInfo?.total_addresses ||
+    tiers.reduce((s, t) => s + (t.anzahl || 0), 0) || 1;
+
+  el("tiers").innerHTML = tiers.map((t) => {
+    const nochNichtGezaehlt = t.anzahl == null;
+    const etn = t.etn != null ? t.etn : Math.max(0, zirkulierend - etnBekannt);
+    const supplyAnteil = zirkulierend ? (etn / zirkulierend) * 100 : 0;
+    const walletAnteil = ((t.anzahl || 0) / walletsGesamt) * 100;
+    const f = TIERFARBEN[t.key] ?? "#64748b";
+
+    // Reihenfolge wichtig: die unterste Stufe hat zwar eine Obergrenze, aber
+    // keine sinnvolle Untergrenze — "0 – 100K" liest sich falsch, "< 100K" nicht.
+    const bereich =
+      t.min === 0 ? "< " + kurz(t.max) + " ETN"
+      : t.max ? kurz(t.min) + " – " + kurz(t.max) + " ETN"
+      : "≥ " + kurz(t.min) + " ETN";
+
+    if (nochNichtGezaehlt) {
+      return '<div class="tierrow" style="opacity:.55">' +
+        '<div class="e">' + t.emoji + "</div>" +
+        '<div class="nm"><b style="color:' + f + '">' + esc(t.name) + "</b>" +
+        "<span>" + bereich + "</span></div>" +
+        '<div class="bars"><div class="barlbl">Monthly census pending&hellip;</div></div>' +
+        '<div class="cnt"><b style="color:var(--tx3)">&mdash;</b>' +
+        "<span>not yet counted</span></div></div>";
+    }
+
+    return '<div class="tierrow">' +
+      '<div class="e">' + t.emoji + "</div>" +
+      '<div class="nm"><b style="color:' + f + '">' + esc(t.name) + "</b>" +
+      "<span>" + bereich + (t.census ? " · monthly" : "") + "</span></div>" +
+      '<div class="bars"><div class="bar"><i style="width:' +
+        Math.max(supplyAnteil, supplyAnteil > 0 ? 1.5 : 0).toFixed(1) +
+        '%;background:' + f + '"></i></div>' +
+      '<div class="barlbl">' + nf(supplyAnteil, 1) + "% of circulating supply</div></div>" +
+      '<div class="cnt"><b style="color:' + f + '">' + nf(t.anzahl) + "</b>" +
+      "<span>" + nf(walletAnteil, walletAnteil < 1 ? 2 : 1) + "% of wallets</span></div></div>";
+  }).join("");
+
+  const note = el("tiersNote");
+  if (note) {
+    note.textContent = tierInfo?.census_vorhanden
+      ? "Humpback–Octopus updated every 6h · Crab–Dust from the monthly census (" +
+        new Date(tierInfo.census_stand).toLocaleDateString(LOC) + ")"
+      : "Humpback–Octopus updated every 6h · Crab–Dust need the first census to run (monthly, or via the button below)";
+  }
+}
+
+// ---------- Movers ----------
+function zeileMover(e, gewinn) {
+  return '<a class="mv" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
+    '<div class="em">' + e.tier_emoji + "</div>" +
+    '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(e.address)) + "</b>" +
+    "<span>rank " + (e.rank_pos ?? "—") + " · " + kurz(e.etn) + " ETN</span></div>" +
+    '<div class="val"><b class="num ' + (gewinn ? "up" : "down") + '">' + kurz(e.delta_etn, true) + "</b>" +
+    '<span class="num">' + pctSafe(e.delta_pct, e.etn - e.delta_etn) + "</span></div></a>";
+}
+let letzterMoverZeitraum = "7d";
+async function ladeMovers(p, bust) {
+  letzterMoverZeitraum = p;
+  el("gainers").innerHTML = el("losers").innerHTML = '<div class="skel" style="height:60px"></div>';
+  const d = await hole("/api/movers?period=" + p + "&limit=8", bust);
+  el("gainers").innerHTML = d.gewinner.length
+    ? d.gewinner.map((e) => zeileMover(e, true)).join("")
+    : '<div class="empty">No inflows in this period</div>';
+  el("losers").innerHTML = d.verlierer.length
+    ? d.verlierer.map((e) => zeileMover(e, false)).join("")
+    : '<div class="empty">No outflows in this period</div>';
+
+  // Eigener Zeitstempel statt sich nur auf die Kopfzeile zu verlassen: wer
+  // direkt auf "Activity" landet, sieht sonst nirgends, wie alt die Zahlen
+  // sind - genau das hatte zu der Frage "updated das ueberhaupt?" gefuehrt.
+  const asOf = el("activityAsOf");
+  asOf.textContent = d.snapshot_taken_at
+    ? "Data as of snapshot " + zeitHer(d.snapshot_taken_at) + " ago"
+    : "No snapshot yet";
+  setSnapTime(d.snapshot_taken_at);
+}
+
+// ---------- Leaderboard ----------
+const LB = { limit: 50, offset: 0, period: "7d", nurEcht: false, gesamt: 0, minEtn: null, maxEtn: null };
+
+async function ladeLeaderboard() {
+  el("thDelta").textContent = "Δ " + (PERIODEN.find((p) => p.k === LB.period)?.t ?? LB.period);
+  el("lbBody").innerHTML = '<tr><td colspan="8"><div class="skel"></div></td></tr>';
+
+  let url = "/api/leaderboard?limit=" + LB.limit + "&offset=" + LB.offset +
+    "&period=" + LB.period + (LB.nurEcht ? "&nur_wallets=1" : "");
+  if (LB.minEtn != null) url += "&min_etn=" + LB.minEtn;
+  if (LB.maxEtn != null) url += "&max_etn=" + LB.maxEtn;
+
+  const d = await hole(url);
+  LB.gesamt = d.gesamt;
+
+  el("lbBody").innerHTML = d.eintraege.map((e) => {
+    const tags = walletTags(e);
+
+    const dEtn = e.delta_etn;
+    // "±0" means provably unchanged, "—" means unknown. Worth distinguishing.
+    const dTxt = !e.delta_sicher ? "—" : dEtn === 0 ? "±0" : kurz(dEtn, true);
+    const dPct = !e.delta_sicher ? "—" : dEtn === 0 ? "±0%" : pctSafe(e.delta_pct, e.etn - dEtn);
+
+    // Positive rang_delta = climbed (smaller rank number)
+    const rd = e.rang_delta;
+    const rTxt = rd == null || rd === 0
+      ? '<span class="dim3">—</span>'
+      : '<span class="' + (rd > 0 ? "up" : "down") + '">' + (rd > 0 ? "▲" : "▼") + Math.abs(rd) + "</span>";
+
+    return "<tr>" +
+      '<td class="num dim3">' + e.platz + "</td>" +
+      '<td class="rk">' + rTxt + "</td>" +
+      '<td><a class="addr" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
+        (e.anzeige ? "<b style='color:var(--tx)'>" + esc(e.anzeige) + "</b>" : kurzAdr(e.address)) +
+      "</a>" + tags + "</td>" +
+      '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
+      '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
+      '<td class="r num ' + (dEtn > 0 ? "up" : dEtn < 0 ? "down" : "dim3") + '">' + dTxt + "</td>" +
+      '<td class="r num ' + (e.delta_pct > 0 ? "up" : e.delta_pct < 0 ? "down" : "dim3") + '">' + dPct + "</td>" +
+      '<td class="r dim" style="font-size:12px">' + ruheText(e.ruhetage) + "</td>" +
+      "</tr>";
+  }).join("");
+
+  const von = LB.offset + 1, bis = Math.min(LB.offset + LB.limit, LB.gesamt);
+  const seiteAktuell = Math.floor(LB.offset / LB.limit) + 1;
+  const seitenGesamt = Math.max(1, Math.ceil(LB.gesamt / LB.limit));
+  el("pageInfo").textContent = nf(von) + "–" + nf(bis) + " of " + nf(LB.gesamt) +
+    "  (page " + seiteAktuell + "/" + seitenGesamt + ")";
+  el("prevPage").disabled = LB.offset === 0;
+  el("nextPage").disabled = bis >= LB.gesamt;
+  el("pageJump").placeholder = String(seiteAktuell);
+}
+
+/**
+ * Badges einer Wallet (Exchange, Bridge, Contract, Schlaefer).
+ *
+ * Bewusst an EINER Stelle, damit Leaderboard und Investigate-Profil nicht
+ * auseinanderlaufen - genau das war vorher der Fall: im Leaderboard stand
+ * "Unknown Exchange", auf der Profilseite derselben Adresse nichts.
+ */
+function walletTags(e) {
+  let tags = "";
+  if (e.label_type === "exchange") tags += '<span class="tag ex">Exchange</span>';
+  else if (e.label_type === "bridge") tags += '<span class="tag br">Bridge</span>';
+  else if (e.label_type === "service" && e.label_source === "auto") {
+    const pct = e.exchange_score != null ? Math.round(e.exchange_score * 100) : null;
+    tags += '<span class="tag maybe" title="Auto-detected by behaviour (counterparty fan-out, throughput, 24/7 activity) - not a confirmed identity. Could also be a team/treasury/payout wallet with many recipients. Verify before treating this as a real exchange.">' +
+      '🔍 Unknown Exchange' + (pct != null ? " " + pct + "%" : "") + '</span>';
+  }
+  else if (e.is_contract) tags += '<span class="tag br">Contract</span>';
+  if (e.ruhetage != null && e.ruhetage >= 90) tags += '<span class="tag sleep">😴</span>';
+  return tags;
+}
+
+// ---------- Exchange net-flow ----------
+//
+// Balkendiagramm um eine Nulllinie: nach oben = ETN wandert AUF die Boersen,
+// nach unten = ETN verlaesst sie. Bewusst eine eigene Zeichenfunktion statt
+// zeichneChart: dort ist die Aussage der Verlauf einer Kurve, hier die
+// Richtung und Groesse einzelner Tage.
+const FLOW = { zeitraum: "30d", inklAuto: false, punkte: null };
+
+function zeichneFlowChart(svg, punkte) {
+  if (punkte) FLOW.punkte = punkte;
+  const daten = FLOW.punkte ?? [];
+  const holder = svg.parentElement;
+  const tip = el("flowTip");
+  if (holder.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
+  const W = Math.max(320, Math.round(holder.clientWidth));
+  const H = W < 640 ? 190 : 240;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.style.height = H + "px";
+
+  if (!daten.length) {
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
+      'text-anchor="middle">no exchange movement in this period</text>';
+    return;
+  }
+
+  const PT = 14, PB = 30, PL = 74, PR = 12;
+  const werte = daten.map((p) => p.netto_etn);
+  const max = Math.max(...werte, 0), min = Math.min(...werte, 0);
+  const spanne = Math.max(Math.abs(max), Math.abs(min)) || 1;
+  const lo = -spanne * 1.1, hi = spanne * 1.1;
+
+  const Y = (v) => PT + ((hi - v) / (hi - lo)) * (H - PT - PB);
+  const bw = Math.max(2, Math.min(26, (W - PL - PR) / daten.length - 2));
+  const X = (i) => PL + (i + 0.5) * ((W - PL - PR) / daten.length);
+  const null_y = Y(0);
+
+  const achse = [hi, hi / 2, 0, lo / 2, lo].map((v) =>
+    '<line x1="' + PL + '" y1="' + Y(v) + '" x2="' + (W - PR) + '" y2="' + Y(v) +
+    '" stroke="' + (v === 0 ? "#334155" : "#1e293b") + '" stroke-width="1"/>' +
+    '<text x="' + (PL - 9) + '" y="' + (Y(v) + 4) + '" fill="#7d8ba3" font-size="11.5" ' +
+    'text-anchor="end" font-family="ui-monospace,monospace">' + (v === 0 ? "0" : kurz(v, true)) + "</text>"
+  ).join("");
+
+  const balken = daten.map((p, i) => {
+    const y = Y(p.netto_etn);
+    const hoehe = Math.max(1, Math.abs(y - null_y));
+    const farbe = p.netto_etn > 0 ? "#f4635e" : "#22d3a7"; // rein = rot, raus = gruen
+    return '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + Math.min(y, null_y).toFixed(1) +
+      '" width="' + bw.toFixed(1) + '" height="' + hoehe.toFixed(1) +
+      '" fill="' + farbe + '" opacity=".85" rx="1.5"/>';
+  }).join("");
+
+  const marken = Math.max(2, Math.min(5, Math.floor((W - PL - PR) / 130)));
+  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
+    const i = Math.round((n / marken) * (daten.length - 1));
+    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
+    return '<text x="' + X(i) + '" y="' + (H - 9) + '" fill="#7d8ba3" font-size="12" ' +
+      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
+      new Date(daten[i].day).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>";
+  }).join("");
+
+  svg.innerHTML = achse + balken + datumTexte;
+
+  function zeige(ev) {
+    const r = holder.getBoundingClientRect();
+    const x = ev.clientX - r.left;
+    const i = Math.max(0, Math.min(daten.length - 1,
+      Math.round(((x - PL) / (W - PL - PR)) * daten.length - 0.5)));
+    const p = daten[i];
+    tip.innerHTML = '<b class="num" style="color:' + (p.netto_etn > 0 ? "#f4635e" : "#22d3a7") + '">' +
+      kurz(p.netto_etn, true) + " ETN</b>" +
+      "<span>" + new Date(p.day).toLocaleDateString(LOC, { year: "numeric", month: "short", day: "numeric" }) + "</span>" +
+      "<span>" + (p.netto_etn > 0 ? "onto exchanges" : "off exchanges") + "</span>";
+    tip.classList.add("on");
+    const links = X(i) > W * 0.6;
+    tip.style.left = links ? "auto" : X(i) + 14 + "px";
+    tip.style.right = links ? W - X(i) + 14 + "px" : "auto";
+  }
+  const verstecke = () => tip.classList.remove("on");
+  holder.onmousemove = zeige;
+  holder.onmouseleave = verstecke;
+  holder.ontouchmove = (e) => { if (e.touches[0]) zeige(e.touches[0]); };
+  holder.ontouchend = verstecke;
+}
+
+async function ladeExchangeFlow() {
+  const d = await hole("/api/exchange-flow?period=" + FLOW.zeitraum + (FLOW.inklAuto ? "&incl_auto=1" : ""));
+  const netto = d.netto_etn;
+  const rein = netto > 0;
+
+  el("flowPeriodLbl").textContent = FLOW.zeitraum;
+  const n = el("flowNet");
+  n.textContent = kurz(netto, true) + " ETN";
+  n.className = "v num " + (rein ? "down" : "up");
+  el("flowDir").textContent = Math.abs(netto) < 1
+    ? "balanced — nothing worth reading into"
+    : rein
+      ? "net movement ONTO exchanges"
+      : "net movement OFF exchanges, into private wallets";
+  el("flowIn").textContent = "+" + kurz(d.zufluss_etn);
+  el("flowOut").textContent = kurz(d.abfluss_etn);
+
+  zeichneFlowChart(el("flowChart"), d.verlauf);
+
+  el("flowPerEx").innerHTML = d.pro_boerse.map((b) =>
+    '<div class="flowex"><div class="nm">' +
+      (b.bestaetigt ? "<b>" + esc(b.label) + "</b>" : '<b>' + esc(b.label) + '</b> <span class="tag maybe">detected</span>') +
+      ' <span class="dim3" style="font-family:var(--mono);font-size:11.5px">' + kurzAdr(b.address) + "</span></div>" +
+      '<div class="val num ' + (b.netto_etn > 0 ? "down" : "up") + '">' + kurz(b.netto_etn, true) + " ETN</div></div>"
+  ).join("") || '<div class="empty">No exchange wallets moved in this period</div>';
+
+  el("flowCoverage").textContent =
+    d.boersen_gezaehlt + " wallet(s) counted" +
+    (d.inkl_auto ? ", including behaviour-detected candidates" : ", confirmed exchanges only") +
+    " — exchanges we haven't labelled are not in these numbers.";
+  el("flowAuto").textContent = d.inkl_auto ? "− Confirmed exchanges only" : "+ Include detected candidates";
+  el("flowAuto").classList.toggle("on", !!d.inkl_auto);
+}
+
+beobachte("flowHolder", () => { if (FLOW.punkte) zeichneFlowChart(el("flowChart")); });
+
+// ---------- Sleepers ----------
+async function ladeSleepers(bust) {
+  const d = await hole("/api/sleepers?limit=12&min_tage=90", bust);
+  el("sleepers").innerHTML = d.eintraege.length ? d.eintraege.map((e) =>
+    '<a class="mv" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
+    '<div class="em">' + e.tier_emoji + "</div>" +
+    '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(e.address)) + "</b>" +
+    "<span>rank " + (e.rank_pos ?? "—") + " · " + e.tier_name + "</span></div>" +
+    '<div class="val"><b class="num">' + kurz(e.etn) + "</b>" +
+    "<span>" + ruheText(e.ruhetage) + " dormant</span></div></a>"
+  ).join("") : '<div class="empty">No sleepers found</div>';
+}
+
+// ---------- Events ----------
+const EV = {
+  gain:         { i: "▲",  f: "#22d3a7", t: "Inflow" },
+  loss:         { i: "▼",  f: "#f4635e", t: "Outflow" },
+  sleeper_wake: { i: "😴", f: "#fbbf24", t: "Sleeper woke up" },
+  drained:      { i: "🚨", f: "#f4635e", t: "Wallet drained" },
+  tier_up:      { i: "⬆",  f: "#a78bfa", t: "Tier up" },
+  tier_down:    { i: "⬇",  f: "#64748b", t: "Tier down" },
+  rank_enter:   { i: "✨", f: "#5b9cff", t: "New in top N" },
+  rank_exit:    { i: "👋", f: "#64748b", t: "Left top N" },
+};
+async function ladeEvents(bust) {
+  const d = await hole("/api/events?limit=14&min_severity=25", bust);
+  el("events").innerHTML = d.eintraege.length ? d.eintraege.map((e) => {
+    const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
+    return '<a class="ev" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
+      '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
+      '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") + "</b>" +
+      "<div>" + esc(e.anzeige ?? kurzAdr(e.address)) +
+      (e.tier_from ? " · " + e.tier_from + " → " + e.tier_to : "") + "</div></div>" +
+      '<div class="when">' + zeitHer(e.detected_at) + "</div></a>";
+  }).join("") : '<div class="empty">No events yet — they appear from the second snapshot onwards</div>';
+}
+
+// ---------- Cluster guesses (experimental) ----------
+async function ladeClusters() {
+  el("clusters").innerHTML = '<div class="skel" style="height:120px"></div>';
+  const d = await hole("/api/clusters");
+  el("clustersNote").textContent = d.stand
+    ? "Last computed " + new Date(d.stand).toLocaleString(LOC) +
+      " · only among the individually-tracked (fast-tier) wallets"
+    : "No analysis has run yet — click \"Run cluster analysis now\" below, " +
+      "or wait for the monthly run.";
+
+  if (!d.gruppen.length) {
+    el("clusters").innerHTML = '<div class="empty">' +
+      (d.stand ? "No shared-funding groups found." : "Nothing computed yet.") + '</div>';
+    return;
+  }
+
+  el("clusters").innerHTML = d.gruppen.map((g) => {
+    const srcNote = g.funding_source_label
+      ? '<span class="tag ' + (g.funding_source_type === "exchange" ? "ex" : "br") + '">' +
+        esc(g.funding_source_label) + "</span>"
+      : g.funding_source_rank
+      ? '<span class="tag">rank ' + g.funding_source_rank + " · " + kurz(g.funding_source_etn) + " ETN</span>"
+      : "";
+    const conf = Math.round(g.durchschnitt_anteil * 100);
+    return '<div class="clustergroup">' +
+      '<div class="head">' +
+      '<div class="src">Funding source <b>' + kurzAdr(g.funding_source) + "</b>" + srcNote + "</div>" +
+      '<div class="combo"><b class="num">' + kurz(g.kombiniert_etn) + " ETN</b>" +
+      "<span>" + g.mitglieder + " wallets combined</span></div></div>" +
+      '<div class="confbar" title="Average share of inbound funds from this source">' +
+      '<i style="width:' + conf + '%"></i></div>' +
+      g.wallets.map((w) =>
+        '<a class="cmember" href="' + EXPLORER + w.address + '" target="_blank" rel="noopener">' +
+          '<div class="em">' + tierEmoji(w.tier) + "</div>" +
+          '<div class="id">' + (w.anzeige ? "<b>" + esc(w.anzeige) + "</b> " : "") + kurzAdr(w.address) + "</div>" +
+          '<div class="val"><b class="num">' + kurz(w.etn) + " ETN</b>" +
+          "<span>" + Math.round(w.funding_share * 100) + "% from this source</span></div></a>"
+      ).join("") +
+      "</div>";
+  }).join("");
+}
+const tierEmoji = (key) => ({
+  humpback:"🐋",whale:"🐳",shark:"🦈",dolphin:"🐬",fish:"🐟",octopus:"🐙",
+  crab:"🦀",shrimp:"🦐",plankton:"🦠",microbe:"🧫",dust:"💨",
+}[key] ?? "•");
+
+// ---------- Investigate (full wallet detail page) ----------
+async function ladeWalletDetail(q) {
+  const wrap = { head: el("invResultWrap"), chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap") };
+  const empty = el("invEmpty");
+  Object.values(wrap).forEach((w) => (w.style.display = "none"));
+  empty.style.display = "none";
+  el("invHead").innerHTML = '<div class="skel" style="height:74px"></div>';
+  wrap.head.style.display = "";
+
+  let d;
+  try {
+    d = await hole("/api/search?q=" + encodeURIComponent(q));
+  } catch (e) {
+    el("invHead").innerHTML = '<div class="empty">Error: ' + esc(e.message) + "</div>";
+    return;
+  }
+
+  // Namenssuche mit mehreren Treffern: Liste zum Auswaehlen statt Detailseite.
+  if (d.treffer) {
+    wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
+    el("invHead").innerHTML = d.treffer.length
+      ? '<div style="font-size:13px;color:var(--tx2);margin-bottom:10px">' + d.treffer.length + ' match(es) - pick one:</div>' +
+        d.treffer.map((e) =>
+          '<a class="mv" href="javascript:void(0)" data-addr="' + e.address + '">' +
+            '<div class="em">' + e.tier_emoji + "</div>" +
+            '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(e.address)) + "</b>" +
+            "<span>rank " + (e.rank_pos ?? "—") + " · " + kurz(e.etn) + " ETN</span></div>" +
+          "</a>"
+        ).join("")
+      : '<div class="empty">Nothing found</div>';
+    return;
+  }
+
+  renderWalletDetail(d);
+}
+
+// ---------- Share ("where do I stand") ----------
+//
+// Privacy-first: die Adresse wird beim Teilen standardmaessig NICHT
+// mitgeschickt, nur Tier/Rang/Fortschritt. Ein Toggle blendet sie auf
+// Wunsch ein - bewusst kein Default, den man erst abwaehlen muss.
+let CUR_WALLET = null;
+let ZEIGE_ADRESSE = false;
+let TELEGRAM_BOT = null; // Bot-Benutzername aus /api/overview, null = Feature nicht konfiguriert
+
+/**
+ * Zwei bewusst UNTERSCHIEDLICHE Texte, nicht derselbe mit weggelassener Adresse:
+ *
+ *   versteckt -> nur die Stufe. KEIN Rang, keine Adresse. Der Rang allein
+ *                waere schon eine Identifizierung - "Rang 137" kann jeder im
+ *                Leaderboard nachschlagen, damit waere das Verstecken sinnlos.
+ *   sichtbar  -> Adresse, Rang, Stufe und der Weg zur naechsten Stufe.
+ */
+function buildShareText(d, zeigeAdresse) {
+  if (!zeigeAdresse) {
+    return d.tier_emoji + " I'm a " + d.tier_name + " on the Electroneum Smart Chain — and proud of it! 💪\n\n" +
+      "What are you? Find your tier on ETN Radar:";
+  }
+  const teile = [d.tier_emoji + " I'm a " + d.tier_name + " on the Electroneum Smart Chain — and proud of it! 💪"];
+  const fakten = [];
+  if (d.in_top_n && d.rank_pos) fakten.push("Rank #" + nf(d.rank_pos) + " of all ETN holders");
+  fakten.push("Holding " + kurz(d.etn) + " ETN");
+  if (d.bis_naechster_tier != null) {
+    fakten.push("Only " + nf(d.bis_naechster_tier) + " ETN to go until " + d.naechster_tier + " " + naechsterEmoji(d) + " — I'll make it!");
+  } else {
+    fakten.push("Top tier reached — nowhere left to climb 🎉");
+  }
+  fakten.push("Wallet: " + d.address);
+  teile.push("", fakten.join("\n"), "", "Where do you stand? Check yours on ETN Radar:");
+  return teile.join("\n");
+}
+
+/** Emoji der naechsthoeheren Stufe - rein kosmetisch fuer den Share-Text. */
+function naechsterEmoji(d) {
+  const t = (TIER_EMOJI_NAME[d.naechster_tier] ?? "");
+  return t;
+}
+const TIER_EMOJI_NAME = {
+  Humpback: "🐋", Whale: "🐳", Shark: "🦈", Dolphin: "🐬", Fish: "🐟",
+  Octopus: "🐙", Crab: "🦀", Shrimp: "🦐", Plankton: "🦠", Microbe: "🧫", Dust: "💨",
+};
+
+function shareBlock(addr) {
+  const alarm = TELEGRAM_BOT
+    ? '<a class="ghost" href="https://t.me/' + TELEGRAM_BOT + '?start=' + addr.slice(2) +
+      '" target="_blank" rel="noopener">🔔 Alert me if this wallet wakes up</a>'
+    : "";
+  return '<div class="sharebar">' +
+    '<button id="shareOpen">📢 Share my rank</button>' +
+    alarm +
+    "</div>";
+}
+
+// ---------- Share-Dialog ----------
+function shareVorschau() {
+  if (!CUR_WALLET) return;
+  el("sharePreview").textContent = buildShareText(CUR_WALLET, ZEIGE_ADRESSE) + "\n" + shareUrl();
+  el("sharePrivacyNote").textContent = ZEIGE_ADRESSE
+    ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
+    : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
+  el("sharePrivacyNote").style.color = ZEIGE_ADRESSE ? "var(--warn)" : "var(--acc2)";
+}
+const shareUrl = () => location.origin + location.pathname;
+
+function shareDialogOeffnen() {
+  if (!CUR_WALLET) return;
+  el("shareHideAddr").checked = !ZEIGE_ADRESSE;
+  shareVorschau();
+  el("shareModal").classList.add("on");
+}
+function shareDialogSchliessen() { el("shareModal").classList.remove("on"); }
+
+function shareOeffnen(plattform) {
+  if (!CUR_WALLET) return;
+  const text = buildShareText(CUR_WALLET, ZEIGE_ADRESSE);
+  const url = shareUrl();
+  const zielUrl = plattform === "x"
+    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(url)
+    : "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+  window.open(zielUrl, "_blank", "noopener,width=600,height=560");
+  shareDialogSchliessen();
+}
+
+function hypeText(progress) {
+  const p = progress * 100;
+  if (p >= 95) return "So close — will you make it? 🚀";
+  if (p >= 75) return "Almost there — keep stacking! 💪";
+  if (p >= 40) return "Making progress — halfway up the ladder.";
+  return "Long way up, but every ETN counts. 🐾";
+}
+
+function renderWalletDetail(d) {
+  const wrap = { chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap") };
+  const bis = d.bis_naechster_tier;
+  const liveOnly = d.quelle === "explorer";
+
+  el("invHead").innerHTML =
+    '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">' +
+    '<div style="font-size:60px;line-height:1">' + d.tier_emoji + "</div>" +
+    '<div style="flex:1;min-width:210px">' +
+    '<div style="font-size:21px;font-weight:640">' + esc(d.anzeige ?? d.tier_name) +
+      '<span style="font-size:11px;font-weight:400">' + walletTags(d) + "</span></div>" +
+    (d.anzeige ? '<div class="dim" style="font-size:12.5px">' + esc(d.tier_name) + "</div>" : "") +
+    '<a class="addr" href="' + EXPLORER + d.address + '" target="_blank" rel="noopener" style="margin-top:3px;display:inline-block">' +
+      kurzAdr(d.address) + " ↗</a></div>" +
+    '<div style="text-align:right"><div class="num" style="font-size:25px;font-weight:660">' +
+    kurz(d.etn) + ' <span style="font-size:.5em;color:var(--tx2)">ETN</span></div>' +
+    '<div class="dim3" style="font-size:12px">' +
+    (d.in_top_n ? "rank " + d.rank_pos : "outside the tracked list") + "</div></div></div>" +
+    (bis != null
+      ? '<div class="progress"><i style="width:' + (d.tier_progress * 100).toFixed(1) + '%"></i></div>' +
+        '<div style="font-size:13.5px;color:var(--tx2)">' + esc(d.tier_name) + ' → <b>' + esc(d.naechster_tier) +
+        '</b> · another <b class="num" style="color:var(--acc)">' + nf(bis) + " ETN</b> to go</div>" +
+        '<div style="font-size:12.5px;color:var(--acc2);margin-top:4px;font-weight:560">' + hypeText(d.tier_progress) + "</div>"
+      : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉 — nowhere left to climb.</div>') +
+    (liveOnly
+      ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer — this wallet is outside the tracked top N, so no history/events/cluster data exists here.</div>'
+      : "") +
+    shareBlock(d.address);
+
+  CUR_WALLET = d;
+
+  if (liveOnly) {
+    wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
+    return;
+  }
+
+  // Chart
+  if (d.verlauf && d.verlauf.length >= 2) {
+    wrap.chart.style.display = "";
+    zeichneChart(el("invChart"), d.verlauf);
+  } else {
+    wrap.chart.style.display = "";
+    el("invChartHolder").innerHTML = '<div class="empty">Not enough history for a chart yet</div>';
+  }
+
+  // Cluster-Bezug
+  const c = d.cluster ?? {};
+  const teile = [];
+  if (c.finanziert_von) {
+    const q = c.finanziert_von;
+    teile.push(
+      '<div class="cmember"><div class="em">⬅️</div>' +
+      '<div class="id">Funded ' + Math.round(q.funding_share * 100) + '% by <b>' +
+        esc(q.quelle_label ?? kurzAdr(q.funding_source)) + "</b>" +
+        (q.quelle_typ ? " (" + esc(q.quelle_typ) + ")" : "") + "</div></div>"
+    );
+  }
+  if (c.finanziert_selbst?.length) {
+    teile.push('<div style="font-size:12.5px;color:var(--tx2);margin:10px 0 4px">Funds ' + c.finanziert_selbst.length + ' other tracked wallet(s):</div>');
+    teile.push(c.finanziert_selbst.map((m) =>
+      '<a class="cmember" href="' + EXPLORER + m.address + '" target="_blank" rel="noopener">' +
+      '<div class="em">➡️</div><div class="id">' + kurzAdr(m.address) + '</div>' +
+      '<div class="val"><b class="num">' + kurz(m.etn) + " ETN</b>" +
+      "<span>" + Math.round(m.funding_share * 100) + "% from this wallet</span></div></a>"
+    ).join(""));
+  }
+  if (teile.length) {
+    wrap.cluster.style.display = "";
+    el("invCluster").innerHTML = teile.join("");
+  } else {
+    wrap.cluster.style.display = "";
+    el("invCluster").innerHTML = '<div class="empty">No funding-source relationship detected for this wallet.</div>';
+  }
+
+  // Ereignisse
+  wrap.events.style.display = "";
+  el("invEvents").innerHTML = d.ereignisse?.length
+    ? d.ereignisse.map((e) => {
+        const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
+        return '<div class="ev">' +
+          '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
+          '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") + "</b>" +
+          (e.tier_from ? "<div>" + e.tier_from + " → " + e.tier_to + "</div>" : "") + "</div>" +
+          '<div class="when">' + zeitHer(e.detected_at) + "</div></div>";
+      }).join("")
+    : '<div class="empty">No events recorded for this wallet yet</div>';
+}
+
+/** Springt zum Investigate-Tab und laedt sofort ein bestimmtes Wallet - Ziel
+    des rechten Mausklicks "Investigate" ueberall im Dashboard. */
+function investigateAddress(addr) {
+  el("invQ").value = addr;
+  location.hash = "investigate";
+  zeigeSeite("investigate");
+  ladeWalletDetail(addr).catch((e) => console.error("investigate:", e));
+}
+
+el("invGoBtn").onclick = () => {
+  const q = el("invQ").value.trim();
+  if (q) ladeWalletDetail(q).catch((e) => console.error("investigate:", e));
+};
+el("invQ").addEventListener("keydown", (e) => { if (e.key === "Enter") el("invGoBtn").click(); });
+el("invHead").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-addr]");
+  if (a) { el("invQ").value = a.dataset.addr; ladeWalletDetail(a.dataset.addr).catch(console.error); return; }
+  if (e.target.closest("#shareOpen")) { shareDialogOeffnen(); return; }
+});
+
+// Share-Dialog: ein Knopf, darin die Wahl der Plattform und der Sichtbarkeit.
+el("shareClose").onclick = shareDialogSchliessen;
+el("shareModal").addEventListener("click", (e) => {
+  if (e.target === el("shareModal")) shareDialogSchliessen(); // Klick auf den Hintergrund
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && el("shareModal").classList.contains("on")) shareDialogSchliessen();
+});
+el("shareHideAddr").addEventListener("change", (e) => {
+  ZEIGE_ADRESSE = !e.target.checked;
+  shareVorschau();
+});
+el("shareGoX").onclick = () => shareOeffnen("x");
+el("shareGoTG").onclick = () => shareOeffnen("tg");
+
+// ---------- Rechtsklick-Menue: "Investigate" auf jeder Wallet-Adresse ----------
+//
+// Ein einziger, delegierter Listener statt einem pro Zeile: erfasst auch
+// Adressen, die erst spaeter dynamisch gerendert werden (Leaderboard-Seiten,
+// Cluster-Ergebnisse, ...). Linksklick auf dieselben Links bleibt unveraendert
+// und geht weiter direkt zum externen Explorer.
+(function () {
+  let menu = null;
+  function schliessen() { if (menu) { menu.remove(); menu = null; } }
+  document.addEventListener("contextmenu", (e) => {
+    const a = e.target.closest('a[href^="' + EXPLORER + '"]');
+    if (!a) return;
+    e.preventDefault();
+    schliessen();
+    const addr = a.getAttribute("href").slice(EXPLORER.length);
+    menu = document.createElement("div");
+    menu.className = "ctxmenu";
+    menu.style.left = e.clientX + "px";
+    menu.style.top = e.clientY + "px";
+    menu.innerHTML = '<button>🔎 Investigate this wallet</button>';
+    menu.querySelector("button").onclick = () => { schliessen(); investigateAddress(addr); };
+    document.body.appendChild(menu);
+  });
+  document.addEventListener("click", schliessen);
+  window.addEventListener("scroll", schliessen, true);
+})();
+
+// ---------- Info-Popup: kleines "ⓘ" statt Dauertext ----------
+//
+// Fuer Erklaerungen, die wichtig sind, aber nicht staendig im Weg stehen
+// sollen: <button class="infoBtn" data-info="...">ⓘ</button> irgendwo im
+// Markup, ein einziger delegierter Listener oeffnet/schliesst die Bubble.
+(function () {
+  let pop = null;
+  function schliessen() { if (pop) { pop.remove(); pop = null; } }
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".infoBtn");
+    const drinnen = e.target.closest(".infopop");
+    if (!btn && !drinnen) { schliessen(); return; }
+    if (!btn) return;
+    e.stopPropagation();
+    const schonOffen = pop && pop.dataset.fuer === btn.dataset.info;
+    schliessen();
+    if (schonOffen) return; // zweiter Klick auf denselben Knopf schliesst nur
+    pop = document.createElement("div");
+    pop.className = "infopop";
+    pop.dataset.fuer = btn.dataset.info;
+    pop.textContent = btn.dataset.info;
+    document.body.appendChild(pop);
+    const r = btn.getBoundingClientRect();
+    const pw = pop.offsetWidth;
+    let left = Math.min(r.left, window.innerWidth - pw - 12);
+    pop.style.left = Math.max(12, left) + "px";
+    pop.style.top = (r.bottom + 7) + "px";
+  });
+  window.addEventListener("scroll", schliessen, true);
+})();
+
+// ---------- Wallet lookup ----------
+async function suchen() {
+  const q = el("q").value.trim();
+  const box = el("searchResult");
+  if (!q) return;
+  box.className = "result show";
+  box.innerHTML = '<div class="skel" style="height:74px"></div>';
+  try {
+    const d = await hole("/api/search?q=" + encodeURIComponent(q));
+    if (d.treffer) {
+      box.innerHTML = d.treffer.length
+        ? d.treffer.map((e) => zeileMover({ ...e, delta_etn: 0, delta_pct: 0 }, true)).join("")
+        : '<div class="empty">Nothing found</div>';
+      return;
+    }
+    const bis = d.bis_naechster_tier;
+    box.innerHTML =
+      '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">' +
+      '<div style="font-size:60px;line-height:1">' + d.tier_emoji + "</div>" +
+      '<div style="flex:1;min-width:210px">' +
+      '<div style="font-size:21px;font-weight:640">' + esc(d.tier_name) + "</div>" +
+      '<div class="addr" style="margin-top:2px">' + kurzAdr(d.address) + "</div></div>" +
+      '<div style="text-align:right"><div class="num" style="font-size:25px;font-weight:660">' +
+      kurz(d.etn) + ' <span style="font-size:.5em;color:var(--tx2)">ETN</span></div>' +
+      '<div class="dim3" style="font-size:12px">' +
+      (d.in_top_n ? "rank " + d.rank_pos : "outside the tracked list") + "</div></div></div>" +
+      (bis != null
+        ? '<div class="progress"><i style="width:' + (d.tier_progress * 100).toFixed(1) + '%"></i></div>' +
+          '<div style="font-size:13.5px;color:var(--tx2)">Another <b class="num" style="color:var(--acc)">' +
+          nf(bis) + " ETN</b> to reach <b>" + esc(d.naechster_tier) + "</b></div>"
+        : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉</div>') +
+      (d.quelle === "explorer"
+        ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer — this wallet is outside the tracked top N.</div>'
+        : "") +
+      // Statt hier alles zu wiederholen: rueber zur vollen Profilseite, wo
+      // Chart, Ereignisse, Cluster und der Share-Dialog ohnehin schon leben.
+      '<div class="sharebar"><button id="zurProfilseite" data-addr="' + esc(d.address) + '">' +
+      "🔎 Full profile &amp; share</button></div>";
+  } catch (e) {
+    box.innerHTML = '<div class="empty">Error: ' + esc(e.message) + "</div>";
+  }
+}
+
+// ---------- Tabs ----------
+//
+// Jede Seite laedt ihre Daten beim ersten Oeffnen. Das haelt den Erststart
+// schlank und spart Anfragen an Endpoints, die der Nutzer nie ansieht.
+const geladen = new Set();
+const LADER = {
+  overview: () => Promise.all([ladeOverview(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
+  board: () => ladeLeaderboard(),
+  activity: () => Promise.all([ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
+  clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
+  investigate: () => Promise.resolve(), // wartet auf eine Suche, laedt nichts von sich aus
+};
+
+function zeigeSeite(name) {
+  document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
+  [...el("nav").children].forEach((b) => b.classList.toggle("on", b.dataset.p === name));
+  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+  if (!geladen.has(name)) {
+    geladen.add(name);
+    LADER[name]().catch((err) => console.error(name + ":", err));
+  }
+  // Der Chart wurde eventuell in einem versteckten Tab gezeichnet und hatte
+  // dort die Breite 0 - beim Einblenden neu vermessen.
+  if (name === "overview") alleChartsNachziehen();
+  if (name === "activity" && FLOW.punkte) zeichneFlowChart(el("flowChart"));
+}
+
+el("nav").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (b) zeigeSeite(b.dataset.p);
+};
+
+// ---------- Wiring ----------
+// ---------- Manual job triggers (census, clusters) ----------
+//
+// Generisch fuer beide "Run now"-Knoepfe: gleiche API-Form
+// (/api/<job>/status, /api/<job>/trigger), gleiche Sperr-Logik.
+function zeitDauer(ms) {
+  const h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
+  return h > 0 ? h + "h " + m + "m" : m + "m";
+}
+const JOB_LABEL = {
+  census: "🔄 Run full census now",
+  clusters: "🔍 Run cluster analysis now",
+  exchanges: "🔍 Detect exchanges",
+  bridge: "🔍 Scan for events now",
+};
+
+async function ladeJobStatus(job, btnId) {
+  const btn = el(btnId);
+  const label = JOB_LABEL[job];
+  try {
+    const s = await hole("/api/" + job + "/status");
+    // Betreiber-Knopf: fuer normale Besucher gar nicht erst anzeigen.
+    if (s.admin_noetig && !s.admin_ok) {
+      btn.style.display = "none";
+      return;
+    }
+    btn.style.display = "";
+    btn.disabled = !s.bereit;
+    btn.textContent = s.bereit ? label : "Available in " + zeitDauer(s.wartezeit_ms);
+  } catch {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+function wireJobButton(job, btnId) {
+  el(btnId).onclick = async () => {
+    const btn = el(btnId);
+    btn.disabled = true;
+    btn.textContent = "Starting…";
+    try {
+      const r = await fetch("/api/" + job + "/trigger", { method: "POST", headers: adminKopf() });
+      const d = await r.json();
+      btn.textContent = d.ok
+        ? "✓ Started — takes ~15-30 min"
+        : d.grund === "nicht_konfiguriert"
+        ? "Not configured — see Actions tab"
+        : d.grund === "kein_zugriff"
+        ? "Operator only"
+        : "Failed — try again later";
+    } catch {
+      btn.textContent = "Failed — try again later";
+    }
+    setTimeout(() => ladeJobStatus(job, btnId), 4000);
+  };
+}
+wireJobButton("census", "censusBtn");
+wireJobButton("exchanges", "exchangesBtn");
+ladeJobStatus("exchanges", "exchangesBtn").catch(() => {});
+wireJobButton("clusters", "clustersBtn");
+wireJobButton("bridge", "bridgeBtn");
+ladeJobStatus("census", "censusBtn").catch(() => {});
+
+el("activityRefresh").onclick = async () => {
+  const btn = el("activityRefresh");
+  btn.disabled = true;
+  btn.textContent = "Refreshing…";
+  try {
+    await Promise.all([
+      ladeMovers(letzterMoverZeitraum, true),
+      ladeSleepers(true),
+      ladeEvents(true),
+      ladeExchangeFlow(),
+    ]);
+  } catch (e) {
+    console.error("Refresh:", e);
+  }
+  btn.disabled = false;
+  btn.textContent = "🔄 Refresh";
+};
+
+el("goBtn").onclick = suchen;
+el("q").addEventListener("keydown", (e) => { if (e.key === "Enter") suchen(); });
+el("searchResult").addEventListener("click", (e) => {
+  const b = e.target.closest("#zurProfilseite");
+  if (b) investigateAddress(b.dataset.addr);
+});
+
+periodTabs(el("moverTabs"), "7d", (p) => ladeMovers(p).catch(console.error));
+periodTabs(el("lbPeriods"), "7d", (p) => { LB.period = p; LB.offset = 0; ladeLeaderboard(); });
+periodTabs(el("flowPeriods"), "30d", (p) => {
+  FLOW.zeitraum = p;
+  ladeExchangeFlow().catch(console.error);
+});
+el("flowAuto").onclick = () => {
+  FLOW.inklAuto = !FLOW.inklAuto;
+  ladeExchangeFlow().catch(console.error);
+};
+
+el("prevPage").onclick = () => { LB.offset = Math.max(0, LB.offset - LB.limit); ladeLeaderboard(); };
+el("nextPage").onclick = () => { LB.offset += LB.limit; ladeLeaderboard(); };
+document.querySelectorAll("[data-n]").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll("[data-n]").forEach((x) => x.classList.toggle("on", x === b));
+    LB.limit = Number(b.dataset.n);
+    LB.offset = 0;
+    ladeLeaderboard();
+  };
+});
+el("hideEx").onclick = (e) => {
+  LB.nurEcht = !LB.nurEcht;
+  e.target.classList.toggle("on", LB.nurEcht);
+  LB.offset = 0;
+  ladeLeaderboard();
+};
+
+// ---------- Seitensprung ----------
+function lbSeiteSpringen() {
+  const seite = Math.max(1, parseInt(el("pageJump").value, 10) || 1);
+  LB.offset = (seite - 1) * LB.limit;
+  ladeLeaderboard();
+}
+el("pageJumpBtn").onclick = lbSeiteSpringen;
+el("pageJump").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSeiteSpringen(); });
+
+// ---------- Balance-Filter ----------
+// Presets grob an der Tier-Skala orientiert - deckt die typischen Fragen ab
+// ("nur die ganz Kleinen", "Whale-Bereich", ...) ohne dass man selbst rechnen muss.
+const ETN_PRESETS = [
+  { t: "All", min: null, max: null },
+  { t: "< 100K", min: null, max: 100000 },
+  { t: "100K–500K", min: 100000, max: 500000 },
+  { t: "500K–2M", min: 500000, max: 2000000 },
+  { t: "2M–10M", min: 2000000, max: 10000000 },
+  { t: "10M+", min: 10000000, max: null },
+];
+function zeigeRangeUI() {
+  [...el("etnPresets").children].forEach((b) =>
+    b.classList.toggle("on", Number(b.dataset.min || 0) === (LB.minEtn ?? 0) &&
+      (b.dataset.max ? Number(b.dataset.max) : null) === LB.maxEtn)
+  );
+}
+el("etnPresets").innerHTML = ETN_PRESETS.map((p) =>
+  '<button class="ghost' + (p.min == null && p.max == null ? " on" : "") + '" data-min="' +
+    (p.min ?? "") + '" data-max="' + (p.max ?? "") + '">' + p.t + "</button>"
+).join("");
+el("etnPresets").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  LB.minEtn = b.dataset.min ? Number(b.dataset.min) : null;
+  LB.maxEtn = b.dataset.max ? Number(b.dataset.max) : null;
+  LB.offset = 0;
+  zeigeRangeUI();
+  ladeLeaderboard();
+};
+
+// ---------- Wallet-Suche: springt direkt zur richtigen Seite ----------
+async function lbSpringeZuWallet() {
+  const q = el("lbSearch").value.trim();
+  const msg = el("lbSearchMsg");
+  if (!q) return;
+  msg.style.display = "";
+  msg.textContent = "Searching …";
+  try {
+    const d = await hole("/api/search?q=" + encodeURIComponent(q));
+    if (d.treffer) {
+      if (!d.treffer.length) { msg.textContent = "No match found."; return; }
+      if (d.treffer.length > 1) {
+        msg.textContent = d.treffer.length + " matches for \"" + q + "\" — be more specific, or use one address.";
+        return;
+      }
+      return lbSpringeZuRang(d.treffer[0].rank_pos, d.treffer[0].address, msg);
+    }
+    if (d.quelle === "explorer" || !d.in_top_n) {
+      msg.textContent = "Found, but outside the tracked leaderboard (rank too low to appear here).";
+      return;
+    }
+    return lbSpringeZuRang(d.rank_pos, d.address, msg);
+  } catch (e) {
+    msg.textContent = "Error: " + e.message;
+  }
+}
+async function lbSpringeZuRang(rang, addr, msg) {
+  if (rang == null) { msg.textContent = "Found, but its rank is unknown."; return; }
+  // Filter, die die Nummerierung verschieben wuerden, erst zuruecksetzen -
+  // sonst landet der Sprung an der falschen Seite.
+  LB.nurEcht = false;
+  el("hideEx").classList.remove("on");
+  LB.minEtn = null; LB.maxEtn = null;
+  zeigeRangeUI();
+  msg.style.display = "none";
+
+  // rank_pos ist der GLOBALE Rang (inkl. Bridge), "platz" in der Liste zaehlt
+  // ohne die Bridge - ein Offset von 1 ist darum normal. Um das nicht exakt
+  // nachrechnen zu muessen: geschaetzte Seite laden, und falls die Adresse
+  // dort nicht auftaucht, eine Seite vor/zurueck nachschauen.
+  const geschaetzt = Math.floor((rang - 1) / LB.limit) * LB.limit;
+  for (const off of [geschaetzt, geschaetzt + LB.limit, geschaetzt - LB.limit]) {
+    if (off < 0) continue;
+    LB.offset = off;
+    await ladeLeaderboard();
+    const row = [...el("lbBody").querySelectorAll("a.addr")]
+      .find((a) => a.getAttribute("href") === EXPLORER + addr)
+      ?.closest("tr");
+    if (row) {
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      row.classList.add("rowhit");
+      setTimeout(() => row.classList.remove("rowhit"), 2200);
+      return;
+    }
+  }
+  msg.style.display = "";
+  msg.textContent = "Found it, but couldn't land on its exact page - try the balance filters below.";
+}
+el("lbSearchBtn").onclick = lbSpringeZuWallet;
+el("lbSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSpringeZuWallet(); });
+
+const start = location.hash.slice(1);
+zeigeSeite(LADER[start] ? start : "overview");
+// Kopfzeile (Snapshot-Zeit, Preis) soll auch dann stimmen, wenn man per
+// Deep-Link auf einem anderen Reiter startet. Wichtig: den VOLLEN Loader
+// aufrufen, nicht nur ladeOverview() - sonst gilt "overview" als geladen,
+// waehrend Teile davon (Bridge-Ereignisse, Job-Status) nie liefen und
+// beim spaeteren Wechsel dorthin ewig auf "Loading..." stehen blieben.
+if (start !== "overview" && LADER[start]) {
+  geladen.add("overview");
+  LADER.overview().catch(console.error);
+}
+</script>
+</body>
+</html>

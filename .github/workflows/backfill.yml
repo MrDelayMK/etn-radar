@@ -1,0 +1,28 @@
+name: ETN Backfill (einmalig)
+
+# Holt die Historie fuer alle bereits erfassten Adressen.
+# Nach dem ersten Snapshot einmal von Hand starten:
+#   Actions -> ETN Backfill -> Run workflow
+#
+# Dauert bei 10.000 Adressen rund 2-3 Stunden: der Explorer wird bewusst mit
+# nur ~3 Anfragen/s belastet (siehe src/blockscout.js). Der Lauf ist
+# wiederaufsetzbar - bereits erledigte Adressen werden uebersprungen. Bricht er
+# ab oder laeuft ins Zeitlimit, einfach erneut starten.
+on:
+  workflow_dispatch:
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Historie nachladen
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/backfill-remote.mjs 6

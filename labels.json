@@ -1,0 +1,50 @@
+{
+  "_hinweis": [
+    "Bekannte Adressen. Diese Datei ist von Hand gepflegt und mit Abstand das",
+    "wertvollste Stueck des Projekts: Zahlen kann jeder vom Explorer ziehen,",
+    "Kontext nicht.",
+    "",
+    "Anwenden mit:  node scripts/apply-labels.mjs ./data/etn.db",
+    "               node scripts/apply-labels.mjs --remote",
+    "",
+    "label_type:  exchange | bridge | team | service | contract | whale",
+    "is_excluded: 1 = aus dem 'nur echte Wallets'-Ranking ausblenden.",
+    "             Boersen halten Kundengelder, sind also keine einzelnen Whales.",
+    "confidence:  confirmed = belegt, likely = starker Verdacht, guess = Vermutung"
+  ],
+
+  "labels": [
+    {
+      "address": "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62",
+      "label": "ETN Bridge",
+      "label_type": "bridge",
+      "is_excluded": 1,
+      "confidence": "confirmed",
+      "notes": "Haelt die noch nicht migrierte Legacy-Supply. Sinkender Bestand = Migrationsfortschritt."
+    },
+    {
+      "address": "0x6f3bAB37B8812a0343AbEb3490E6aBE68bBFBF5d",
+      "label": "HTX",
+      "label_type": "exchange",
+      "is_excluded": 1,
+      "confidence": "confirmed",
+      "notes": "Boersen-Wallet. Quelle: Community/PlanetETN, 2026-09."
+    },
+    {
+      "address": "0x92F0bac0f513CcAFC2b4101365E2d1afCf9874e4",
+      "label": "KuCoin",
+      "label_type": "exchange",
+      "is_excluded": 1,
+      "confidence": "confirmed",
+      "notes": "Groesstes Nicht-Bridge-Wallet der Chain. Quelle: Community/PlanetETN, 2026-09."
+    },
+    {
+      "address": "0x6ae77AF00D6d646690CAB3A6d60fc96acF40FEAc",
+      "label": "Biconomy",
+      "label_type": "exchange",
+      "is_excluded": 1,
+      "confidence": "confirmed",
+      "notes": "Boersen-Wallet. Quelle: Community/PlanetETN, 2026-09."
+    }
+  ]
+}

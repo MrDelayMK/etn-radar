@@ -1,0 +1,27 @@
+# Abhaengigkeiten
+node_modules/
+
+# Lokale Entwicklungs-Datenbank (SQLite, mehrere MB) - gehoert nicht ins Repo.
+# Die echten Daten leben in D1; lokal baut man sie mit
+# `node scripts/ingest-local.mjs` neu auf.
+data/
+
+# Wrangler-Zustand und lokale Secrets. .dev.vars enthaelt im Zweifel Tokens -
+# niemals committen.
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Editor-/Sitzungszustand
+.claude/
+.vscode/
+.idea/
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*

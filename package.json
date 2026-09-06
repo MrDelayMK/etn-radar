@@ -1,0 +1,19 @@
+{
+  "name": "etn-whale-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Top-Holder- und Migrations-Tracker fuer die Electroneum Smart Chain",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create etn-tracker",
+    "db:init": "wrangler d1 execute etn-tracker --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute etn-tracker --local --file=./schema.sql",
+    "backfill": "node scripts/backfill.mjs",
+    "ingest:once": "node scripts/ingest-local.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

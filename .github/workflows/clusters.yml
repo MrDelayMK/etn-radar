@@ -1,0 +1,35 @@
+name: ETN Cluster Analysis
+
+# Cluster-Vermutungen: Wallets mit gemeinsamer Finanzierungsquelle. Nur ein
+# Muster, kein Beweis - siehe src/clusters.js und die README. Monatlich wie
+# der Census, weil sich Finanzierungsbeziehungen kaum aendern; jederzeit auch
+# per Knopf im Dashboard ("🔍 Run cluster analysis now", hoechstens 1x/24h).
+on:
+  schedule:
+    - cron: "0 4 1 * *" # am 1. jedes Monats, 04:00 UTC (nach dem Census um 03:30)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Nur die groessten N Wallets pruefen (leer = Standard: Top 1000)"
+        required: false
+        default: ""
+
+concurrency:
+  group: etn-clusters
+  cancel-in-progress: false
+
+jobs:
+  clusters:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cluster-Analyse
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/clusters-remote.mjs "${{ github.event.inputs.limit }}"

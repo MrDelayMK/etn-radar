@@ -1,0 +1,74 @@
+name = "etn-whale-tracker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Dashboard (public/index.html) wird vom selben Worker ausgeliefert
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# KEIN Cron-Trigger: Workers Free erlaubt nur 10 ms CPU pro Ausfuehrung, das
+# reicht fuer einen Snapshot ueber tausende Adressen nicht. Der Ingest laeuft
+# stattdessen alle 30 Minuten in einer GitHub Action
+# (.github/workflows/snapshot.yml) und schreibt ueber die D1-REST-API.
+# Der Worker liest hier nur - das bleibt weit unter dem Limit.
+
+[vars]
+EXPLORER_API   = "https://blockexplorer.electroneum.com/api/v2"
+# Tiefe des 6h-Snapshots: bis Octopus (>= 500k ETN, aktuell ~2.050 Wallets),
+# mit Sicherheitsspanne. Darunter aendert sich taeglich kaum etwas Sichtbares -
+# das erledigt die woechentliche Tiefenzaehlung (siehe CENSUS_DEPTH und
+# .github/workflows/census.yml), die nur Summen statt einzelner Zeilen
+# schreibt. Siehe src/tiers.js, Abschnitt "Zwei Geschwindigkeiten".
+TRACK_TOP_N    = "3000"
+# Wie tief die Tiefenzaehlung maximal paginiert. Muss unter die Microbe-Grenze
+# (5.000 ETN) reichen, sonst bleiben die untersten Stufen unvollstaendig -
+# siehe CENSUS_DUST_FLOOR in src/tiers.js. Real gemessen (02.09.2026):
+# 5.000 ETN liegt bei Rang 61.846 - 90.000 gibt ~45% Sicherheitsspanne und
+# dauert bei ~3 Anfragen/s rund 20-25 Minuten.
+CENSUS_DEPTH   = "90000"
+# Legacy-Migrations-Deadline
+MIGRATION_DEADLINE = "2027-01-31"
+# Bridge-Contract, haelt die noch nicht migrierte Legacy-Supply
+BRIDGE_ADDRESS = "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62"
+
+# Fuer den "Run full census now"-Knopf im Dashboard: der Worker loest damit
+# den GitHub-Actions-Workflow census.yml aus (er kann den 20-30 Minuten
+# langen Lauf nicht selbst ausfuehren). Eigenes Repo hier eintragen; das
+# Token selbst NIE hier eintragen, sondern als Secret setzen:
+#   npx wrangler secret put GITHUB_PAT
+# Fine-grained Personal Access Token mit "Actions: Read and write" nur auf
+# dieses eine Repository. Ohne gesetztes Secret zeigt der Knopf einen
+# Hinweis auf den manuellen Weg ueber den Actions-Tab - nichts bricht.
+GITHUB_OWNER   = "PLATZHALTER_GITHUB_BENUTZERNAME"
+GITHUB_REPO    = "PLATZHALTER_REPO_NAME"
+GITHUB_BRANCH  = "main"
+
+# WICHTIG, sobald das Dashboard oeffentlich erreichbar ist:
+# Die "Run now"-Knoepfe loesen GitHub-Actions-Laeufe aus - also Arbeit auf
+# deine Kosten, plus die 24h-Sperre. Ohne Token kann das jeder mit der URL.
+# Ein beliebiges langes Zufallswort als Secret setzen:
+#   npx wrangler secret put ADMIN_TOKEN
+# Danach die Seite EINMAL mit ?admin=<dasselbe Wort> aufrufen - der Browser
+# merkt es sich, die Knoepfe erscheinen nur noch bei dir. Fuer alle anderen
+# sind sie unsichtbar. Ohne gesetztes ADMIN_TOKEN bleibt alles offen wie
+# bisher (fuer eine rein private Instanz voellig in Ordnung).
+
+# Telegram-Weckalarm (siehe src/telegram.js, README "Telegram-Weckalarm").
+# Optional - ohne TELEGRAM_BOT_TOKEN bleibt das Feature einfach inaktiv,
+# nichts bricht. Einrichtung:
+#   1. Bot bei @BotFather anlegen, Token als Secret setzen:
+#        npx wrangler secret put TELEGRAM_BOT_TOKEN
+#   2. Bot-Benutzername (ohne @) hier eintragen - der ist oeffentlich, dient
+#      nur dem Deep-Link-Button im Dashboard ("Nachricht an den Bot").
+#   3. Optional ein zufaelliges Secret setzen (verhindert gefaelschte
+#      Webhook-Aufrufe an /api/telegram/webhook):
+#        npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
+#   4. Webhook bei Telegram registrieren (einmalig, im Browser oder curl):
+#        https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<deine-domain>/api/telegram/webhook&secret_token=<dasselbe Secret aus Schritt 3>
+TELEGRAM_BOT_USERNAME = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "etn-tracker"
+database_id = "PLATZHALTER_NACH_DB_CREATE_EINSETZEN"

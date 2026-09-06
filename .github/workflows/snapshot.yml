@@ -1,0 +1,39 @@
+name: ETN Snapshot
+
+# Alle 30 Minuten ein Snapshot (vorher alle 6h) - damit Top Movers/Activity
+# zeitnah aktuell bleiben. Kostenrechnung: ~48 Laeufe/Tag * ~1 Min ~= 1.440
+# Minuten/Monat, klar unter dem Gratis-Kontingent von 2.000 Min/Monat fuer
+# private Repos (bei einem OEFFENTLICHEN Repo unbegrenzt). GitHub startet
+# Cron-Jobs oft mit einigen Minuten Verzoegerung - bei 30 Minuten Takt spuerbar,
+# aber unkritisch.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      top_n:
+        description: "Wie viele Adressen erfassen"
+        required: false
+        default: "3000"
+
+concurrency:
+  group: etn-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Snapshot ziehen und nach D1 schreiben
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/ingest-remote.mjs ${{ github.event.inputs.top_n || '3000' }}
