@@ -540,7 +540,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
       <div id="bridgeEvents" class="empty">Loading&hellip;</div>
       <div class="tiersfoot" style="margin-top:14px">
         <div class="dim3" style="font-size:11.5px">Runs weekly, or any time via the button.</div>
-        <button class="ghost" id="bridgeBtn">🔍 Scan for events now</button>
+        <button class="ghost" id="bridgeBtn" style="display:none">🔍 Scan for events now</button>
       </div>
     </div>
   </section>
@@ -576,7 +576,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     <div class="grid" style="gap:9px" id="tiers"></div>
     <div class="tiersfoot">
       <div class="dim3" style="font-size:11.5px" id="tiersNote"></div>
-      <button class="ghost" id="censusBtn">🔄 Run full census now</button>
+      <button class="ghost" id="censusBtn" style="display:none">🔄 Run full census now</button>
     </div>
 
     <div class="chartcard" style="margin-top:16px">
@@ -607,7 +607,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
       <div class="tabs" id="lbPeriods"></div>
       <div class="tabs" style="margin-left:auto">
         <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
-        <button class="ghost" id="exchangesBtn" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
+        <button class="ghost" id="exchangesBtn" style="display:none" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
       </div>
     </h2>
     <div class="rangebar">
@@ -718,7 +718,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
   <section>
     <h2>Funding-source clusters
       <div class="tabs" style="margin-left:auto">
-        <button class="ghost" id="clustersBtn">🔍 Run cluster analysis now</button>
+        <button class="ghost" id="clustersBtn" style="display:none">🔍 Run cluster analysis now</button>
       </div>
     </h2>
     <div class="dim3" style="font-size:11.5px;margin-bottom:12px" id="clustersNote"></div>
@@ -2300,6 +2300,12 @@ const LADER = {
 };
 
 function zeigeSeite(name) {
+  // Ausgeblendete Bereiche (labs) duerfen auch nicht ueber die Adresszeile
+  // erreichbar sein - sonst kommt jeder ueber "#clusters" auf die noch
+  // ungeprueften Cluster-Vermutungen, samt Betreiber-Knopf.
+  const navKnopf = document.querySelector('#nav [data-p="' + name + '"]');
+  if (navKnopf?.hasAttribute("hidden")) name = "overview";
+
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
   [...el("nav").children].forEach((b) => b.classList.toggle("on", b.dataset.p === name));
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
@@ -2358,8 +2364,10 @@ async function ladeJobStatus(job, btnId) {
     btn.disabled = !s.bereit;
     btn.textContent = s.bereit ? label : "Available in " + zeitDauer(s.wartezeit_ms);
   } catch {
-    btn.disabled = false;
-    btn.textContent = label;
+    // Im Zweifel VERSTECKT lassen. Ein Knopf, der nur 403 kann, hilft
+    // niemandem - und einer, der bei Netzproblemen aufpoppt, verraet
+    // Besuchern eine Funktion, die ihnen nicht zusteht.
+    btn.style.display = "none";
   }
 }
 function wireJobButton(job, btnId) {
