@@ -15,8 +15,9 @@ on:
         required: false
         default: ""
 
+# Gemeinsame Warteschlange aller Explorer-lastigen Jobs, siehe census.yml.
 concurrency:
-  group: etn-bridge-events
+  group: etn-explorer-schwer
   cancel-in-progress: false
 
 jobs:

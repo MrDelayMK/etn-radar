@@ -15,8 +15,19 @@ on:
         required: false
         default: "90000"
 
+# Alle Explorer-lastigen Jobs teilen sich EINE Warteschlange.
+#
+# Die Drossel in src/blockscout.js (~3 Anfragen/s) wirkt nur innerhalb eines
+# Prozesses. Zwei gleichzeitige Laeufe sind zwei Prozesse und damit doppelte
+# Last auf dem Explorer - genau so ist beim Aufsetzen ein Backfill parallel
+# zum Census gestartet worden. Getrennte Gruppen (etn-census, etn-clusters,
+# ...) haben das nicht verhindert, weil sie sich gegenseitig nicht kennen.
+#
+# Der Snapshot bleibt bewusst DRAUSSEN: er ist kurz, laeuft alle 30 Minuten
+# und duerfte sonst 25 Minuten hinter einem Census warten - das wuerde Loecher
+# in die Zeitreihe reissen.
 concurrency:
-  group: etn-census
+  group: etn-explorer-schwer
   cancel-in-progress: false
 
 jobs:

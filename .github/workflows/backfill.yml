@@ -11,6 +11,11 @@ name: ETN Backfill (einmalig)
 on:
   workflow_dispatch:
 
+# Gemeinsame Warteschlange aller Explorer-lastigen Jobs, siehe census.yml.
+concurrency:
+  group: etn-explorer-schwer
+  cancel-in-progress: false
+
 jobs:
   backfill:
     runs-on: ubuntu-latest
