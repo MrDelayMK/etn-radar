@@ -69,6 +69,20 @@ npm run db:migrate
 Bei einer frischen Datenbank meldet das nur „schon vorhanden" und ist damit
 gefahrlos. Nötig ist es, wenn die Datenbank älter ist als eine neue Spalte.
 
+Von Hand braucht man das normalerweise nicht: die wöchentlichen Jobs
+(Bridge-Ereignisse, Tiefenzählung, Cluster, Börsen-Erkennung, Backfill) wenden
+die Migrationen vor ihrem eigentlichen Lauf selbst an. So kommt eine neue
+Spalte mit dem Code, statt als Schritt, den man vergessen kann — genau das war
+schon einmal die Ursache dafür, dass ein Job auf eine Datenbank traf, die seine
+Spalten nicht kannte. Der Befehl oben ist der Weg, wenn es sofort passieren
+soll, ohne auf den nächsten Lauf zu warten.
+
+> Er braucht `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` und `CLOUDFLARE_API_TOKEN`
+> in der Umgebung. Wer die nicht zur Hand hat, aber bei wrangler angemeldet
+> ist, kann jede Zeile aus `migrations.sql` auch einzeln fahren mit
+> `npx wrangler d1 execute etn-tracker --remote -y --command "…"` — ein
+> „duplicate column name" heißt dort schlicht „schon vorhanden".
+
 ### 2. Worker veröffentlichen
 
 ```bash

@@ -648,9 +648,23 @@ async function bridge_events_api(db) {
   ).results;
   // Wie weit der letzte Lauf tatsaechlich zurueckkam - sonst sieht "nichts
   // gefunden" fuer einen aelteren Zeitraum wie "nichts passiert" aus.
-  const lauf = await db
-    .prepare("SELECT zurueck_bis, taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
-    .first();
+  //
+  // Bewusst abgesichert: zurueck_bis kam erst spaeter dazu (siehe
+  // migrations.sql). Auf einer Datenbank, auf der die Migration noch nicht
+  // gelaufen ist, warf diese eine Zeile den KOMPLETTEN Endpoint mit 500 um -
+  // die Ereignisse selbst waren laengst da. Eine Zusatzangabe darf die
+  // Hauptantwort nicht mitreissen.
+  let lauf = null;
+  try {
+    lauf = await db
+      .prepare("SELECT zurueck_bis, taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
+      .first();
+  } catch {
+    lauf = await db
+      .prepare("SELECT taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
+      .first()
+      .catch(() => null);
+  }
   return {
     abgedeckt_ab: lauf?.zurueck_bis ?? null,
     geprueft_am: lauf?.taken_at ?? null,

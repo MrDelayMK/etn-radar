@@ -1,10 +1,10 @@
 name: ETN Bridge Events
 
-# Findet ungewoehnliche Bridge-Abfluss-Tage (Median x3, siehe
-# src/bridge-events.js) und verfolgt zurueck, welche Wallets an diesem Tag
-# ETN erhalten haben. Guenstig: die Bridge hat keine normalen Transaktionen,
-# nur interne - deren Historie ist so duenn belegt, dass wenige Seiten schon
-# Wochen zurueckreichen. Woechentlich automatisch, jederzeit auch per Knopf.
+# Sucht in den internen Transfers der Bridge die grossen Einzelbetraege
+# (ab 500.000 ETN, siehe src/bridge-events.js) und buendelt sie nach Tag.
+# Die Bridge hat keine normalen Transaktionen, nur interne - der Lauf holt
+# darum eine einzige, durchgehende Seitenkette und filtert daraus.
+# Woechentlich automatisch, jederzeit auch per Knopf.
 on:
   schedule:
     - cron: "30 3 * * 1" # jeden Montag 03:30 UTC
@@ -29,6 +29,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Migrationen anwenden
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/apply-migrations.mjs --remote
       - name: Bridge-Ereignisse analysieren
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
