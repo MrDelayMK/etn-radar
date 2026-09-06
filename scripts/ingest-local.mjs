@@ -17,7 +17,11 @@ const fresh = !existsSync(dbPath);
 const db = new LocalDB(dbPath);
 
 // Schema ist idempotent (CREATE TABLE IF NOT EXISTS), also immer anwenden.
+// Danach die Migrationen: die ergaenzen Spalten an Tabellen, die es in einer
+// aelteren lokalen Datei schon gab. exec() ueberspringt dabei stillschweigend
+// "duplicate column name" - bei einer frischen Datei also alle.
 db.exec(readFileSync(new URL("../schema.sql", import.meta.url), "utf8"));
+db.exec(readFileSync(new URL("../migrations.sql", import.meta.url), "utf8"));
 if (fresh) console.log("Neue Datenbank angelegt: " + dbPath);
 
 const env = {

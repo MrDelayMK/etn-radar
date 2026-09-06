@@ -71,4 +71,4 @@ TELEGRAM_BOT_USERNAME = ""
 [[d1_databases]]
 binding = "DB"
 database_name = "etn-tracker"
-database_id = "PLATZHALTER_NACH_DB_CREATE_EINSETZEN"
+database_id = "b1f4fc13-62ca-4a5f-a5f7-c0862cbb460c"

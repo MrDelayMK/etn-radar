@@ -268,24 +268,16 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, detected_at DESC);
 -- nutzen, nicht die Daten eines anderen Projekts.
 
 -- ===================================================================
--- Migrationen fuer bereits bestehende Datenbanken
+-- Neue Spalte an einer BESTEHENDEN Tabelle?
 --
--- CREATE TABLE IF NOT EXISTS legt neue Tabellen an, aendert aber NICHTS an
--- einer bereits existierenden Tabelle. Eine neue Spalte, die oben in einer
--- bestehenden Tabelle ergaenzt wurde, taucht in einer schon angelegten
--- Datenbank sonst nie auf - genau das ist beim Ergaenzen von
--- addresses.exchange_signale passiert (lokal wie potenziell auf D1).
+-- Dann gehoert sie an ZWEI Stellen: oben ins CREATE TABLE (fuer frische
+-- Datenbanken) UND als ALTER-Zeile nach migrations.sql (fuer alle, die es
+-- schon gibt). CREATE TABLE IF NOT EXISTS aendert eine vorhandene Tabelle
+-- naemlich nicht - die neue Spalte taucht dort sonst nie auf.
 --
--- Jede Zeile hier wird von den DB-Adaptern (scripts/local-db.mjs,
--- src/db-http.js) EINZELN ausgefuehrt; "duplicate column name" (Spalte
--- existiert schon - der Normalfall bei einer frischen Datenbank, wo
--- CREATE TABLE oben die Spalte bereits angelegt hat) wird dabei
--- stillschweigend uebersprungen, jeder andere Fehler weiterhin geworfen.
---
--- Neue Spalte an einer bestehenden Tabelle? Hier eine Zeile ergaenzen, NICHT
--- nur oben im CREATE TABLE aendern - sonst bleibt eine schon existierende
--- Datenbank für immer ohne die neue Spalte.
+-- Warum getrennte Dateien: diese Datei muss mit `wrangler d1 execute --file`
+-- durchlaufen. Wrangler bricht beim ersten Fehler ab, und ein
+-- "ALTER TABLE ... ADD COLUMN" auf eine frische Datenbank ist immer ein
+-- Fehler ("duplicate column name") - die Spalte steht ja schon im CREATE
+-- TABLE. Damit war die dokumentierte Ersteinrichtung nicht durchfuehrbar.
 -- ===================================================================
-ALTER TABLE addresses ADD COLUMN exchange_signale TEXT;
-ALTER TABLE bridge_events ADD COLUMN unvollstaendig INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE network_daily ADD COLUMN top1000_share REAL;

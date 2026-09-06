@@ -10,6 +10,9 @@
     "db:create": "wrangler d1 create etn-tracker",
     "db:init": "wrangler d1 execute etn-tracker --remote --file=./schema.sql",
     "db:init:local": "wrangler d1 execute etn-tracker --local --file=./schema.sql",
+    "db:migrate": "node scripts/apply-migrations.mjs --remote",
+    "db:migrate:local": "node scripts/apply-migrations.mjs",
+    "serve": "node scripts/serve-local.mjs",
     "backfill": "node scripts/backfill.mjs",
     "ingest:once": "node scripts/ingest-local.mjs"
   },
