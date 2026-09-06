@@ -42,10 +42,10 @@ header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:cent
 .brand .sub{font-size:12.5px;color:var(--tx3);margin-top:2px}
 .hspace{flex:1}
 .homelink{
-  text-decoration:none;color:var(--tx2);transition:.15s;gap:8px
+  text-decoration:none;color:var(--tx2);transition:.15s;gap:8px;padding-left:9px
 }
 .homelink:hover{color:var(--tx);border-color:var(--acc)}
-.homelink .ic{font-size:14px}
+.homelink img{display:block;border-radius:4px;flex-shrink:0}
 .chip{
   display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
   background:var(--card);border:1px solid var(--line);border-radius:9px;
@@ -363,6 +363,39 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .pager{display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap}
 .pager .info{font-size:12.5px;color:var(--tx2);font-family:var(--mono)}
 
+/* ---------- Money-flow (Sankey) ---------- */
+.sankeygrid{grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:1000px){ .sankeygrid{grid-template-columns:1fr} }
+.sankeycard{padding:16px 16px 10px}
+.sankeyhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.sankeyhead .dir{font-size:13px;font-weight:650}
+.sankeyhead .dir.in{color:var(--up)}
+.sankeyhead .dir.out{color:var(--down)}
+.sankeyhead .num{font-size:17px;font-weight:660}
+.sankeyholder{position:relative;width:100%}
+.sankeyholder svg{width:100%;display:block;overflow:visible}
+
+/* Baender und Balken: im Ruhezustand gedaempft, beim Zeigen leuchtet die
+   angefasste Verbindung samt ihrer beiden Balken auf. */
+.sankeyholder .band{fill-opacity:.28;transition:fill-opacity .12s}
+.sankeyholder.aktiv .band{fill-opacity:.07}
+.sankeyholder .band.on{fill-opacity:.72;filter:url(#glow)}
+.sankeyholder .bar{transition:opacity .12s}
+.sankeyholder.aktiv .bar{opacity:.3}
+.sankeyholder .bar.on{opacity:1;filter:url(#glow)}
+.sankeyholder .lbl{font-size:11.5px;fill:var(--tx2);font-family:var(--mono);pointer-events:none;transition:fill .12s}
+.sankeyholder.aktiv .lbl{fill:var(--tx3)}
+.sankeyholder .lbl.on{fill:#fff;font-weight:600}
+.sankeyholder .lbl.name{font-family:var(--sans);font-weight:600;fill:var(--tx)}
+.sankeytip{
+  position:fixed;z-index:70;display:none;pointer-events:none;
+  background:#0a1120f2;border:1px solid var(--line2);border-radius:10px;padding:10px 13px;
+  font-size:12.5px;line-height:1.55;box-shadow:0 10px 30px #000b;max-width:280px
+}
+.sankeytip.on{display:block}
+.sankeytip b{display:block;font-size:14px;margin-bottom:3px}
+.sankeytip .adr{font-family:var(--mono);font-size:11px;color:var(--tx3);word-break:break-all}
+
 /* ---------- Exchange net-flow ---------- */
 .flowhead{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:14px}
 .flowhead .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
@@ -418,8 +451,8 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     </div>
   </div>
   <div class="hspace"></div>
-  <a class="chip homelink" href="https://galacticsl.com" target="_blank" rel="noopener">
-    <span class="ic">🌐</span><span>galacticsl.com</span>
+  <a class="chip homelink" href="https://galacticsl.com" target="_blank" rel="noopener" title="Galacticsl.com">
+    <img src="/gsl-logo.png" alt="GSL" width="22" height="22" loading="lazy"><span>galacticsl.com</span>
   </a>
   <div class="chip"><span class="dot"></span><span id="snapTime">loading&hellip;</span></div>
   <div class="chip">ETN <b class="num" id="price" style="color:var(--tx)">&mdash;</b></div>
@@ -716,6 +749,30 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
       </div>
     </div>
   </section>
+  <section id="invFlowWrap" style="display:none">
+    <h2>Money flow
+      <button class="infoBtn" data-info="Where the ETN came from and where it went, straight from the explorer. Counterparties are ranked by amount; only the largest are drawn, the rest are bundled into one bar. Hover a ribbon to highlight it.">ⓘ</button>
+      <div class="tabs" id="flowPeriodTabs"></div>
+    </h2>
+    <div class="grid sankeygrid">
+      <div class="card sankeycard">
+        <div class="sankeyhead">
+          <div><span class="dir in">▼ Inflows</span> <span class="dim3" id="inflowMeta">&mdash;</span></div>
+          <div class="num up" id="inflowTotal">&mdash;</div>
+        </div>
+        <div class="sankeyholder"><svg id="inflowSankey"></svg></div>
+      </div>
+      <div class="card sankeycard">
+        <div class="sankeyhead">
+          <div><span class="dir out">▲ Outflows</span> <span class="dim3" id="outflowMeta">&mdash;</span></div>
+          <div class="num down" id="outflowTotal">&mdash;</div>
+        </div>
+        <div class="sankeyholder"><svg id="outflowSankey"></svg></div>
+      </div>
+    </div>
+    <div class="sankeytip" id="sankeyTip"></div>
+  </section>
+
   <section id="invClusterWrap" style="display:none">
     <h2>Cluster relationships <span class="hint">from the funding-source analysis - a pattern, not proof</span></h2>
     <div class="card" id="invCluster"></div>
@@ -1681,7 +1738,7 @@ const tierEmoji = (key) => ({
 
 // ---------- Investigate (full wallet detail page) ----------
 async function ladeWalletDetail(q) {
-  const wrap = { head: el("invResultWrap"), chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap") };
+  const wrap = { head: el("invResultWrap"), chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap"), fluss: el("invFlowWrap") };
   const empty = el("invEmpty");
   Object.values(wrap).forEach((w) => (w.style.display = "none"));
   empty.style.display = "none";
@@ -1698,7 +1755,7 @@ async function ladeWalletDetail(q) {
 
   // Namenssuche mit mehreren Treffern: Liste zum Auswaehlen statt Detailseite.
   if (d.treffer) {
-    wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
+    wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = wrap.fluss.style.display = "none";
     el("invHead").innerHTML = d.treffer.length
       ? '<div style="font-size:13px;color:var(--tx2);margin-bottom:10px">' + d.treffer.length + ' match(es) - pick one:</div>' +
         d.treffer.map((e) =>
@@ -1802,6 +1859,179 @@ function shareOeffnen(plattform) {
   shareDialogSchliessen();
 }
 
+// ---------- Money flow (Sankey) ----------
+//
+// Zwei Diagramme statt einem: bei einer Boerse sind Ein- und Ausgaenge zwei
+// verschiedene Fragen, kein Durchfluss. Links die vielen Gegenparteien, rechts
+// (bzw. gespiegelt) das untersuchte Wallet - Balkenhoehe proportional zum
+// Betrag, Baender dazwischen als Bezier-Kurven.
+const FLUSS = { zeitraum: "7d", adresse: null, daten: null };
+
+function sankeyFarbe(p, rein) {
+  if (p.rest) return "#64748b";
+  if (p.label_type === "exchange" || p.label_type === "service") return "#fbbf24";
+  if (p.label_type === "bridge") return "#a78bfa";
+  if (p.is_contract) return "#5b9cff";
+  return rein ? "#22d3a7" : "#f4635e";
+}
+
+function zeichneSankey(svg, seite, rein, eigenName) {
+  const holder = svg.parentElement;
+  const W = Math.max(300, Math.round(holder.clientWidth));
+  if (W === 0) return;
+
+  const teile = [...seite.parteien];
+  if (seite.rest) {
+    teile.push({ address: null, anzeige: seite.rest.anzahl + " more", etn: seite.rest.etn,
+                 tx: seite.rest.tx, anteil: seite.rest.etn / (seite.gesamt_etn || 1), rest: true });
+  }
+  if (!teile.length) {
+    svg.setAttribute("viewBox", "0 0 " + W + " 90");
+    svg.style.height = "90px";
+    svg.innerHTML = '<text x="' + W / 2 + '" y="50" fill="#5b6b83" font-size="13" text-anchor="middle">' +
+      "no " + (rein ? "inflows" : "outflows") + " in this period</text>";
+    return;
+  }
+
+  const PT = 12, PB = 12;
+  const zeilenHoehe = 30;
+  const H = Math.max(150, PT + PB + teile.length * zeilenHoehe);
+  const barW = 13;
+  const LABELW = Math.min(190, Math.max(120, W * 0.42));
+  // Die vielen Gegenparteien stehen aussen, das eigene Wallet innen.
+  const vieleX = rein ? LABELW : W - LABELW - barW;
+  const einzelX = rein ? W - barW - 8 : 8;
+
+  const gesamt = teile.reduce((s, p) => s + p.etn, 0) || 1;
+  const nutzH = H - PT - PB;
+  const luecke = teile.length > 1 ? Math.min(6, nutzH * 0.04 / (teile.length - 1)) : 0;
+  const balkenH = nutzH - luecke * (teile.length - 1);
+
+  // Mindesthoehe pro Zeile, sonst kleben die Beschriftungen der kleinen
+  // Betraege uebereinander (bei 13 Gegenparteien waren manche Balken 2,5 px
+  // hoch, der Text braucht 14). Der Rest wird proportional verteilt - die
+  // grossen Baender bleiben also erkennbar groesser, nur das Verhaeltnis am
+  // unteren Ende ist gestaucht. Exakte Zahlen stehen ohnehin im Tooltip.
+  const MIN_H = 15;
+  const verteilbar = balkenH - MIN_H * teile.length;
+  const proportional = verteilbar > 0;
+
+  let y = PT;
+  const knoten = teile.map((p) => {
+    const h = proportional
+      ? MIN_H + (p.etn / gesamt) * verteilbar
+      : balkenH / teile.length;
+    const k = { p, y, h, farbe: sankeyFarbe(p, rein) };
+    y += h + luecke;
+    return k;
+  });
+
+  // Der eine Balken auf der Gegenseite ist so hoch wie alle zusammen.
+  const eigenH = knoten.reduce((s, k) => s + k.h, 0) + luecke * (knoten.length - 1);
+  const eigenY = PT;
+
+  let baender = "", balken = "", texte = "";
+  let lauf = eigenY;
+  knoten.forEach((k, i) => {
+    const h = k.h;
+    const y1 = k.y, y2 = lauf;
+    lauf += h;
+    // Bezier von der Aussenseite zum eigenen Balken
+    const x1 = rein ? vieleX + barW : vieleX;
+    const x2 = rein ? einzelX : einzelX + barW;
+    const mx = (x1 + x2) / 2;
+    const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` +
+              ` L${x2},${y2 + h} C${mx},${y2 + h} ${mx},${y1 + h} ${x1},${y1 + h} Z`;
+    baender += `<path class="band" data-i="${i}" d="${d}" fill="${k.farbe}"/>`;
+    balken += `<rect class="bar" data-i="${i}" x="${vieleX}" y="${y1}" width="${barW}" height="${h}" fill="${k.farbe}" rx="2"/>`;
+
+    const name = k.p.anzeige ?? kurzAdr(k.p.address);
+    const tx = rein ? vieleX - 9 : vieleX + barW + 9;
+    const anker = rein ? "end" : "start";
+    texte += `<text class="lbl ${k.p.anzeige ? "name" : ""}" data-i="${i}" x="${tx}" y="${y1 + h / 2 + 4}" text-anchor="${anker}">` +
+      esc(name.length > 22 ? name.slice(0, 21) + "…" : name) + "</text>";
+  });
+
+  const eigenFarbe = rein ? "#22d3a7" : "#f4635e";
+  balken += `<rect class="bar" data-i="self" x="${einzelX}" y="${eigenY}" width="${barW}" height="${eigenH}" fill="${eigenFarbe}" rx="2"/>`;
+  const selbstX = rein ? einzelX - 9 : einzelX + barW + 9;
+  texte += `<text class="lbl name" x="${selbstX}" y="${eigenY + eigenH / 2 + 4}" text-anchor="${rein ? "end" : "start"}">` +
+    esc(eigenName) + "</text>";
+
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.style.height = H + "px";
+  svg.innerHTML =
+    '<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%">' +
+    '<feGaussianBlur stdDeviation="3.5" result="b"/><feMerge>' +
+    '<feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+    baender + balken + texte;
+
+  // Hover: Band, beide Balken und die Beschriftung hervorheben.
+  const tip = el("sankeyTip");
+  holder.onmousemove = (ev) => {
+    const el2 = ev.target.closest("[data-i]");
+    const i = el2?.dataset.i;
+    if (i == null || i === "self") { holder.classList.remove("aktiv"); tip.classList.remove("on");
+      svg.querySelectorAll(".on").forEach((n) => n.classList.remove("on")); return; }
+    holder.classList.add("aktiv");
+    svg.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
+    svg.querySelectorAll('[data-i="' + i + '"]').forEach((n) => n.classList.add("on"));
+    svg.querySelector('[data-i="self"]')?.classList.add("on");
+
+    const k = knoten[Number(i)];
+    tip.innerHTML = "<b>" + esc(k.p.anzeige ?? (k.p.rest ? k.p.anzeige : kurzAdr(k.p.address))) + "</b>" +
+      '<span class="num" style="color:' + k.farbe + ';font-size:14px;font-weight:650">' +
+        kurz(k.p.etn) + " ETN</span>" +
+      "<div>" + nf(k.p.anteil * 100, 1) + "% of " + (rein ? "inflows" : "outflows") +
+        " · " + nf(k.p.tx) + " tx</div>" +
+      (k.p.address ? '<div class="adr">' + k.p.address + "</div>" : "") +
+      (k.p.balance_etn != null ? "<div>holds " + kurz(k.p.balance_etn) + " ETN</div>" : "");
+    tip.classList.add("on");
+    tip.style.left = Math.min(ev.clientX + 16, window.innerWidth - 300) + "px";
+    tip.style.top = Math.min(ev.clientY + 14, window.innerHeight - 130) + "px";
+  };
+  holder.onmouseleave = () => {
+    holder.classList.remove("aktiv");
+    tip.classList.remove("on");
+    svg.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
+  };
+  // Klick auf eine Gegenpartei: dorthin weiterspringen.
+  holder.onclick = (ev) => {
+    const i = ev.target.closest("[data-i]")?.dataset.i;
+    if (i == null || i === "self") return;
+    const a = knoten[Number(i)]?.p.address;
+    if (a) investigateAddress(a);
+  };
+}
+
+async function ladeWalletFlows(adresse) {
+  FLUSS.adresse = adresse;
+  el("invFlowWrap").style.display = "";
+  el("sankeyTip").classList.remove("on"); // Tooltip des vorigen Wallets
+  el("inflowMeta").textContent = el("outflowMeta").textContent = "loading…";
+  el("inflowTotal").textContent = el("outflowTotal").textContent = "—";
+  el("inflowSankey").innerHTML = el("outflowSankey").innerHTML = "";
+
+  try {
+    const d = await hole("/api/wallet-flows/" + adresse + "?period=" + FLUSS.zeitraum);
+    FLUSS.daten = d;
+    const eigen = CUR_WALLET?.anzeige ?? kurzAdr(adresse);
+
+    for (const [seite, svgId, metaId, totalId, rein] of [
+      [d.inflow, "inflowSankey", "inflowMeta", "inflowTotal", true],
+      [d.outflow, "outflowSankey", "outflowMeta", "outflowTotal", false],
+    ]) {
+      el(totalId).textContent = (rein ? "+" : "−") + kurz(seite.gesamt_etn) + " ETN";
+      el(metaId).textContent =
+        nf(seite.tx_anzahl) + " tx" +
+        (seite.gedeckelt ? " · partial (very active wallet)" : "");
+      zeichneSankey(el(svgId), seite, rein, eigen);
+    }
+  } catch (e) {
+    el("inflowMeta").textContent = el("outflowMeta").textContent = "Error: " + e.message;
+  }
+}
+
 function hypeText(progress) {
   const p = progress * 100;
   if (p >= 95) return "So close — will you make it? 🚀";
@@ -1811,7 +2041,7 @@ function hypeText(progress) {
 }
 
 function renderWalletDetail(d) {
-  const wrap = { chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap") };
+  const wrap = { chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap"), fluss: el("invFlowWrap") };
   const bis = d.bis_naechster_tier;
   const liveOnly = d.quelle === "explorer";
 
@@ -1840,6 +2070,11 @@ function renderWalletDetail(d) {
     shareBlock(d.address);
 
   CUR_WALLET = d;
+
+  // Die Fluss-Diagramme kommen live vom Explorer, nicht aus der Datenbank -
+  // sie funktionieren deshalb auch fuer Wallets ausserhalb der verfolgten
+  // Top N, wo es sonst nichts zu zeigen gaebe.
+  ladeWalletFlows(d.address).catch((e) => console.error("flows:", e));
 
   if (liveOnly) {
     wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
@@ -2168,6 +2403,17 @@ periodTabs(el("lbPeriods"), "7d", (p) => { LB.period = p; LB.offset = 0; ladeLea
 periodTabs(el("flowPeriods"), "30d", (p) => {
   FLOW.zeitraum = p;
   ladeExchangeFlow().catch(console.error);
+});
+periodTabs(el("flowPeriodTabs"), "7d", (p) => {
+  FLUSS.zeitraum = p;
+  if (FLUSS.adresse) ladeWalletFlows(FLUSS.adresse).catch(console.error);
+});
+// Bei Groessenaenderung neu zeichnen - die Balken sind pixelgenau gesetzt.
+beobachte("invFlowWrap", () => {
+  if (!FLUSS.daten) return;
+  const eigen = CUR_WALLET?.anzeige ?? kurzAdr(FLUSS.adresse ?? "");
+  zeichneSankey(el("inflowSankey"), FLUSS.daten.inflow, true, eigen);
+  zeichneSankey(el("outflowSankey"), FLUSS.daten.outflow, false, eigen);
 });
 el("flowAuto").onclick = () => {
   FLOW.inklAuto = !FLOW.inklAuto;

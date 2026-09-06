@@ -743,6 +743,105 @@ async function exchange_flow(db, u) {
   };
 }
 
+/**
+ * Woher kam das ETN und wohin ging es? Grundlage der beiden Fluss-Diagramme
+ * auf der Investigate-Seite.
+ *
+ * Bewusst live beim Explorer statt aus der Datenbank: Transaktionen werden
+ * hier nirgends gespeichert (das waere bei 2 Mio. Adressen sinnlos), und die
+ * Seite fragt immer nur EIN Wallet auf Wunsch ab. Die Antwort wird zwei
+ * Minuten gecacht, wiederholtes Ansehen kostet also nichts.
+ *
+ * Aggregiert wird ueber balance_wei/BigInt, nie ueber gerundete Zahlen.
+ */
+async function wallet_flows(db, env, adresse, u) {
+  const adr = adresse.toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(adr)) return fehler("Keine gueltige Adresse");
+
+  const zeitraum = u.searchParams.get("period") ?? "7d";
+  const tage = ZEITRAUM[zeitraum] ?? 7;
+  const abZeit = new Date(Date.now() - tage * 86400000).toISOString();
+  const topN = Math.min(20, Math.max(3, Number(u.searchParams.get("top") ?? 12)));
+
+  const { fetchInboundTransactions, fetchOutboundTransactions } = await import("./blockscout.js");
+  const api = env.EXPLORER_API;
+  const [rein, raus] = await Promise.all([
+    fetchInboundTransactions(api, adr, { maxPages: 10, bisZeit: abZeit }),
+    fetchOutboundTransactions(api, adr, { maxPages: 10, bisZeit: abZeit }),
+  ]);
+
+  /** Transfers einer Richtung nach Gegenpartei buendeln. */
+  function buendeln(res) {
+    const proPartei = new Map();
+    let gesamt = 0n;
+    let anzahl = 0;
+    for (const t of res.transfers) {
+      if (t.timestamp < abZeit) continue;      // ausserhalb des Fensters
+      if (t.gegenpart === adr) continue;       // Selbstueberweisung
+      const wei = BigInt(t.value_wei);
+      if (wei === 0n) continue;                // reine Contract-Aufrufe
+      const e = proPartei.get(t.gegenpart) ?? { wei: 0n, tx: 0 };
+      e.wei += wei;
+      e.tx++;
+      proPartei.set(t.gegenpart, e);
+      gesamt += wei;
+      anzahl++;
+    }
+    const zuEtn = (w) => Number(w / 10n ** 12n) / 1e6;
+    const sortiert = [...proPartei.entries()].sort((a, b) => (a[1].wei < b[1].wei ? 1 : -1));
+    const oben = sortiert.slice(0, topN);
+    const rest = sortiert.slice(topN);
+    return {
+      gesamt_etn: zuEtn(gesamt),
+      tx_anzahl: anzahl,
+      parteien: oben.map(([address, e]) => ({
+        address, etn: zuEtn(e.wei), tx: e.tx,
+        anteil: gesamt > 0n ? Number((e.wei * 10000n) / gesamt) / 10000 : 0,
+      })),
+      rest: rest.length
+        ? {
+            anzahl: rest.length,
+            etn: zuEtn(rest.reduce((s, [, e]) => s + e.wei, 0n)),
+            tx: rest.reduce((s, [, e]) => s + e.tx, 0),
+          }
+        : null,
+      // Ehrlich bleiben: nur wenn der Seitendeckel griff, BEVOR das
+      // Zeitfenster erreicht war, fehlen tatsaechlich Daten.
+      gedeckelt: !res.vollstaendig,
+    };
+  }
+
+  const inflow = buendeln(rein);
+  const outflow = buendeln(raus);
+
+  // Bekannte Namen ergaenzen, damit im Diagramm "KuCoin" statt Hex steht.
+  const alle = [...inflow.parteien, ...outflow.parteien].map((p) => p.address);
+  if (alle.length) {
+    const platzhalter = alle.map(() => "?").join(",");
+    const rows = (
+      await db
+        .prepare(
+          "SELECT a.hash, a.label, a.ens_name, a.label_type, a.is_contract, c.etn" +
+            " FROM addresses a LEFT JOIN current_balances c ON c.address = a.hash" +
+            " WHERE a.hash IN (" + platzhalter + ")"
+        )
+        .bind(...alle)
+        .all()
+    ).results;
+    const nach = new Map(rows.map((r) => [r.hash, r]));
+    for (const p of [...inflow.parteien, ...outflow.parteien]) {
+      const r = nach.get(p.address);
+      if (!r) continue;
+      p.anzeige = r.label ?? r.ens_name ?? null;
+      p.label_type = r.label_type ?? null;
+      p.is_contract = r.is_contract ?? 0;
+      p.balance_etn = r.etn ?? null;
+    }
+  }
+
+  return { address: adr, zeitraum, inflow, outflow };
+}
+
 /** Freie Wallet-Suche: erst lokal, sonst direkt beim Explorer nachschlagen. */
 async function suche(db, env, q) {
   const adr = q.trim().toLowerCase();
@@ -842,6 +941,8 @@ export default {
       else if (pfad === "/api/search") {
         const q = u.searchParams.get("q");
         antwort = q ? json(await suche(db, env, q)) : fehler("Parameter q fehlt");
+      } else if (pfad.startsWith("/api/wallet-flows/")) {
+        antwort = json(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
       } else if (pfad.startsWith("/api/wallet/")) {
         const w = await wallet(db, env, pfad.slice("/api/wallet/".length));
         antwort = w ? json(w) : fehler("Wallet nicht gefunden", 404);

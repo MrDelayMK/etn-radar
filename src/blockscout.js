@@ -252,6 +252,9 @@ export async function fetchDailyHistory(apiBase, hash) {
  */
 async function fetchTransactions(apiBase, hash, richtung, opts = {}) {
   const maxPages = opts.maxPages ?? 6;
+  // Optional: aufhoeren, sobald die Seite aelter als dieser Zeitpunkt ist.
+  // Ohne das kostet "letzte 7 Tage" genauso viele Anfragen wie "letzte 90".
+  const bisZeit = opts.bisZeit ? Date.parse(opts.bisZeit) : null;
   const gegenpartFeld = richtung === "to" ? "from" : "to";
   const out = [];
   let next = null;
@@ -274,9 +277,19 @@ async function fetchTransactions(apiBase, hash, richtung, opts = {}) {
       }))
     );
     next = d.next_page_params;
-    if (!next || items.length === 0) break;
+    // Die Liste kommt neueste zuerst: ist der letzte Eintrag der Seite schon
+    // aelter als das Fenster, liegt alles Weitere ebenfalls davor.
+    const letzte = (d.items ?? [])[d.items.length - 1]?.timestamp;
+    const amZiel = bisZeit && letzte && Date.parse(letzte) < bisZeit;
+    if (!next || items.length === 0 || amZiel) {
+      // Unterscheiden, WARUM Schluss ist: sauber am Zeitfenster angekommen
+      // (dann ist das Ergebnis vollstaendig) oder Historie zu Ende. Nur wer
+      // am Seitendeckel scheitert, hat ein unvollstaendiges Ergebnis - sonst
+      // warnt die Oberflaeche grundlos bei jedem aktiven Wallet.
+      return { transfers: out, seiten: seite + 1, gedeckelt: false, vollstaendig: true };
+    }
   }
-  return { transfers: out, seiten: seite + 1, gedeckelt: next != null };
+  return { transfers: out, seiten: maxPages, gedeckelt: next != null, vollstaendig: false };
 }
 
 /** Eingehende Transaktionen. Grundlage der Cluster-Vermutungen. */
