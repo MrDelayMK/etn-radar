@@ -462,7 +462,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
-  <button data-p="clusters"><span class="ic">🔍</span>Clusters</button>
+  <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
 </nav>
 
@@ -773,8 +773,8 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     <div class="sankeytip" id="sankeyTip"></div>
   </section>
 
-  <section id="invClusterWrap" style="display:none">
-    <h2>Cluster relationships <span class="hint">from the funding-source analysis - a pattern, not proof</span></h2>
+  <section id="invClusterWrap" class="labs" style="display:none">
+    <h2>Cluster relationships</h2>
     <div class="card" id="invCluster"></div>
   </section>
   <section id="invEventsWrap" style="display:none">
@@ -904,6 +904,23 @@ const ADMIN = {
   })(),
 };
 const adminKopf = () => (ADMIN.token ? { "X-Admin-Token": ADMIN.token } : {});
+
+// Unfertige Bereiche (Cluster-Vermutungen) sind oeffentlich ausgeblendet, bis
+// sie geprueft sind. Mit ?labs=1 werden sie sichtbar - so laesst sich auf der
+// echten Seite mit echten Daten testen, ohne dass Besucher etwas Halbfertiges
+// zu sehen bekommen. Die Merkung bleibt im Browser.
+(() => {
+  const u = new URL(location.href);
+  if (u.searchParams.has("labs")) {
+    const an = u.searchParams.get("labs") !== "0";
+    try { an ? localStorage.setItem("etnLabs", "1") : localStorage.removeItem("etnLabs"); } catch {}
+    u.searchParams.delete("labs");
+    history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
+  }
+  let an = false;
+  try { an = localStorage.getItem("etnLabs") === "1"; } catch {}
+  if (an) document.querySelectorAll(".labs").forEach((e) => e.removeAttribute("hidden"));
+})();
 
 async function hole(pfad, bust) {
   // bust=true haengt einen Cache-Buster an: der Worker cached Antworten bis
@@ -2024,7 +2041,7 @@ async function ladeWalletFlows(adresse) {
       el(totalId).textContent = (rein ? "+" : "−") + kurz(seite.gesamt_etn) + " ETN";
       el(metaId).textContent =
         nf(seite.tx_anzahl) + " tx" +
-        (seite.gedeckelt ? " · partial (very active wallet)" : "");
+        "";
       zeichneSankey(el(svgId), seite, rein, eigen);
     }
   } catch (e) {
@@ -2112,7 +2129,7 @@ function renderWalletDetail(d) {
     ).join(""));
   }
   if (teile.length) {
-    wrap.cluster.style.display = "";
+    wrap.cluster.style.display = wrap.cluster.hasAttribute("hidden") ? "none" : "";
     el("invCluster").innerHTML = teile.join("");
   } else {
     wrap.cluster.style.display = "";
