@@ -59,6 +59,17 @@ Die ausgegebene `database_id` in [`wrangler.toml`](wrangler.toml) eintragen
 npx wrangler d1 execute etn-tracker --remote --file=./schema.sql
 ```
 
+Das legt alle Tabellen an. `schema.sql` enthält bewusst **nur** CREATE-
+Anweisungen — spätere Spalten-Ergänzungen stehen in
+[`migrations.sql`](migrations.sql) und werden separat angewendet:
+
+```bash
+npm run db:migrate
+```
+
+Bei einer frischen Datenbank meldet das nur „schon vorhanden" und ist damit
+gefahrlos. Nötig ist es, wenn die Datenbank älter ist als eine neue Spalte.
+
 ### 2. Worker veröffentlichen
 
 ```bash
@@ -67,8 +78,17 @@ npx wrangler deploy
 
 ### 3. GitHub-Repository und Secrets
 
-Repository anlegen (privat genügt), Code pushen, dann unter
-**Settings → Secrets and variables → Actions** drei Secrets setzen:
+Repository anlegen, Code pushen, dann unter
+**Settings → Secrets and variables → Actions** drei Secrets setzen.
+
+> **Öffentlich oder privat?** Der Snapshot läuft alle 30 Minuten, also 48
+> Läufe pro Tag. GitHub rechnet pro Lauf auf volle Minuten auf — das sind
+> mindestens ~1.440 Minuten im Monat, realistisch eher 2.500–2.900. Für
+> **private** Repos sind nur 2.000 Minuten im Monat gratis, das reißt.
+> Für **öffentliche** Repos sind Actions-Minuten unbegrenzt gratis. Wer das
+> Repo privat halten will, sollte den Cron in
+> [`snapshot.yml`](.github/workflows/snapshot.yml) auf stündlich stellen
+> (`0 * * * *`).
 
 | Secret | Woher |
 |---|---|
