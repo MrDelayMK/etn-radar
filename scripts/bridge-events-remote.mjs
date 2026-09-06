@@ -18,3 +18,4 @@ const env = {
 const res = await runBridgeEventAnalysis(env, db, { limit, log: (m) => console.log(m) });
 console.log("\nFertig:", JSON.stringify(res));
 console.log("D1-HTTP-Anfragen: " + db.requests);
+console.log(db.schreibBericht());

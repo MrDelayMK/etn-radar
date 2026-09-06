@@ -12,6 +12,9 @@
 // Statement. Unsere Statements haben <= 13 Platzhalter; die Batchgroesse ist
 // unten so gewaehlt, dass die 100 KB sicher eingehalten werden.
 
+// Schreibzeilen pro Tag im D1-Gratis-Tarif. Dient nur der Prozentangabe im Log.
+const TAGESLIMIT = 100000;
+
 const API = "https://api.cloudflare.com/client/v4";
 export const MAX_BATCH = 50;
 
@@ -63,6 +66,23 @@ export class D1Http {
     this.token = token;
     this.onRequest = onRequest;
     this.requests = 0;
+    // Verbrauchte Schreibzeilen. D1 laesst im Gratis-Tarif 100.000 pro Tag zu.
+    // Wird das gerissen, schlaegt der GANZE Stapel fehl - D1-Batches sind
+    // atomar -, und der Lauf hinterlaesst nichts. Genau das ist tagelang
+    // unbemerkt passiert: die Datenbank blieb leer, und am naechsten Tag begann
+    // derselbe teure Erstlauf von vorn. Jeder Job zaehlt jetzt mit und schreibt
+    // die Zahl am Ende ins Log.
+    this.rowsWritten = 0;
+  }
+
+  /** Eine Zeile fuers Job-Log: wie viel vom Tagesbudget dieser Lauf kostet. */
+  schreibBericht() {
+    const anteil = ((this.rowsWritten / TAGESLIMIT) * 100).toFixed(1);
+    return (
+      "D1-Schreiblast: " + this.rowsWritten.toLocaleString("de-DE") +
+      " Zeilen = " + anteil + "% des Tagesbudgets (" +
+      TAGESLIMIT.toLocaleString("de-DE") + ")"
+    );
   }
 
   prepare(sql) {
@@ -117,7 +137,9 @@ export class D1Http {
         "D1-Fehler: " + msg + "\n  erstes Statement: " + String(batch[0]?.sql).slice(0, 160)
       );
     }
-    return body.result ?? [];
+    const ergebnis = body.result ?? [];
+    for (const r of ergebnis) this.rowsWritten += r?.meta?.rows_written ?? 0;
+    return ergebnis;
   }
 
   /** Mehrzeiliges SQL (z.B. schema.sql) anwenden. */

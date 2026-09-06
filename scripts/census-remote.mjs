@@ -21,6 +21,7 @@ const res = await runCensus(env, db, {
 });
 
 console.log("\nD1-HTTP-Anfragen: " + db.requests);
+console.log(db.schreibBericht());
 if (!res.vollstaendig) {
   console.error("Tiefe hat nicht bis zur Dust-Grenze gereicht - CENSUS_DEPTH erhoehen.");
   process.exitCode = 1;

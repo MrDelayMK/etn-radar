@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ETN Radar</title>
 <meta name="description" content="Whale and migration tracking for the Electroneum Smart Chain">
+<link rel="icon" type="image/png" href="/assets/favicon.png">
+<link rel="apple-touch-icon" href="/assets/logo-192.png">
+<meta name="theme-color" content="#080b12">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ETN Radar">
+<meta property="og:description" content="Whale and migration tracking for the Electroneum Smart Chain">
+<meta property="og:image" content="https://etn-radar.galacticsl.com/assets/logo.png">
+<meta name="twitter:card" content="summary">
 <style>
 :root{
   --bg:#080b12; --bg2:#0d1220; --card:#111827; --card2:#151d2e; --card3:#1a2436;
@@ -29,7 +37,26 @@ body{
     var(--bg);
   color:var(--tx); font:15px/1.55 var(--sans); min-height:100vh; padding:0 0 80px;
 }
-.wrap{max-width:1360px;margin:0 auto;padding:0 22px}
+.wrap{max-width:1360px;margin:0 auto;padding:0 22px;position:relative}
+
+/* Hintergrundbild. Zwei feste Ebenen hinter dem Inhalt: das Bild selbst,
+   darueber ein Verlauf, der nach unten in die Grundfarbe laeuft. Ohne den
+   Verlauf konkurriert das Bild ueber die ganze Seitenlaenge mit Text und
+   Zahlen - oben, wo nur der Kopf steht, darf es dagegen zu sehen sein. */
+body::before{
+  content:""; position:fixed; inset:0; z-index:-2;
+  background:url("/assets/bg.jpg") center 62%/cover no-repeat;
+  opacity:.5;
+}
+body::after{
+  content:""; position:fixed; inset:0; z-index:-1;
+  background:linear-gradient(180deg,
+    rgba(8,11,18,.18) 0%, rgba(8,11,18,.55) 38%, rgba(8,11,18,.88) 66%, var(--bg) 92%);
+}
+@media(prefers-reduced-motion:no-preference){
+  body::before{animation:bgAn 1.2s ease-out}
+}
+@keyframes bgAn{from{opacity:0;transform:scale(1.04)}to{opacity:.5;transform:none}}
 a{color:inherit;text-decoration:none}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .up{color:var(--up)} .down{color:var(--down)} .dim{color:var(--tx2)} .dim3{color:var(--tx3)}
@@ -37,7 +64,8 @@ a{color:inherit;text-decoration:none}
 /* ---------- Header ---------- */
 header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
 .brand{display:flex;align-items:center;gap:15px}
-.brand .logo{font-size:46px;line-height:1;filter:drop-shadow(0 0 18px #5b9cff70)}
+.brand .logo{width:46px;height:46px;border-radius:50%;flex:0 0 auto;
+              filter:drop-shadow(0 0 16px #5b9cff70)}
 .brand h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
 .brand .sub{font-size:12.5px;color:var(--tx3);margin-top:2px}
 .hspace{flex:1}
@@ -61,6 +89,7 @@ nav button{
   padding:13px 20px;font:620 14.5px var(--sans);cursor:pointer;white-space:nowrap;
   border-radius:0;transition:.15s;display:flex;align-items:center;gap:9px
 }
+nav button[hidden]{display:none}
 nav button .ic{font-size:19px}
 nav button:hover{color:var(--tx)}
 nav button.on{color:var(--tx);border-bottom-color:var(--acc)}
@@ -434,8 +463,49 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .skel{background:linear-gradient(90deg,#141c2c,#1d2739,#141c2c);background-size:200% 100%;
       animation:sh 1.3s infinite;border-radius:7px;height:15px}
 @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
-       font-size:12px;color:var(--tx3);display:flex;flex-wrap:wrap;gap:14px}
+/* ---------- About ---------- */
+.abouthead{display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin:26px 0 4px}
+.abouthead img{width:96px;height:96px;border-radius:50%;flex:0 0 auto;
+               filter:drop-shadow(0 0 26px #5b9cff55)}
+.abouthead h1{font-size:30px;font-weight:680;letter-spacing:-.025em}
+.abouthead p{color:var(--tx2);max-width:46em;margin-top:7px;line-height:1.65}
+.aboutgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.aboutcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:19px 21px}
+.aboutcard h3{font-size:15px;font-weight:620;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+.aboutcard p{color:var(--tx2);line-height:1.68;margin-bottom:10px}
+.aboutcard p:last-child{margin-bottom:0}
+.aboutcard b{color:var(--tx);font-weight:620}
+.aboutlist{list-style:none;display:grid;gap:9px;margin-top:4px}
+.aboutlist li{display:flex;gap:11px;align-items:baseline;color:var(--tx2);line-height:1.55}
+.aboutlist li b{flex:0 0 8.5em;color:var(--tx);font-weight:600}
+.person{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.person>img{width:132px;height:132px;border-radius:15px;object-fit:cover;flex:0 0 auto;
+            border:1px solid var(--line2)}
+.person .role{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+              color:var(--acc);font-weight:700}
+.person h3{font-size:21px;margin:5px 0 11px}
+.person .body{flex:1 1 320px}
+.linkrow{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+.linkrow a{border:1px solid var(--line2);border-radius:9px;padding:8px 14px;
+           font-size:13px;color:var(--tx2);font-weight:550}
+.linkrow a:hover{border-color:var(--acc);color:var(--tx)}
+.linkrow a.primary{background:var(--acc);border-color:var(--acc);color:#04101f}
+@media(max-width:860px){ .aboutgrid{grid-template-columns:1fr} }
+
+footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-size:12.5px}
+.footcols{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:26px}
+.footcols h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+             color:var(--tx3);font-weight:700;margin-bottom:11px}
+.footcols a{display:block;color:var(--tx2);padding:3px 0}
+.footcols a:hover{color:var(--acc)}
+.footbrand{display:flex;gap:13px;align-items:flex-start}
+.footbrand img{width:38px;height:38px;border-radius:50%;flex:0 0 auto}
+.footbrand b{display:block;font-size:14.5px;color:var(--tx);margin-bottom:5px}
+.footbrand p{color:var(--tx3);max-width:34em;line-height:1.6}
+.footbar{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--tx3);font-size:11.5px}
+.footbar .sp{margin-left:auto}
+@media(max-width:860px){ .footcols{grid-template-columns:1fr 1fr} .footbar .sp{margin-left:0} }
 
 @media(max-width:1000px){ .movergrid,.feedgrid{grid-template-columns:1fr} }
 @media(max-width:640px){
@@ -455,7 +525,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
 
 <header>
   <div class="brand">
-    <div class="logo">🐋</div>
+    <img class="logo" src="/assets/logo.png" alt="" width="46" height="46">
     <div>
       <h1>ETN Radar</h1>
       <div class="sub">Whale &amp; migration tracking &middot; Electroneum Smart Chain</div>
@@ -471,10 +541,12 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
 
 <nav id="nav">
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
+  <button data-p="tiers"><span class="ic">🏔️</span>Tiers</button>
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
   <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
+  <button data-p="about"><span class="ic">📡</span>About</button>
 </nav>
 
 <!-- ================= OVERVIEW ================= -->
@@ -583,15 +655,22 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     </div>
   </section>
 
-  <section>
-    <h2>Holder tiers <span class="hint">thresholds fixed in ETN, so a falling price never demotes anyone</span></h2>
+</div>
+
+<!-- ================= TIERS ================= -->
+<div class="page" id="page-tiers">
+
+  <section style="margin-top:22px">
+    <h2>🏔️ Holder tiers <span class="hint">thresholds fixed in ETN, so a falling price never demotes anyone</span></h2>
     <div class="grid" style="gap:9px" id="tiers"></div>
     <div class="tiersfoot">
       <div class="dim3" style="font-size:11.5px" id="tiersNote"></div>
       <button class="ghost" id="censusBtn" style="display:none">🔄 Run full census now</button>
     </div>
+  </section>
 
-    <div class="chartcard" style="margin-top:16px">
+  <section>
+    <div class="chartcard">
       <div class="top">
         <div>
           <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Concentration over time</div>
@@ -797,9 +876,133 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
   <div class="empty" id="invEmpty" style="display:none">Search for a wallet above to see its full profile.</div>
 </div>
 
+<!-- ================= ABOUT ================= -->
+<div class="page" id="page-about">
+
+  <div class="abouthead">
+    <img src="/assets/logo.png" alt="">
+    <div>
+      <h1>ETN Radar</h1>
+      <p>A public dashboard for the Electroneum Smart Chain: who holds the large
+      balances, which long-dormant wallets wake up, and how much of the legacy
+      supply still has to cross the bridge before the migration window closes.</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="aboutgrid">
+      <div class="aboutcard">
+        <h3>🌉 Why it exists</h3>
+        <p>Legacy ETN has to be migrated to the Smart Chain by
+        <b>31 January 2027</b>. Whatever is still sitting in the bridge contract
+        on that date does not make the move.</p>
+        <p>The block explorer holds every number needed to follow that, but it
+        shows one address at a time. This site keeps the running totals: how
+        fast the bridge is draining, which pace would be needed to empty it in
+        time, and which large wallets have started moving.</p>
+      </div>
+      <div class="aboutcard">
+        <h3>🔭 What it watches</h3>
+        <ul class="aboutlist">
+          <li><b>Migration</b><span>Bridge balance, daily pace, and the gap to the deadline</span></li>
+          <li><b>Whales</b><span>The top 3,000 wallets, re-read every 30 minutes</span></li>
+          <li><b>Sleepers</b><span>Wallets that sat still for months and suddenly move</span></li>
+          <li><b>Tiers</b><span>How the full holder base is spread across size bands</span></li>
+          <li><b>Concentration</b><span>What share the top 10, 100 and 1,000 hold over time</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="aboutcard person">
+      <img src="/assets/mrdelaymk.jpg" alt="MrDelayMK"
+           onerror="this.style.display='none'">
+      <div class="body">
+        <span class="role">Built by</span>
+        <h3>MrDelayMK</h3>
+        <p>In the Electroneum community since the ICO days. Also behind the
+        <b>Galactic Sports League</b>, a sports NFT project running on the same
+        chain — the ETN Radar grew out of watching that chain closely enough to
+        want proper numbers on it.</p>
+        <p>Suggestions are welcome: the fastest way to reach me is the Telegram
+        group or X.</p>
+        <div class="linkrow">
+          <a class="primary" href="https://t.me/GalacticSL" target="_blank" rel="noopener">Telegram group</a>
+          <a href="https://x.com/MrDelayMK" target="_blank" rel="noopener">𝕏 @MrDelayMK</a>
+          <a href="https://x.com/GalacticSL" target="_blank" rel="noopener">𝕏 @GalacticSL</a>
+          <a href="https://galacticsl.com" target="_blank" rel="noopener">galacticsl.com</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="aboutgrid">
+      <div class="aboutcard">
+        <h3>📡 Where the numbers come from</h3>
+        <ul class="aboutlist">
+          <li><b>Source</b><span>blockexplorer.electroneum.com, the official Blockscout instance</span></li>
+          <li><b>Snapshot</b><span>Top 3,000 wallets, every 30 minutes</span></li>
+          <li><b>Full census</b><span>Down to dust balances, once a week</span></li>
+          <li><b>Bridge events</b><span>Single transfers of 500,000 ETN or more, weekly</span></li>
+          <li><b>Price</b><span>Whatever the explorer reports for ETN, per snapshot</span></li>
+        </ul>
+      </div>
+      <div class="aboutcard">
+        <h3>⚠️ What it is not</h3>
+        <p>Not affiliated with Electroneum Ltd. — this is an independent
+        community project reading public chain data.</p>
+        <p>Nothing here is financial advice. Labels such as "exchange" are
+        partly detected automatically and can be wrong; a wallet moving does
+        not tell you why it moved.</p>
+        <p>The forecast on the overview is a straight line, not a prediction.
+        It answers "what if the current pace never changes", and the pace
+        always changes.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
 <footer>
-  <span>Data: Blockscout (blockexplorer.electroneum.com) &middot; snapshot every 30&nbsp;min</span>
-  <span>Not affiliated with Electroneum Ltd. &middot; not financial advice</span>
+  <div class="footcols">
+    <div class="footbrand">
+      <img src="/assets/logo.png" alt="">
+      <div>
+        <b>ETN Radar</b>
+        <p>Tracks the biggest wallets on the Electroneum Smart Chain and how much
+        of the legacy supply still has to cross the bridge before the migration
+        deadline. Everything here is read straight from the public block explorer.</p>
+      </div>
+    </div>
+    <div>
+      <h4>Dashboard</h4>
+      <a href="#overview">Overview</a>
+      <a href="#tiers">Holder tiers</a>
+      <a href="#board">Leaderboard</a>
+      <a href="#activity">Activity</a>
+      <a href="#investigate">Investigate</a>
+      <a href="#about">About</a>
+    </div>
+    <div>
+      <h4>Community</h4>
+      <a href="https://x.com/MrDelayMK" target="_blank" rel="noopener">X &middot; @MrDelayMK</a>
+      <a href="https://x.com/GalacticSL" target="_blank" rel="noopener">X &middot; @GalacticSL</a>
+      <a href="https://t.me/GalacticSL" target="_blank" rel="noopener">Telegram group</a>
+      <a href="https://galacticsl.com" target="_blank" rel="noopener">galacticsl.com</a>
+    </div>
+    <div>
+      <h4>Electroneum</h4>
+      <a href="https://electroneum.com/" target="_blank" rel="noopener">Electroneum</a>
+      <a href="https://blockexplorer.electroneum.com/" target="_blank" rel="noopener">Block explorer</a>
+      <a href="https://electroswap.io/" target="_blank" rel="noopener">ElectroSwap DEX</a>
+    </div>
+  </div>
+  <div class="footbar">
+    <span>&copy; <span id="copyYear"></span> ETN Radar</span>
+    <span>Data: Blockscout &middot; snapshot every 30&nbsp;min</span>
+    <span class="sp">Not affiliated with Electroneum Ltd. &middot; not financial advice</span>
+  </div>
 </footer>
 
 </div>
@@ -2341,8 +2544,17 @@ async function suchen() {
 // Jede Seite laedt ihre Daten beim ersten Oeffnen. Das haelt den Erststart
 // schlank und spart Anfragen an Endpoints, die der Nutzer nie ansieht.
 const geladen = new Set();
+
+// Uebersicht und Tiers-Reiter fuellen sich aus EINEM /api/overview-Aufruf.
+// Ohne die gemeinsam genutzte Zusage fragt der zweite geoeffnete Reiter
+// denselben Endpoint noch einmal ab, nur um dieselben Zahlen zu bekommen.
+let uebersichtLaeuft = null;
+const uebersicht = () => (uebersichtLaeuft ??= ladeOverview());
+
 const LADER = {
-  overview: () => Promise.all([ladeOverview(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
+  overview: () => Promise.all([uebersicht(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
+  tiers: () => uebersicht(),
+  about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),
   activity: () => Promise.all([ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
@@ -2356,7 +2568,9 @@ function zeigeSeite(name) {
   const navKnopf = document.querySelector('#nav [data-p="' + name + '"]');
   if (navKnopf?.hasAttribute("hidden")) name = "overview";
 
+  const wechsel = document.querySelector("#nav button.on")?.dataset.p !== name;
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
+  if (wechsel) window.scrollTo({ top: 0 });
   [...el("nav").children].forEach((b) => b.classList.toggle("on", b.dataset.p === name));
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
   if (!geladen.has(name)) {
@@ -2365,7 +2579,7 @@ function zeigeSeite(name) {
   }
   // Der Chart wurde eventuell in einem versteckten Tab gezeichnet und hatte
   // dort die Breite 0 - beim Einblenden neu vermessen.
-  if (name === "overview") alleChartsNachziehen();
+  if (name === "overview" || name === "tiers") alleChartsNachziehen();
   if (name === "activity" && FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
 
@@ -2614,6 +2828,8 @@ el("lbSearchBtn").onclick = lbSpringeZuWallet;
 el("lbSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSpringeZuWallet(); });
 
 const start = location.hash.slice(1);
+el("copyYear").textContent = new Date().getFullYear();
+
 zeigeSeite(LADER[start] ? start : "overview");
 // Kopfzeile (Snapshot-Zeit, Preis) soll auch dann stimmen, wenn man per
 // Deep-Link auf einem anderen Reiter startet. Wichtig: den VOLLEN Loader

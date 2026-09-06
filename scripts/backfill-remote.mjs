@@ -18,3 +18,4 @@ await runBackfill(
   }
 );
 console.log("D1-HTTP-Anfragen: " + db.requests);
+console.log(db.schreibBericht());

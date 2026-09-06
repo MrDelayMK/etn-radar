@@ -33,5 +33,6 @@ try {
   console.error("\nFEHLGESCHLAGEN: " + e.message);
   process.exitCode = 1;
 } finally {
+  console.log(db.schreibBericht());
   console.log("Gesamtlaufzeit: " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
 }

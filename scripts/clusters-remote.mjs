@@ -22,3 +22,4 @@ await runClusterAnalysis(env, db, {
 });
 
 console.log("D1-HTTP-Anfragen: " + db.requests);
+console.log(db.schreibBericht());
