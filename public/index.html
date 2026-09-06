@@ -506,7 +506,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     <div class="card" id="bridgeEventsCard">
       <div id="bridgeEvents" class="empty">Loading&hellip;</div>
       <div class="tiersfoot" style="margin-top:14px">
-        <div class="dim3" style="font-size:11.5px">Runs monthly, or any time via the button.</div>
+        <div class="dim3" style="font-size:11.5px">Runs weekly, or any time via the button.</div>
         <button class="ghost" id="bridgeBtn">🔍 Scan for events now</button>
       </div>
     </div>
@@ -1352,7 +1352,7 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
     return '<div class="tierrow">' +
       '<div class="e">' + t.emoji + "</div>" +
       '<div class="nm"><b style="color:' + f + '">' + esc(t.name) + "</b>" +
-      "<span>" + bereich + (t.census ? " · monthly" : "") + "</span></div>" +
+      "<span>" + bereich + (t.census ? " · weekly" : "") + "</span></div>" +
       '<div class="bars"><div class="bar"><i style="width:' +
         Math.max(supplyAnteil, supplyAnteil > 0 ? 1.5 : 0).toFixed(1) +
         '%;background:' + f + '"></i></div>' +
@@ -1364,9 +1364,9 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
   const note = el("tiersNote");
   if (note) {
     note.textContent = tierInfo?.census_vorhanden
-      ? "Humpback–Octopus updated every 6h · Crab–Dust from the monthly census (" +
+      ? "Humpback–Octopus updated every 6h · Crab–Dust from the weekly census (" +
         new Date(tierInfo.census_stand).toLocaleDateString(LOC) + ")"
-      : "Humpback–Octopus updated every 6h · Crab–Dust need the first census to run (monthly, or via the button below)";
+      : "Humpback–Octopus updated every 6h · Crab–Dust need the first census to run (weekly, or via the button below)";
   }
 }
 
@@ -1641,7 +1641,7 @@ async function ladeClusters() {
     ? "Last computed " + new Date(d.stand).toLocaleString(LOC) +
       " · only among the individually-tracked (fast-tier) wallets"
     : "No analysis has run yet — click \"Run cluster analysis now\" below, " +
-      "or wait for the monthly run.";
+      "or wait for the weekly run.";
 
   if (!d.gruppen.length) {
     el("clusters").innerHTML = '<div class="empty">' +

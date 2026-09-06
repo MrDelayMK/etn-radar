@@ -28,7 +28,7 @@
       "label_type": "exchange",
       "is_excluded": 1,
       "confidence": "confirmed",
-      "notes": "Boersen-Wallet. Quelle: Community/PlanetETN, 2026-09."
+      "notes": "Boersen-Wallet. Quelle: ETN-Community, 2026-09."
     },
     {
       "address": "0x92F0bac0f513CcAFC2b4101365E2d1afCf9874e4",
@@ -36,7 +36,7 @@
       "label_type": "exchange",
       "is_excluded": 1,
       "confidence": "confirmed",
-      "notes": "Groesstes Nicht-Bridge-Wallet der Chain. Quelle: Community/PlanetETN, 2026-09."
+      "notes": "Groesstes Nicht-Bridge-Wallet der Chain. Quelle: ETN-Community, 2026-09."
     },
     {
       "address": "0x6ae77AF00D6d646690CAB3A6d60fc96acF40FEAc",
@@ -44,7 +44,7 @@
       "label_type": "exchange",
       "is_excluded": 1,
       "confidence": "confirmed",
-      "notes": "Boersen-Wallet. Quelle: Community/PlanetETN, 2026-09."
+      "notes": "Boersen-Wallet. Quelle: ETN-Community, 2026-09."
     }
   ]
 }

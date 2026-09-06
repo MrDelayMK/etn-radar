@@ -1,13 +1,13 @@
 name: ETN Tier Census
 
-# Monatlich statt alle 6h: die unteren Tiers (Crab bis Microbe) bewegen sich im
+# Woechentlich statt alle 6h: die unteren Tiers (Crab bis Microbe) bewegen sich im
 # Cent-Bereich und brauchen keine hohe Aufloesung - siehe die Begruendung in
 # src/tiers.js ("Zwei Geschwindigkeiten"). Wer es eilig hat, kann im Dashboard
 # jederzeit "Run full census now" druecken (hoechstens einmal alle 24h, siehe
-# /api/census/trigger in src/index.js) statt auf den Monatslauf zu warten.
+# /api/census/trigger in src/index.js) statt auf den Wochenlauf zu warten.
 on:
   schedule:
-    - cron: "30 3 1 * *" # am 1. jedes Monats, 03:30 UTC
+    - cron: "30 3 * * 0" # jeden Sonntag 03:30 UTC
   workflow_dispatch:
     inputs:
       depth:

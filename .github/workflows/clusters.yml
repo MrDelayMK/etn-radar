@@ -1,12 +1,12 @@
 name: ETN Cluster Analysis
 
 # Cluster-Vermutungen: Wallets mit gemeinsamer Finanzierungsquelle. Nur ein
-# Muster, kein Beweis - siehe src/clusters.js und die README. Monatlich wie
+# Muster, kein Beweis - siehe src/clusters.js und die README. Woechentlich wie
 # der Census, weil sich Finanzierungsbeziehungen kaum aendern; jederzeit auch
 # per Knopf im Dashboard ("🔍 Run cluster analysis now", hoechstens 1x/24h).
 on:
   schedule:
-    - cron: "0 4 1 * *" # am 1. jedes Monats, 04:00 UTC (nach dem Census um 03:30)
+    - cron: "30 3 * * 3" # jeden Mittwoch 03:30 UTC
   workflow_dispatch:
     inputs:
       limit:

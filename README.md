@@ -101,14 +101,14 @@ In **Actions** nacheinander von Hand starten:
 
 1. **ETN Snapshot** — erster Bestand (danach automatisch alle 30 Min)
 2. **ETN Backfill** — holt die Historie und die echten Bewegungsdaten
-3. **ETN Tier Census** — zählt Crab bis Microbe (danach automatisch monatlich)
-4. **ETN Cluster Analysis** — optional, Cluster-Vermutungen (siehe unten; ebenfalls monatlich automatisch)
-5. **ETN Exchange Detection** — optional, markiert Börsen-/Dienst-Kandidaten (ebenfalls monatlich automatisch)
-6. **ETN Bridge Events** — optional, große Migrations-Tage samt Empfängern (siehe unten; ebenfalls monatlich automatisch)
+3. **ETN Tier Census** — zählt Crab bis Microbe (danach automatisch wöchentlich, sonntags)
+4. **ETN Cluster Analysis** — optional, Cluster-Vermutungen (siehe unten; automatisch mittwochs)
+5. **ETN Exchange Detection** — optional, markiert Börsen-/Dienst-Kandidaten (automatisch freitags)
+6. **ETN Bridge Events** — optional, große Migrations-Tage samt Empfängern (siehe unten; automatisch montags)
 
 Backfill, Census und Cluster Analysis sind wiederaufsetzbar bzw. laufen bei
 Bedarf einfach erneut; siehe [„Zwei Geschwindigkeiten"](#zwei-geschwindigkeiten-snapshot-vs-tiefenzählung)
-weiter unten für die Begründung des monatlichen Takts.
+weiter unten für die Begründung des Takts.
 
 ### 5. Bekannte Adressen setzen
 
@@ -248,7 +248,7 @@ Die Tier-Skala ist deshalb in zwei Gruppen geteilt (siehe [`src/tiers.js`](src/t
 | Stufen | Quelle | Takt | Speicherung |
 |---|---|---|---|
 | Humpback … Octopus (≥ 500.000 ETN) | normaler Snapshot | alle 30 Min | einzeln, mit Verlauf, im Leaderboard durchblätterbar |
-| Crab, Shrimp, Plankton, Microbe (5.000 – 500.000 ETN) | [`src/census.js`](src/census.js) | monatlich (1. des Monats) + jederzeit per Knopf | nur Summen, keine einzelnen Zeilen |
+| Crab, Shrimp, Plankton, Microbe (5.000 – 500.000 ETN) | [`src/census.js`](src/census.js) | wöchentlich (sonntags) + jederzeit per Knopf | nur Summen, keine einzelnen Zeilen |
 | Dust (< 5.000 ETN) | — | — | reine Restrechnung: `total_addresses − alles nachweislich Darüberliegende` |
 
 Der Schnitt bei Octopus ist eine Entscheidung darüber, wo Whale-Watching mit
@@ -321,7 +321,7 @@ echten Cluster-Kandidaten. Wallets mit ≥ 2 Mitgliedern und ≥ 60 % Anteil
 derselben (nicht-Börsen-)Quelle werden als Gruppe gemeldet.
 
 **„Run cluster analysis now"**: wie der Census manuell auslösbar, dauert
-8-12 Minuten bei den Top 1.000, monatlich automatisch (`.github/workflows/clusters.yml`).
+8-12 Minuten bei den Top 1.000, mittwochs automatisch (`.github/workflows/clusters.yml`).
 
 **Mögliche Erweiterung** (noch nicht gebaut): weitere Muster wie „Wallets, die
 nur miteinander interagieren" oder „im selben Block entstanden" — jedes
@@ -377,7 +377,7 @@ Börsen/Bridge zum Filter „Real wallets only".
 
 **„Detect exchanges"**-Knopf: wie Census/Cluster-Analyse auslösbar, prüft die
 Top 500 noch ungelabelten Wallets (Contracts ausgenommen), dauert ~15-20
-Minuten, monatlich automatisch (`.github/workflows/exchange-detect.yml`).
+Minuten, freitags automatisch (`.github/workflows/exchange-detect.yml`).
 
 ---
 
@@ -411,7 +411,7 @@ dafür einen eigenen Hinweis statt einer Zahl.
 **„Scan for events now"**-Knopf im Migration-Watch-Bereich: wie
 Census/Cluster-Analyse/Exchange Detection auslösbar, analysiert die 8
 größten Ausreisser der letzten 90 Tage, dauert je nach Bridge-Aktivität bis
-zu ~15-20 Minuten, monatlich automatisch (`.github/workflows/bridge-events.yml`).
+zu ~15-20 Minuten, montags automatisch (`.github/workflows/bridge-events.yml`).
 
 ---
 
