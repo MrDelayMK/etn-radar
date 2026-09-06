@@ -40,8 +40,8 @@ BRIDGE_ADDRESS = "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62"
 # Fine-grained Personal Access Token mit "Actions: Read and write" nur auf
 # dieses eine Repository. Ohne gesetztes Secret zeigt der Knopf einen
 # Hinweis auf den manuellen Weg ueber den Actions-Tab - nichts bricht.
-GITHUB_OWNER   = "PLATZHALTER_GITHUB_BENUTZERNAME"
-GITHUB_REPO    = "PLATZHALTER_REPO_NAME"
+GITHUB_OWNER   = "MrDelayMK"
+GITHUB_REPO    = "etn-radar"
 GITHUB_BRANCH  = "main"
 
 # WICHTIG, sobald das Dashboard oeffentlich erreichbar ist:
