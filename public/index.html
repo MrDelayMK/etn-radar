@@ -492,6 +492,43 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .linkrow a.primary{background:var(--acc);border-color:var(--acc);color:#04101f}
 @media(max-width:860px){ .aboutgrid{grid-template-columns:1fr} }
 
+/* ---------- Netzwerk-Kennzahlen ---------- */
+.netcard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
+         border:1px solid var(--line);border-radius:16px;padding:19px 21px 15px}
+.nethead{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:16px}
+.nethead .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+              color:var(--tx3);font-weight:700}
+.nethead .live{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--tx3)}
+.nethead .live i{width:6px;height:6px;border-radius:50%;background:var(--up);
+                 box-shadow:0 0 8px var(--up)}
+@media(prefers-reduced-motion:no-preference){
+  .nethead .live i{animation:puls 2.4s ease-in-out infinite}
+}
+@keyframes puls{0%,100%{opacity:1}50%{opacity:.35}}
+.nethead .cap{margin-left:auto;font-size:12.5px;color:var(--tx2)}
+.nethead .cap b{color:var(--tx);font-weight:620}
+
+.netgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;
+         background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.netstat{background:var(--card);padding:13px 15px 14px}
+.netstat .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+            color:var(--tx3);font-weight:700;margin-bottom:6px}
+.netstat .v{font-size:19px;font-weight:650;letter-spacing:-.02em}
+.netstat .s{font-size:11.5px;color:var(--tx3);margin-top:3px}
+
+.nettx{margin-top:15px}
+.nettx .top{display:flex;align-items:baseline;gap:10px;margin-bottom:7px}
+.nettx .top b{font-size:12.5px;color:var(--tx2);font-weight:560}
+.nettx .top span{font-size:11.5px;color:var(--tx3);margin-left:auto}
+.nettx svg{width:100%;height:52px;display:block}
+.nettx rect{fill:var(--acc);opacity:.55;transition:opacity .12s}
+.nettx rect:hover{opacity:1}
+.nettx .axis{display:flex;justify-content:space-between;font-size:10.5px;
+             color:var(--tx3);margin-top:5px}
+
+@media(max-width:1000px){ .netgrid{grid-template-columns:repeat(3,1fr)} }
+@media(max-width:560px){ .netgrid{grid-template-columns:repeat(2,1fr)} .netstat .v{font-size:17px} }
+
 footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-size:12.5px}
 .footcols{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:26px}
 .footcols h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
@@ -592,6 +629,38 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="migbar-lbl">
         <span>Migrated: <b id="migDoneLbl">&mdash;</b></span>
         <span>Not migrated yet: <b id="migRestLbl">&mdash;</b></span>
+      </div>
+    </div>
+  </section>
+
+
+  <section>
+    <div class="netcard">
+      <div class="nethead">
+        <span class="lbl">Network</span>
+        <span class="live"><i></i>Electroneum Smart Chain</span>
+        <span class="cap">Market cap <b class="num" id="netCap">&mdash;</b></span>
+      </div>
+
+      <div class="netgrid">
+        <div class="netstat"><div class="k">Block height</div>
+          <div class="v num" id="netBlocks">&mdash;</div><div class="s" id="netBlockTime">&mdash;</div></div>
+        <div class="netstat"><div class="k">Transactions</div>
+          <div class="v num" id="netTx">&mdash;</div><div class="s">since genesis</div></div>
+        <div class="netstat"><div class="k">Today so far</div>
+          <div class="v num" id="netTxToday">&mdash;</div><div class="s" id="netTxAvg">&mdash;</div></div>
+        <div class="netstat"><div class="k">Addresses</div>
+          <div class="v num" id="netAddr">&mdash;</div><div class="s">ever seen on chain</div></div>
+        <div class="netstat"><div class="k">Utilisation</div>
+          <div class="v num" id="netUtil">&mdash;</div><div class="s">of available block space</div></div>
+        <div class="netstat"><div class="k">Gas price</div>
+          <div class="v num" id="netGas">&mdash;</div><div class="s">average, gwei</div></div>
+      </div>
+
+      <div class="nettx">
+        <div class="top"><b>Transactions per day</b><span id="netTxRange">&mdash;</span></div>
+        <svg id="netTxChart" viewBox="0 0 600 52" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="axis"><span id="netTxFrom">&mdash;</span><span id="netTxTo">&mdash;</span></div>
       </div>
     </div>
   </section>
@@ -1541,6 +1610,66 @@ function zeichneBurnKarte(d, m) {
       "× faster</b> than today for all of it to make it across.";
     urteil.style.color = faktor > 3 ? "var(--down)" : "var(--warn)";
   }
+}
+
+/**
+ * Netzwerk-Kennzahlen. Kommen als einzige nicht aus der eigenen Datenbank,
+ * sondern live vom Explorer (siehe network() in src/index.js). Faellt der
+ * Abruf aus, bleibt die Karte auf ihren Strichen stehen - sie ist Beiwerk,
+ * kein Grund, die Uebersicht scheitern zu lassen.
+ */
+async function ladeNetzwerk() {
+  let d;
+  try {
+    d = await hole("/api/network");
+  } catch {
+    return;
+  }
+  if (!d || d.leer) return;
+
+  el("netBlocks").textContent = nf(d.blockhoehe);
+  el("netBlockTime").textContent = d.blockzeit_ms
+    ? "~" + nf(d.blockzeit_ms / 1000, 1) + " s per block"
+    : "—";
+  el("netTx").textContent = kurz(d.transaktionen);
+  el("netAddr").textContent = kurz(d.adressen);
+  el("netUtil").textContent = d.auslastung != null ? nf(d.auslastung, 1) + "%" : "—";
+  el("netGas").textContent = d.gaspreis != null ? nf(d.gaspreis, 2) : "—";
+  el("netCap").textContent = d.marktkapitalisierung != null
+    ? "$" + kurz(d.marktkapitalisierung) : "—";
+
+  el("netTxToday").textContent = kurz(d.tx_heute);
+  // Bewusst KEIN Prozentvergleich gegen den Tagesschnitt: der laufende Tag ist
+  // noch nicht vorbei, morgens um sechs staende dort zwangslaeufig -80%, und
+  // das saehe nach einem Einbruch aus statt nach einer halben Uhrzeit. Beide
+  // Zahlen nebeneinander, den Vergleich zieht der Leser selbst.
+  el("netTxAvg").textContent = d.tx_schnitt
+    ? "30-day average " + kurz(d.tx_schnitt) : "";
+
+  zeichneNetzChart(d.tx_verlauf ?? []);
+}
+
+/** Schlichtes Balkenbild der Tagestransaktionen. */
+function zeichneNetzChart(tage) {
+  const svg = el("netTxChart");
+  if (!tage.length) return;
+  const B = 600, H = 52;
+  const max = Math.max(...tage.map((t) => t.tx)) || 1;
+  const breite = B / tage.length;
+  svg.innerHTML = tage
+    .map((t, i) => {
+      const h = Math.max(1, (t.tx / max) * (H - 2));
+      return '<rect x="' + (i * breite + breite * 0.14).toFixed(2) +
+        '" y="' + (H - h).toFixed(2) +
+        '" width="' + (breite * 0.72).toFixed(2) +
+        '" height="' + h.toFixed(2) + '" rx="1"><title>' +
+        new Date(t.day).toLocaleDateString(LOC) + ": " + nf(t.tx) + " tx</title></rect>";
+    })
+    .join("");
+
+  el("netTxRange").textContent = "peak " + kurz(max);
+  el("netTxFrom").textContent = new Date(tage[0].day).toLocaleDateString(LOC);
+  el("netTxTo").textContent = new Date(tage[tage.length - 1].day).toLocaleDateString(LOC);
 }
 
 async function ladeBridgeEvents() {
@@ -2552,7 +2681,8 @@ let uebersichtLaeuft = null;
 const uebersicht = () => (uebersichtLaeuft ??= ladeOverview());
 
 const LADER = {
-  overview: () => Promise.all([uebersicht(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
+  overview: () =>
+    Promise.all([uebersicht(), ladeNetzwerk(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),

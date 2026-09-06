@@ -888,6 +888,70 @@ async function suche(db, env, q) {
   return { quelle: "db", treffer: rows.map((r) => schmuecken(r)) };
 }
 
+/* ---------- Netzwerk-Kennzahlen ----------------------------------------
+ *
+ * Die einzigen Zahlen im Dashboard, die NICHT aus der eigenen Datenbank
+ * kommen, sondern direkt vom Explorer. Bewusst so:
+ *
+ *   - Sie aendern sich im Sekundentakt (Blockhoehe, Transaktionen). Alle 30
+ *     Minuten einen Schnappschuss davon wegzuschreiben waere gleichzeitig zu
+ *     langsam fuer die Anzeige und zu teuer fuer das D1-Schreibbudget.
+ *   - Es sind Momentwerte ohne eigene Historie - es gibt nichts abzuleiten,
+ *     was der Explorer nicht selbst schon fuehrt.
+ *
+ * Zwei Abfragen pro Aufruf, und die Antwort haengt eine Minute im
+ * Worker-Cache. Faellt der Explorer aus, kommt eine leere Antwort statt
+ * eines Fehlers: der Rest der Uebersicht soll deswegen nicht kippen.
+ */
+async function network(env) {
+  const api = env.EXPLORER_API;
+  const holen = async (pfad) => {
+    const r = await fetch(api + pfad, { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error(pfad + ": HTTP " + r.status);
+    return r.json();
+  };
+
+  let s, verlauf;
+  try {
+    [s, verlauf] = await Promise.all([
+      holen("/stats"),
+      holen("/stats/charts/transactions").catch(() => null),
+    ]);
+  } catch (e) {
+    return { leer: true, grund: e.message };
+  }
+
+  const zahl = (v) => (v == null || v === "" ? null : Number(v));
+
+  // Der neueste Eintrag der Reihe ist der LAUFENDE Tag - nachgeprueft: sein
+  // Wert ist identisch mit transactions_today. Als Balken waere er ein
+  // Einbruch auf halber Hoehe, im Schnitt zoege er die Linie nach unten.
+  // Darum faellt er raus, und zwar ueber die Sortierung statt ueber einen
+  // Datumsvergleich: die Tagesgrenze des Explorers ist nicht zwingend die
+  // von UTC, und dann wuerde ein Vergleich mit "heute" danebenliegen.
+  const tage = (verlauf?.chart_data ?? [])
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(1, 31)
+    .reverse()
+    .map((d) => ({ day: d.date, tx: zahl(d.transaction_count) }));
+
+  return {
+    blockhoehe: zahl(s.total_blocks),
+    transaktionen: zahl(s.total_transactions),
+    tx_heute: zahl(s.transactions_today),
+    adressen: zahl(s.total_addresses),
+    blockzeit_ms: zahl(s.average_block_time),
+    auslastung: zahl(s.network_utilization_percentage),
+    gas_used_heute: zahl(s.gas_used_today),
+    gaspreis: zahl(s.gas_prices?.average),
+    preis: zahl(s.coin_price),
+    marktkapitalisierung: zahl(s.market_cap),
+    tx_verlauf: tage,
+    tx_schnitt: tage.length ? tage.reduce((a, b) => a + b.tx, 0) / tage.length : null,
+  };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const u = new URL(request.url);
@@ -937,6 +1001,7 @@ export default {
     try {
       const db = env.DB;
       if (pfad === "/api/overview") antwort = json(await overview(db, env));
+      else if (pfad === "/api/network") antwort = json(await network(env), 200, 60);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
