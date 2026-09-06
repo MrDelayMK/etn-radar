@@ -5,9 +5,8 @@ Top-Holder- und Migrations-Tracker für die **Electroneum Smart Chain**.
 Beantwortet die Frage, die sich mit der Legacy-Deadline (31.01.2027) stellt:
 *Wie verhalten sich die großen Wallets, je näher der Stichtag rückt?*
 
-Ergänzt [ETN Pulse](https://pulse.planetetn.org/), statt damit zu konkurrieren:
-Pulse trackt **Fluss** (Transfers, Events), dieses Projekt trackt **Bestand**
-(Balancen, Ränge, Tiers, Migrationsfortschritt).
+Getrackt wird **Bestand**: Balancen, Ränge, Tiers, Konzentration und der
+Migrationsfortschritt der Bridge.
 
 ---
 
@@ -308,7 +307,7 @@ sich auf die Fälle, in denen ein Cluster überhaupt etwas bedeutet: zwei
 Wallets mit ein paar hundert Dollar zu gruppieren ist kein nennenswerter Fund.
 Pro Wallet werden bis zu 6 Seiten eingehender Transaktionen von
 `blockexplorer.electroneum.com` geholt (`/addresses/{hash}/transactions?filter=to`
-— ausschließlich diese eine Quelle, siehe [„Nie PlanetETN oder andere Drittseiten"](#rücksicht-auf-den-explorer)).
+— ausschließlich diese eine Quelle, siehe [„Rücksicht auf den Explorer"](#rücksicht-auf-den-explorer)).
 
 **Börsen und die Bridge zählen nie als Finanzierungsquelle**, auch nicht
 teilweise — sonst wären alle Kunden derselben Börse fälschlich „ein Cluster",

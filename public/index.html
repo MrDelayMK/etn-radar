@@ -41,6 +41,11 @@ header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:cent
 .brand h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
 .brand .sub{font-size:12.5px;color:var(--tx3);margin-top:2px}
 .hspace{flex:1}
+.homelink{
+  text-decoration:none;color:var(--tx2);transition:.15s;gap:8px
+}
+.homelink:hover{color:var(--tx);border-color:var(--acc)}
+.homelink .ic{font-size:14px}
 .chip{
   display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
   background:var(--card);border:1px solid var(--line);border-radius:9px;
@@ -110,6 +115,44 @@ svg.chart{width:100%;display:block}
   margin-top:16px;background:#f4635e12;border:1px solid #f4635e33;border-left:3px solid var(--down);
   border-radius:10px;padding:13px 16px;font-size:13.5px;color:#ffd4d2
 }
+/* ---------- Burn forecast ---------- */
+.burncard{
+  position:relative;overflow:hidden;
+  background:radial-gradient(120% 140% at 88% 0%,#f4635e26 0%,#f4635e0d 42%,transparent 70%),
+             linear-gradient(155deg,#1c1420 0%,#141019 55%,#1a1117 100%);
+  border:1px solid #f4635e4d;border-radius:20px;padding:26px 28px 22px
+}
+.burncard .flames{
+  position:absolute;top:-14px;right:16px;font-size:96px;line-height:1;opacity:.16;
+  animation:flacker 2.6s ease-in-out infinite;pointer-events:none
+}
+@keyframes flacker{
+  0%,100%{transform:scale(1) rotate(-2deg);opacity:.14}
+  45%    {transform:scale(1.09) rotate(3deg);opacity:.22}
+}
+@media (prefers-reduced-motion:reduce){ .burncard .flames{animation:none} }
+.burnhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.tag-burn{
+  background:#f4635e1f;border:1px solid #f4635e55;color:#ff8f8b;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.11em
+}
+.burnbig{
+  font-size:clamp(38px,5.6vw,60px);font-weight:700;letter-spacing:-.04em;line-height:1;
+  color:#ff9a92;text-shadow:0 0 34px #f4635e40
+}
+.burnsub{margin-top:9px;font-size:15.5px;color:var(--tx);line-height:1.5;max-width:62ch}
+.burnsub b{color:#ffb4ae}
+.burnfacts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0 15px
+}
+.burnfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
+.burnfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
+.burnbar{height:13px;background:#0a0f1b;border:1px solid var(--line);border-radius:7px;overflow:hidden;display:flex}
+.burnbar i{display:block;height:100%}
+.burnbar #burnBarDone{background:linear-gradient(90deg,#22d3a7,#4ade80)}
+.burnbar .burn{background:repeating-linear-gradient(45deg,#f4635e,#f4635e 7px,#c93b36 7px,#c93b36 14px);flex:1}
+.burnverdict{margin-top:13px;font-size:14px;font-weight:600}
+
 .projbig{
   margin-top:18px;background:linear-gradient(120deg,#f4635e1c,#fbbf2414);
   border:1px solid #f4635e40;border-left:4px solid var(--down);border-radius:14px;
@@ -375,6 +418,9 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     </div>
   </div>
   <div class="hspace"></div>
+  <a class="chip homelink" href="https://galacticsl.com" target="_blank" rel="noopener">
+    <span class="ic">🌐</span><span>galacticsl.com</span>
+  </a>
   <div class="chip"><span class="dot"></span><span id="snapTime">loading&hellip;</span></div>
   <div class="chip">ETN <b class="num" id="price" style="color:var(--tx)">&mdash;</b></div>
 </header>
@@ -424,9 +470,6 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
           <svg class="chart" id="bridgeChart"></svg>
           <div class="tip" id="chartTip"></div>
         </div>
-        <div class="dim3" style="font-size:11px;margin-top:8px">
-          Y-axis zoomed to the recent range so the trend stays readable — gridlines show the % of total supply that value represents.
-        </div>
       </div>
 
       <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i></div>
@@ -434,8 +477,25 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
         <span>Migrated: <b id="migDoneLbl">&mdash;</b></span>
         <span>Still in bridge: <b id="migRestLbl">&mdash;</b></span>
       </div>
+    </div>
+  </section>
 
-      <div class="projbig" id="projection">Loading projection&hellip;</div>
+  <section>
+    <div class="burncard">
+      <div class="flames" aria-hidden="true">🔥</div>
+      <div class="burnhead">
+        <span class="tag-burn">Burn forecast</span>
+        <span class="dim3" id="burnDeadline">&mdash;</span>
+      </div>
+      <div class="burnbig num" id="burnEtn">&mdash;</div>
+      <div class="burnsub" id="burnSub">&mdash;</div>
+      <div class="burnfacts">
+        <div><div class="k">Countdown</div><div class="v num" id="burnDays">&mdash;</div></div>
+        <div><div class="k">Current pace</div><div class="v num" id="burnPace">&mdash;</div></div>
+        <div><div class="k">Needed pace</div><div class="v num" id="burnNeeded">&mdash;</div></div>
+      </div>
+      <div class="burnbar"><i id="burnBarDone"></i><i class="burn" id="burnBarBurn"></i></div>
+      <div class="burnverdict" id="burnVerdict">&mdash;</div>
     </div>
   </section>
 
@@ -466,27 +526,6 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
   </section>
 
   <section>
-    <div class="chartcard">
-      <div class="top">
-        <div>
-          <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Concentration over time</div>
-          <div style="font-size:12px;color:var(--tx3)" id="concRange">&mdash;</div>
-        </div>
-        <div class="conc-legend">
-          <span><i style="background:#f4635e"></i>Top 10</span>
-          <span><i style="background:#fbbf24"></i>Top 100</span>
-          <span><i style="background:#5b9cff"></i>Top 1000</span>
-        </div>
-      </div>
-      <div class="chartholder" id="concHolder">
-        <svg class="chart" id="concChart"></svg>
-        <div class="tip" id="concTip"></div>
-      </div>
-      <div class="dim3" style="font-size:11px;margin-top:8px" id="concNote"></div>
-    </div>
-  </section>
-
-  <section>
     <div class="card">
       <div style="font-size:13.5px;color:var(--tx2);margin-bottom:11px">
         🔍 Look up a wallet &mdash; tier, rank and distance to the next level
@@ -505,6 +544,25 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     <div class="tiersfoot">
       <div class="dim3" style="font-size:11.5px" id="tiersNote"></div>
       <button class="ghost" id="censusBtn">🔄 Run full census now</button>
+    </div>
+
+    <div class="chartcard" style="margin-top:16px">
+      <div class="top">
+        <div>
+          <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Concentration over time</div>
+          <div style="font-size:12px;color:var(--tx3)" id="concRange">&mdash;</div>
+        </div>
+        <div class="conc-legend">
+          <span><i style="background:#f4635e"></i>Top 10</span>
+          <span><i style="background:#fbbf24"></i>Top 100</span>
+          <span><i style="background:#5b9cff"></i>Top 1000</span>
+        </div>
+      </div>
+      <div class="chartholder" id="concHolder">
+        <svg class="chart" id="concChart"></svg>
+        <div class="tip" id="concTip"></div>
+      </div>
+      <div class="dim3" style="font-size:11px;margin-top:8px" id="concNote"></div>
     </div>
   </section>
 </div>
@@ -1112,11 +1170,7 @@ async function ladeOverview() {
   el("migDoneLbl").textContent = nf(migrPct, 1) + "%";
   el("migRestLbl").textContent = d.bridge_anteil != null ? nf(d.bridge_anteil * 100, 1) + "%" : "—";
 
-  el("projection").innerHTML = m.rest_bei_deadline != null
-    ? "At the current pace of <b>" + kurz(m.abfluss_pro_tag) + " ETN/day</b>, <b>" +
-      kurz(m.rest_bei_deadline) + " ETN</b> (" + nf(m.anteil_bei_deadline * 100, 1) +
-      "% of supply) would still be unmigrated on " + new Date(m.deadline).toLocaleDateString(LOC) + "."
-    : "Projection appears once several days of history exist.";
+  zeichneBurnKarte(d, m);
 
   el("k10m").textContent = nf(d.holder.ueber_10m);
   el("k10ms").textContent = nf(d.holder.ueber_5m) + " ≥ 5M · " + nf(d.holder.ueber_1m) + " ≥ 1M";
@@ -1144,6 +1198,58 @@ async function ladeOverview() {
     : "";
 
   zeichneTiers(d.tiers, d.zirkulierend, d.tier_info);
+}
+
+/**
+ * Die Burn-Karte: was passiert mit dem, was bis zur Deadline nicht migriert ist.
+ *
+ * Der eigentliche Punkt ist nicht die Restmenge, sondern das Tempo-Verhaeltnis:
+ * "aktuell X/Tag, noetig waeren Y/Tag". Erst daran sieht man, ob die Frist
+ * ueberhaupt erreichbar ist - und der Faktor dazwischen ist die Aussage.
+ */
+function zeichneBurnKarte(d, m) {
+  const rest = m.rest_bei_deadline;
+  const tage = m.tage_bis_deadline;
+  const deadline = new Date(m.deadline).toLocaleDateString(LOC, { day: "2-digit", month: "long", year: "numeric" });
+  el("burnDeadline").textContent = "Deadline " + deadline;
+
+  if (rest == null || !tage) {
+    el("burnEtn").textContent = "—";
+    el("burnSub").textContent = "The forecast appears once a few days of bridge history exist.";
+    return;
+  }
+
+  // Welches Tempo waere noetig, um bis zur Deadline alles herueberzuholen?
+  const noetig = d.bridge_etn / tage;
+  const faktor = noetig / (m.abfluss_pro_tag || 1);
+  const anteil = m.anteil_bei_deadline * 100;
+
+  el("burnEtn").textContent = kurz(rest) + " ETN";
+  el("burnSub").innerHTML =
+    "would still sit in the bridge on deadline day — and <b>burn</b>. " +
+    "That's <b>" + nf(anteil, 1) + "%</b> of the entire supply, gone for good.";
+
+  el("burnDays").textContent = nf(tage) + " days";
+  el("burnPace").textContent = kurz(m.abfluss_pro_tag) + " /day";
+  el("burnNeeded").textContent = kurz(noetig) + " /day";
+  el("burnNeeded").className = "v num " + (faktor > 1 ? "down" : "up");
+
+  // Balken: geretteter Anteil vs. verbrennender Anteil, gemessen an der
+  // Menge, die HEUTE noch in der Bridge liegt.
+  const gerettet = Math.max(0, Math.min(100, (1 - rest / d.bridge_etn) * 100));
+  el("burnBarDone").style.width = gerettet.toFixed(1) + "%";
+
+  const urteil = el("burnVerdict");
+  if (faktor <= 1) {
+    urteil.textContent = "🎉 At this pace everything makes it across in time.";
+    urteil.style.color = "var(--acc2)";
+  } else {
+    // Bewusst nur der Faktor: er ist nachrechenbar (noetiges Tempo geteilt
+    // durch aktuelles) und braucht keine ausgedachte Zusatzgroesse daneben.
+    urteil.innerHTML = "🔥 Migration would have to run <b>" + nf(faktor, 1) +
+      "× faster</b> than today for all of it to make it across.";
+    urteil.style.color = faktor > 3 ? "var(--down)" : "var(--warn)";
+  }
 }
 
 async function ladeBridgeEvents() {

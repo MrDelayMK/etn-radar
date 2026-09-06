@@ -260,12 +260,9 @@ CREATE INDEX IF NOT EXISTS idx_events_time ON events(detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_addr ON events(address, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, detected_at DESC);
 
--- Hinweis: es gibt bewusst KEINE Tabelle fuer Transfer-Daten von Drittseiten
--- (z.B. PlanetETN Pulse). Alle Daten dieses Projekts kommen ausschliesslich
--- vom offiziellen Explorer der Electroneum Smart Chain
--- (blockexplorer.electroneum.com). Eine spaetere Cluster-Vermutungs-Funktion
--- (siehe README, "Noch offen") wuerde dessen eigene Transaktions-Endpoints
--- nutzen, nicht die Daten eines anderen Projekts.
+-- Hinweis: es gibt bewusst KEINE Tabelle fuer Transfer-Daten von Drittseiten.
+-- Alle Daten dieses Projekts kommen ausschliesslich vom offiziellen Explorer
+-- der Electroneum Smart Chain (blockexplorer.electroneum.com).
 
 -- ===================================================================
 -- Neue Spalte an einer BESTEHENDEN Tabelle?
