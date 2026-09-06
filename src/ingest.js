@@ -14,6 +14,21 @@ const CHUNK = 100; // Statements pro D1-Batch
 // Ab wie vielen Tagen ohne Bewegung gilt ein Wallet als "Schlaefer".
 const SLEEPER_DAYS = 30;
 
+// Ab welcher bewegten Menge ein Ereignis ueberhaupt eines ist.
+//
+// Vorher hing an gain/loss nur eine Untergrenze von 1.000 ETN (ueber
+// severity()), und sleeper_wake, tier_up und tier_down hatten gar keine. Ein
+// Wallet mit 40 Millionen ETN, das nach Monaten Stille 84 ETN bewegt, stand
+// dadurch als "Sleeper woke up" in der Liste - gemessen an der Fragestellung
+// des Dashboards ist das nichts, sondern Gebuehren oder Staub.
+//
+// 100.000 ETN als Grenze: das ist ein Fuenftel der kleinsten hier gefuehrten
+// Stufe (Octopus ab 500.000) und damit auch fuer das kleinste beobachtete
+// Wallet noch eine erkennbare Bewegung. Gemessen an den bisher gesammelten
+// Ereignissen faellt damit rund die Haelfte weg - fast ausschliesslich
+// Betraege unter 10.000 ETN.
+const MIN_EREIGNIS_ETN = 100000;
+
 async function batched(db, statements) {
   for (let i = 0; i < statements.length; i += CHUNK) {
     await db.batch(statements.slice(i, i + CHUNK));
@@ -195,7 +210,7 @@ export async function runIngest(env, db, opts = {}) {
         const pct = p.etn > 0 ? (deltaEtn / p.etn) * 100 : 0;
         const sev = severity(deltaEtn, pct);
 
-        if (sev > 0) {
+        if (sev > 0 && Math.abs(deltaEtn) >= MIN_EREIGNIS_ETN) {
           events.push({
             type: deltaEtn > 0 ? "gain" : "loss",
             address: r.hash, delta_wei: deltaWei, delta_etn: deltaEtn, delta_pct: pct,
@@ -216,7 +231,11 @@ export async function runIngest(env, db, opts = {}) {
           ? (Date.parse(takenAt) - Date.parse(p.updated_at)) / 86400000
           : 0;
         const neverMoved = (p.tx_count ?? -1) === 0; // zusaetzliches, staerkeres Signal
-        if (p.etn >= 1000000 && (idleDays >= SLEEPER_DAYS || neverMoved)) {
+        if (
+          p.etn >= 1000000 &&
+          Math.abs(deltaEtn) >= MIN_EREIGNIS_ETN &&
+          (idleDays >= SLEEPER_DAYS || neverMoved)
+        ) {
           events.push({
             type: "sleeper_wake", address: r.hash, delta_wei: deltaWei,
             delta_etn: deltaEtn, delta_pct: pct,
@@ -229,7 +248,9 @@ export async function runIngest(env, db, opts = {}) {
             }),
           });
         }
-        // Wallet praktisch leergeraeumt
+        // Wallet praktisch leergeraeumt. Einziger Fall ohne die
+        // MIN_EREIGNIS_ETN-Grenze: 95 Prozent eines Wallets sind auch dann
+        // bemerkenswert, wenn der absolute Betrag knapp darunter liegt.
         if (p.etn >= 100000 && r.etn < p.etn * 0.05) {
           events.push({
             type: "drained", address: r.hash, delta_wei: deltaWei,
@@ -238,7 +259,7 @@ export async function runIngest(env, db, opts = {}) {
           });
         }
         // Tier-Wechsel
-        if (p.tier && p.tier !== tier) {
+        if (p.tier && p.tier !== tier && Math.abs(deltaEtn) >= MIN_EREIGNIS_ETN) {
           events.push({
             type: deltaEtn > 0 ? "tier_up" : "tier_down", address: r.hash,
             delta_wei: deltaWei, delta_etn: deltaEtn, delta_pct: pct,

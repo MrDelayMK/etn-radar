@@ -492,6 +492,10 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .linkrow a.primary{background:var(--acc);border-color:var(--acc);color:#04101f}
 @media(max-width:860px){ .aboutgrid{grid-template-columns:1fr} }
 
+.evtag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:5px;
+       background:var(--card3);border:1px solid var(--line);color:var(--tx3);
+       font-size:10.5px;font-weight:600;vertical-align:1px;letter-spacing:.01em}
+
 /* ---------- Netzwerk-Kennzahlen ---------- */
 .netcard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
          border:1px solid var(--line);border-radius:16px;padding:19px 21px 15px}
@@ -939,7 +943,9 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     <div class="card" id="invCluster"></div>
   </section>
   <section id="invEventsWrap" style="display:none">
-    <h2>Events for this wallet</h2>
+    <h2>⚡ Events for this wallet
+      <button class="infoBtn" data-info="Moments this dashboard flagged for this wallet since it started watching: inflows and outflows of at least 100,000 ETN, a wallet moving again after a month or more of silence, crossing a holder-tier boundary, being emptied out, or entering and leaving the tracked top 3,000. Smaller movements are deliberately left out — at this size they are fees and dust.">ⓘ</button>
+    </h2>
     <div class="card" id="invEvents"></div>
   </section>
   <div class="empty" id="invEmpty" style="display:none">Search for a wallet above to see its full profile.</div>
@@ -1679,7 +1685,8 @@ async function ladeBridgeEvents() {
     const tage = d.ereignisse ?? [];
     if (!tage.length) {
       box.className = "empty";
-      box.textContent = "No large migration transfers found yet — run a scan to check the last 90 days.";
+      box.textContent =
+        "No single migration transfer above 500,000 ETN in the period checked.";
       return;
     }
     box.className = "";
@@ -1697,15 +1704,8 @@ async function ladeBridgeEvents() {
         '<summary><span class="date">' + datum + "</span>" +
         '<span class="out num">−' + kurz(t.outflow_etn) + " ETN</span>" +
         '<span class="wer">' +
-          (t.unvollstaendig ? "⏳ not traced yet"
-            : t.recipient_count === 1 ? "1 transfer"
-            : nf(t.recipient_count) + " transfers") +
+          (t.recipient_count === 1 ? "1 transfer" : nf(t.recipient_count) + " transfers") +
         "</span></summary>";
-
-      if (t.unvollstaendig) {
-        return "<details class=\"evday\">" + kopf +
-          '<div class="incomplete">The recipient search hasn\'t reached this far back yet. Run the scan again to dig deeper.</div></details>';
-      }
 
       // Die Auswertung liefert nur noch grosse Einzeltransfers - Tage, an
       // denen ausschliesslich Kleinbetraege liefen, tauchen gar nicht mehr auf.
@@ -1813,7 +1813,11 @@ function zeileMover(e, gewinn) {
   return '<a class="mv" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
     '<div class="em">' + e.tier_emoji + "</div>" +
     '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(e.address)) + "</b>" +
-    "<span>rank " + (e.rank_pos ?? "—") + " · " + kurz(e.etn) + " ETN</span></div>" +
+    // Vorher UND nachher. Bisher stand hier nur der heutige Bestand - was das
+    // Wallet vor der Bewegung hatte, musste man sich aus Betrag und Prozent
+    // selbst zusammenrechnen.
+    "<span>rank " + (e.rank_pos ?? "—") + " · " +
+      kurz(e.etn - e.delta_etn) + " → " + kurz(e.etn) + " ETN</span></div>" +
     '<div class="val"><b class="num ' + (gewinn ? "up" : "down") + '">' + kurz(e.delta_etn, true) + "</b>" +
     '<span class="num">' + pctSafe(e.delta_pct, e.etn - e.delta_etn) + "</span></div></a>";
 }
@@ -2058,13 +2062,23 @@ const EV = {
   rank_enter:   { i: "✨", f: "#5b9cff", t: "New in top N" },
   rank_exit:    { i: "👋", f: "#64748b", t: "Left top N" },
 };
+/** Die Nebenrollen eines gebuendelten Ereignisses als kleine Marken. */
+function nebenrollen(e) {
+  const weitere = [...new Set(e.auch ?? [])];
+  if (!weitere.length) return "";
+  return weitere
+    .map((t) => '<span class="evtag">' + (EV[t]?.t ?? t) + "</span>")
+    .join("");
+}
+
 async function ladeEvents(bust) {
   const d = await hole("/api/events?limit=14&min_severity=25", bust);
   el("events").innerHTML = d.eintraege.length ? d.eintraege.map((e) => {
     const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
     return '<a class="ev" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
       '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
-      '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") + "</b>" +
+      '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") +
+      nebenrollen(e) + "</b>" +
       "<div>" + esc(e.anzeige ?? kurzAdr(e.address)) +
       (e.tier_from ? " · " + e.tier_from + " → " + e.tier_to : "") + "</div></div>" +
       '<div class="when">' + zeitHer(e.detected_at) + "</div></a>";
@@ -2517,11 +2531,13 @@ function renderWalletDetail(d) {
         const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
         return '<div class="ev">' +
           '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
-          '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") + "</b>" +
+          '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") +
+          nebenrollen(e) + "</b>" +
           (e.tier_from ? "<div>" + e.tier_from + " → " + e.tier_to + "</div>" : "") + "</div>" +
           '<div class="when">' + zeitHer(e.detected_at) + "</div></div>";
       }).join("")
-    : '<div class="empty">No events recorded for this wallet yet</div>';
+    : '<div class="empty">Nothing flagged yet — this wallet has not moved 100,000 ETN or more ' +
+      'in one go since tracking started.</div>';
 }
 
 /** Springt zum Investigate-Tab und laedt sofort ein bestimmtes Wallet - Ziel

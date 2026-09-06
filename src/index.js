@@ -424,6 +424,65 @@ async function sleepers(db, env, u) {
   return { min_etn: minEtn, min_tage: minTage, eintraege: rows.map((r) => schmuecken(r, jetzt)) };
 }
 
+// Mindestbewegung, damit ein Ereignis angezeigt wird - dieselbe Zahl wie
+// MIN_EREIGNIS_ETN in src/ingest.js. Dort verhindert sie, dass neue
+// Kleinstmeldungen ueberhaupt entstehen; hier blendet sie die bereits
+// gespeicherten aus. Ohne das blieben die alten fuer immer stehen: der
+// kleinste gemeldete "Sleeper woke up" bewegte 0 ETN.
+//
+// Ausgenommen sind die beiden Rang-Ereignisse und "drained": sie beschreiben
+// keine Bewegungsgroesse. rank_exit fuehrt gar keinen Betrag mit, und
+// "drained" ist ueber den Anteil definiert (95 Prozent des Wallets), nicht
+// ueber den Betrag.
+const MIN_EREIGNIS_ETN = 100000;
+const OHNE_BETRAGSGRENZE = ["rank_exit", "drained"];
+
+// Nicht im Meldungsstrom: "Left top N" ist Buchhaltung, keine Nachricht. Ein
+// Wallet faellt aus den verfolgten Top 3.000, weil ANDERE gewachsen sind -
+// es selbst muss sich dafuer nicht bewegt haben. Bei jedem Snapshot trifft
+// das gut ein Dutzend Adressen, und die Liste bestand daraufhin aus nichts
+// anderem mehr. Auf der Wallet-Detailseite bleibt der Eintrag: dort ist
+// "diese Adresse ist aus den Top 3.000 gefallen" eine Auskunft ueber genau
+// diese eine Adresse und damit am Platz.
+const NICHT_IM_STROM = ["rank_exit"];
+
+// Reihenfolge, in der ein gebuendeltes Ereignis benannt wird: die
+// aussagekraeftigste Bezeichnung fuehrt, "Inflow"/"Outflow" ist der Rueckfall.
+//
+// Hintergrund: EINE Bewegung erzeugt bis zu drei Zeilen. Ein Wallet, das nach
+// Monaten Stille 5,6 Millionen ETN bekommt und dabei eine Stufe aufsteigt,
+// stand dreimal untereinander in der Liste - als Inflow, als Sleeper woke up
+// und als Tier up, mit identischem Betrag und identischer Uhrzeit. Es ist
+// aber ein Vorgang, nicht drei.
+const TYP_RANG = ["drained", "sleeper_wake", "rank_enter", "tier_up", "tier_down", "gain", "loss"];
+
+/** Zeilen derselben Adresse aus demselben Snapshot zu einem Eintrag machen. */
+function buendeln(rows) {
+  const nach = new Map();
+  for (const r of rows) {
+    const schluessel = r.address + "|" + r.detected_at;
+    const da = nach.get(schluessel);
+    if (!da) {
+      nach.set(schluessel, { ...r, auch: [] });
+      continue;
+    }
+    // Tier-Angaben mitnehmen, egal welche Zeile sie traegt.
+    if (r.tier_from && !da.tier_from) {
+      da.tier_from = r.tier_from;
+      da.tier_to = r.tier_to;
+    }
+    da.severity = Math.max(da.severity ?? 0, r.severity ?? 0);
+    const fuehrend = TYP_RANG.indexOf(r.type) < TYP_RANG.indexOf(da.type);
+    if (fuehrend) {
+      da.auch.push(da.type);
+      da.type = r.type;
+    } else {
+      da.auch.push(r.type);
+    }
+  }
+  return [...nach.values()];
+}
+
 async function events(db, u) {
   const limit = Math.min(200, Number(u.searchParams.get("limit") ?? 50));
   const typ = u.searchParams.get("type");
@@ -432,21 +491,26 @@ async function events(db, u) {
     "SELECT e.*, a.label, a.ens_name, a.checksum_hash, c.etn, c.tier" +
     " FROM events e LEFT JOIN addresses a ON a.hash = e.address" +
     " LEFT JOIN current_balances c ON c.address = e.address" +
-    " WHERE e.severity >= ?";
-  const args = [minSev];
+    " WHERE e.severity >= ?" +
+    " AND e.type NOT IN (" + NICHT_IM_STROM.map(() => "?").join(",") + ")" +
+    " AND (e.type IN (" + OHNE_BETRAGSGRENZE.map(() => "?").join(",") + ")" +
+    "      OR abs(coalesce(e.delta_etn, 0)) >= ?)";
+  const args = [minSev, ...NICHT_IM_STROM, ...OHNE_BETRAGSGRENZE, MIN_EREIGNIS_ETN];
   if (typ) {
     sql += " AND e.type = ?";
     args.push(typ);
   }
   sql += " ORDER BY e.detected_at DESC, e.severity DESC LIMIT ?";
-  args.push(limit);
+  args.push(limit * 4);
   const rows = (await db.prepare(sql).bind(...args).all()).results;
   return {
-    eintraege: rows.map((r) => ({
-      ...r,
-      anzeige: r.label ?? r.ens_name ?? null,
-      tier_emoji: r.etn != null ? tierFor(r.etn).emoji : null,
-    })),
+    eintraege: buendeln(rows)
+      .slice(0, limit)
+      .map((r) => ({
+        ...r,
+        anzeige: r.label ?? r.ens_name ?? null,
+        tier_emoji: r.etn != null ? tierFor(r.etn).emoji : null,
+      })),
   };
 }
 
@@ -472,10 +536,16 @@ async function wallet(db, env, hash) {
   ).results;
   const ereignisse = (
     await db
-      .prepare("SELECT * FROM events WHERE address = ? ORDER BY detected_at DESC LIMIT 50")
-      .bind(adr)
+      .prepare(
+        "SELECT * FROM events WHERE address = ?" +
+          " AND (type IN (" + OHNE_BETRAGSGRENZE.map(() => "?").join(",") + ")" +
+          "      OR abs(coalesce(delta_etn, 0)) >= ?)" +
+          " ORDER BY detected_at DESC LIMIT 50"
+      )
+      .bind(adr, ...OHNE_BETRAGSGRENZE, MIN_EREIGNIS_ETN)
       .all()
   ).results;
+  const ereignisseGebuendelt = buendeln(ereignisse);
 
   // Cluster-Bezug, fuer die Wallet-Detailseite: gehoert diese Adresse selbst
   // zu einer Cluster-Vermutung (hat eine erkannte Finanzierungsquelle), UND
@@ -505,7 +575,7 @@ async function wallet(db, env, hash) {
   return {
     ...schmuecken(r),
     verlauf,
-    ereignisse,
+    ereignisse: ereignisseGebuendelt,
     cluster: {
       finanziert_von: finanziertVon ?? null,
       finanziert_selbst: finanziertSelbst,
@@ -642,10 +712,57 @@ async function clusters_api(db) {
  * Grosse Migrations-Tage: an welchen Tagen ist ungewoehnlich viel ETN aus der
  * Bridge geflossen, und an welche Wallets? Siehe src/bridge-events.js.
  */
+// Ein Tag zaehlt nur, wenn an ihm mindestens EIN Transfer diese Groesse
+// hatte. Dieselbe Zahl steht in src/bridge-events.js; hier wird sie beim Lesen
+// noch einmal durchgesetzt.
+//
+// Warum doppelt: in der Datenbank koennen Zeilen aus einer aelteren Fassung
+// des Laufs stehen, die noch aus der Tagesbilanz gerechnet hat. Solche Zeilen
+// zeigen Tage mit siebenhundert Ueberweisungen zu je 50.000 ETN - also genau
+// das, was dieses Panel nicht zeigen soll. Sie verschwinden damit sofort,
+// statt erst beim naechsten woechentlichen Lauf.
+const BRIDGE_MIN_TRANSFER_ETN = 500000;
+
+/**
+ * Haelt ein gespeicherter Tag der eigenen Zusage stand?
+ *
+ * Zwei Pruefungen, beide direkt aus dem, was das Panel verspricht:
+ *
+ *   1. Mindestens ein Einzeltransfer erreicht die Schwelle. Ein Tag aus
+ *      siebenhundert Ueberweisungen zu je 50.000 ETN ist Alltagsverkehr.
+ *   2. Die Kopfzahl IST die Summe der aufgefuehrten Transfers. Genau diese
+ *      Zusage war einmal gebrochen: die Summe kam aus der Tagesbilanz der
+ *      Bridge, die Empfaengerliste aus den Zeitstempeln der Transfers - und
+ *      weil beide Seiten den Tag anders abgrenzen, stand ueber einem einzigen
+ *      Transfer von 3,0 Millionen eine Ueberschrift von 6,97 Millionen.
+ *
+ * Sind mehr grosse Transfers vorhanden als aufgefuehrt (die Liste haelt zehn),
+ * kann die Summe der Liste nur eine Untergrenze sein - dann wird auch nur das
+ * geprueft.
+ */
+function brauchbar(r) {
+  let empf;
+  try {
+    empf = r.top_recipients ? JSON.parse(r.top_recipients) : [];
+  } catch {
+    return false;
+  }
+  if (!empf.length) return false;
+  if (!empf.some((e) => e.etn >= BRIDGE_MIN_TRANSFER_ETN)) return false;
+
+  const summe = empf.reduce((s, e) => s + e.etn, 0);
+  const vollstaendigGelistet = (r.recipient_count ?? empf.length) <= empf.length;
+  // Ein Promille Spielraum fuer die Wei-nach-ETN-Umrechnung.
+  const abweichung = Math.abs(r.outflow_etn - summe) / (r.outflow_etn || 1);
+  return vollstaendigGelistet ? abweichung < 0.001 : summe <= r.outflow_etn * 1.001;
+}
+
 async function bridge_events_api(db) {
-  const rows = (
-    await db.prepare("SELECT * FROM bridge_events ORDER BY outflow_etn DESC LIMIT 12").all()
+  const alle = (
+    await db.prepare("SELECT * FROM bridge_events ORDER BY outflow_etn DESC LIMIT 40").all()
   ).results;
+
+  const rows = alle.filter((r) => brauchbar(r)).slice(0, 12);
   // Wie weit der letzte Lauf tatsaechlich zurueckkam - sonst sieht "nichts
   // gefunden" fuer einen aelteren Zeitraum wie "nichts passiert" aus.
   //
@@ -673,7 +790,7 @@ async function bridge_events_api(db) {
       outflow_etn: r.outflow_etn,
       recipient_count: r.recipient_count,
       top_empfaenger: r.top_recipients ? JSON.parse(r.top_recipients) : [],
-      unvollstaendig: !!r.unvollstaendig,
+      unvollstaendig: false,
       analyzed_at: r.analyzed_at,
     })),
   };
