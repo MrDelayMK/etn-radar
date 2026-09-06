@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS bridge_event_runs (
   day             TEXT NOT NULL,
   tage_gefunden   INTEGER,
   tage_analysiert INTEGER,
+  zurueck_bis     TEXT,                      -- wie weit der Lauf tatsaechlich zurueckkam
   status          TEXT NOT NULL DEFAULT 'ok'
 );
 

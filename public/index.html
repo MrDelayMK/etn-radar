@@ -546,7 +546,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
 
   <section>
     <h2>🌉 Big migration events
-      <button class="infoBtn" data-info="Flags days where bridge outflow was more than 3x the recent median, then traces the bridge's internal transactions to find out which wallets received the ETN that day.">ⓘ</button>
+      <button class="infoBtn" id="bridgeEventsInfo" data-info="Single migration transfers of 500,000 ETN or more, grouped by day. Everyday traffic — the hundreds of small migrations that happen daily — is left out on purpose. Amounts are the transfers themselves, traced from the bridge's internal transactions.">ⓘ</button>
     </h2>
     <div class="card" id="bridgeEventsCard">
       <div id="bridgeEvents" class="empty">Loading&hellip;</div>
@@ -1340,10 +1340,6 @@ function zeichneBurnKarte(d, m) {
   }
 }
 
-// Ab welchem Betrag ein einzelner Empfaenger im Ereignis aufgefuehrt wird.
-// Darunter ist es Alltagsverkehr, der an einem grossen Tag nur mitlaeuft.
-const EVENT_SCHWELLE = 500000;
-
 async function ladeBridgeEvents() {
   const box = el("bridgeEvents");
   try {
@@ -1351,10 +1347,18 @@ async function ladeBridgeEvents() {
     const tage = d.ereignisse ?? [];
     if (!tage.length) {
       box.className = "empty";
-      box.textContent = "No scan has run yet — click \"Scan for events now\" below to check the last 90 days (runs automatically once a month otherwise).";
+      box.textContent = "No large migration transfers found yet — run a scan to check the last 90 days.";
       return;
     }
     box.className = "";
+    // Den tatsaechlich geprueften Zeitraum in den Info-Punkt schreiben. Der
+    // Durchlauf kommt nicht immer die vollen 90 Tage zurueck; ohne diese
+    // Angabe sieht "keine Ereignisse" wie "es ist nichts passiert" aus.
+    const info = document.querySelector('#bridgeEventsInfo');
+    if (info && d.abgedeckt_ab) {
+      info.dataset.info = info.dataset.info.replace(/ Checked back to.*$/, "") +
+        " Checked back to " + new Date(d.abgedeckt_ab).toLocaleDateString(LOC) + ".";
+    }
     box.innerHTML = tage.map((t) => {
       const datum = new Date(t.day).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
       const kopf =
@@ -1362,8 +1366,8 @@ async function ladeBridgeEvents() {
         '<span class="out num">−' + kurz(t.outflow_etn) + " ETN</span>" +
         '<span class="wer">' +
           (t.unvollstaendig ? "⏳ not traced yet"
-            : t.recipient_count === 1 ? "1 recipient"
-            : nf(t.recipient_count) + " recipients") +
+            : t.recipient_count === 1 ? "1 transfer"
+            : nf(t.recipient_count) + " transfers") +
         "</span></summary>";
 
       if (t.unvollstaendig) {
@@ -1371,29 +1375,24 @@ async function ladeBridgeEvents() {
           '<div class="incomplete">The recipient search hasn\'t reached this far back yet. Run the scan again to dig deeper.</div></details>';
       }
 
-      // Kleinbetraege ausblenden: an einem grossen Migrationstag haengen
-      // hunderte Alltags-Transfers mit dran, die niemanden interessieren -
-      // das Panel heisst schliesslich "Big migration events".
-      const empf = (t.top_empfaenger ?? []).filter((r) => r.etn >= EVENT_SCHWELLE);
-      const klein = (t.top_empfaenger ?? []).length - empf.length;
+      // Die Auswertung liefert nur noch grosse Einzeltransfers - Tage, an
+      // denen ausschliesslich Kleinbetraege liefen, tauchen gar nicht mehr auf.
+      const empf = t.top_empfaenger ?? [];
+      const weitere = t.recipient_count - empf.length;
 
       return "<details class=\"evday\">" + kopf +
         '<div class="shape">' +
         (t.recipient_count === 1
-          ? "A <b>single</b> wallet took the whole amount — one large migration, not many small ones."
-          : "<b>" + nf(t.recipient_count) + "</b> wallets received ETN that day.") +
+          ? "One wallet took the whole amount in a <b>single</b> transfer."
+          : "<b>" + nf(t.recipient_count) + "</b> large transfers went out that day.") +
         "</div>" +
-        (empf.length
-          ? empf.map((r) =>
-              '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
-                '<div class="id">' + kurzAdr(r.address) + "</div>" +
-                '<div class="val num">' + kurz(r.etn) + " ETN</div></a>"
-            ).join("")
-          : '<div class="dim3" style="font-size:12px;padding:8px 0">No single recipient above ' +
-            kurz(EVENT_SCHWELLE) + " ETN — this day was many small migrations.</div>") +
-        (klein > 0
-          ? '<div class="dim3" style="font-size:11.5px;padding-top:8px">' + klein +
-            " smaller recipient(s) below " + kurz(EVENT_SCHWELLE) + " ETN not shown</div>"
+        empf.map((r) =>
+          '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
+            '<div class="id">' + kurzAdr(r.address) + "</div>" +
+            '<div class="val num">' + kurz(r.etn) + " ETN</div></a>"
+        ).join("") +
+        (weitere > 0
+          ? '<div class="dim3" style="font-size:11.5px;padding-top:8px">and ' + weitere + " more</div>"
           : "") +
         "</details>";
     }).join("");

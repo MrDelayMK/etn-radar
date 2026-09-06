@@ -644,9 +644,16 @@ async function clusters_api(db) {
  */
 async function bridge_events_api(db) {
   const rows = (
-    await db.prepare("SELECT * FROM bridge_events ORDER BY outflow_etn DESC LIMIT 8").all()
+    await db.prepare("SELECT * FROM bridge_events ORDER BY outflow_etn DESC LIMIT 12").all()
   ).results;
+  // Wie weit der letzte Lauf tatsaechlich zurueckkam - sonst sieht "nichts
+  // gefunden" fuer einen aelteren Zeitraum wie "nichts passiert" aus.
+  const lauf = await db
+    .prepare("SELECT zurueck_bis, taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
+    .first();
   return {
+    abgedeckt_ab: lauf?.zurueck_bis ?? null,
+    geprueft_am: lauf?.taken_at ?? null,
     ereignisse: rows.map((r) => ({
       day: r.day,
       outflow_etn: r.outflow_etn,

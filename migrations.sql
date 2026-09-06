@@ -20,3 +20,4 @@
 ALTER TABLE addresses ADD COLUMN exchange_signale TEXT;
 ALTER TABLE bridge_events ADD COLUMN unvollstaendig INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE network_daily ADD COLUMN top1000_share REAL;
+ALTER TABLE bridge_event_runs ADD COLUMN zurueck_bis TEXT;

@@ -1,80 +1,88 @@
-// Grosse Migrations-Ereignisse: an welchen Tagen ist ungewoehnlich viel ETN
-// aus der Bridge abgeflossen, und an welche Wallets?
+// Grosse Migrations-Ereignisse: an welchen Tagen ist ein ungewoehnlich
+// GROSSER Einzelbetrag aus der Bridge geflossen, und an wen?
 //
-// Zwei Schritte:
-//   1. Ausreisser-Tage aus der bereits vorhandenen Tages-Historie der Bridge
-//      finden (daily_balances) - kostet nichts, nur eine Berechnung.
-//   2. Fuer die groessten Ausreisser die Empfaenger nachschlagen. Die Bridge
-//      selbst hat KEINE normalen Top-Level-Transaktionen (gegengeprueft -
-//      leere Liste), sie sendet ETN ausschliesslich ueber interne
-//      Transaktionen (Nebeneffekt der Contract-Logik).
+// Grundlage sind die internen Transaktionen der Bridge. Sie sendet ETN
+// naemlich nicht ueber normale Top-Level-Transaktionen - die Liste ist dort
+// leer (gegengeprueft) -, sondern ausschliesslich ueber interne Transfers
+// innerhalb der Contract-Logik.
 //
-// WICHTIG (gegengeprueft, urspruengliche Annahme war falsch): die Bridge ist
-// keineswegs duenn belegt - allein Ende Juli/August kamen ~2.000 echte
-// Transfers zusammen (~250 Seiten fuer 4 Wochen). Darum EINMAL gemeinsam so
-// weit wie noetig zurueckpaginieren (bis zum aeltesten zu analysierenden
-// Ausreisser-Tag) und danach die Treffer nach Tag bucketen - statt wie
-// zuvor pro Tag komplett neu ab Seite 1 zu paginieren (8x dieselben Seiten
-// abrufen, und trotzdem nie tief genug fuer die aelteren Tage).
+// WARUM NICHT UEBER DIE TAGESBILANZ (frueherer Ansatz, war falsch):
+// Zuerst wurden Ausreisser aus daily_balances bestimmt (Tagesrueckgang >
+// 3x Median) und danach die Empfaenger gesucht. Das ergab widerspruechliche
+// Zahlen: fuer den 06.08.2026 stand ein Rueckgang von 6.970.369 ETN, waehrend
+// an dem Tag nur ein einziger Transfer ueber 3.000.000 ETN lief. Der Rest
+// stammte vom Vortag - die Tagesgrenze von `coin-balance-history-by-day`
+// stimmt nicht mit der Tagesgrenze der Zeitstempel ueberein. Kopfzahl und
+// Empfaengerliste passten dadurch grundsaetzlich nicht zusammen.
 //
-// Ausreisser-Definition: Tagesabfluss > 3x den Median der letzten 90 Tage.
-// Bewusst der Median, nicht der Durchschnitt - ein einzelner Riesentag soll
-// die Schwelle fuer sich selbst nicht anheben.
+// Jetzt wird ausschliesslich mit den Transfers selbst gerechnet. Damit ist
+// die Summe per Definition die Summe der aufgefuehrten Transfers, das Datum
+// kommt vom Zeitstempel, und Tage ohne grossen Einzelbetrag fallen von selbst
+// heraus - was das Panel "Big migration events" auch verspricht.
 
 import { fetchInternalTransactions } from "./blockscout.js";
 
-const AUSREISSER_FAKTOR = 3;
-const MAX_TAGE = 8; // hoechstens so viele Ausreisser-Tage im Detail analysieren
-// Sicherheitsdeckel fuer den EINEN gemeinsamen Durchlauf. 800 Seiten (40.000
-// Eintraege) kosten bei ~1,5 Seiten/s rund 9 Minuten - unkritisch fuer einen
-// monatlichen Lauf, reicht aber je nach Bridge-Aktivitaet evtl. nicht bis zum
-// aeltesten Ausreisser zurueck. Wird das nicht erreicht, markiert
-// runBridgeEventAnalysis den betroffenen Tag als "unvollstaendig" statt
-// faelschlich 0 Empfaenger zu melden.
-const MAX_SEITEN_GESAMT = 1100;
+// Ab welchem Einzelbetrag ein Transfer ueberhaupt interessant ist. Darunter
+// ist es Alltagsverkehr: an einem beliebigen Tag laufen hunderte kleine
+// Migrationen, die niemand einzeln sehen will.
+const MIN_TRANSFER_ETN = 500000;
 
-function median(werte) {
-  const s = [...werte].sort((a, b) => a - b);
-  const mitte = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mitte] : (s[mitte - 1] + s[mitte]) / 2;
-}
+// Wie weit zurueck geschaut wird und wie viele Tage im Ergebnis landen.
+const TAGE_ZURUECK = 90;
+const MAX_TAGE = 12;
+
+// Sicherheitsdeckel fuer den einen Durchlauf. Die Bridge ist aktiv (~250
+// Seiten pro Monat gemessen); 1.100 Seiten decken rund zwei Monate ab und
+// kosten bei ~1,5 Seiten/s etwa 12 Minuten.
+const MAX_SEITEN = 1100;
 
 /**
  * @param {object} env  { EXPLORER_API, BRIDGE_ADDRESS }
  * @param {object} db   D1-kompatible Datenbank
  */
-export async function findeAusreisserTage(env, db) {
-  const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
-  const rows = (
-    await db
-      .prepare("SELECT day, etn FROM daily_balances WHERE address = ? ORDER BY day ASC")
-      .bind(bridge)
-      .all()
-  ).results;
-
-  const deltas = [];
-  for (let i = 1; i < rows.length; i++) {
-    const abfluss = rows[i - 1].etn - rows[i].etn;
-    if (abfluss > 0) deltas.push({ day: rows[i].day, abfluss });
-  }
-  if (deltas.length < 5) return []; // zu wenig Historie fuer eine sinnvolle Schwelle
-
-  const schwelle = median(deltas.map((d) => d.abfluss)) * AUSREISSER_FAKTOR;
-  return deltas.filter((d) => d.abfluss > schwelle).sort((a, b) => b.abfluss - a.abfluss);
-}
-
-/**
- * Analysiert die groessten Ausreisser-Tage im Detail: welche Wallets haben
- * an diesem Tag ETN aus der Bridge erhalten?
- */
 export async function runBridgeEventAnalysis(env, db, opts = {}) {
   const log = opts.log ?? (() => {});
   const api = env.EXPLORER_API;
   const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
+  const schwelle = opts.schwelle ?? MIN_TRANSFER_ETN;
+  const abZeit = new Date(Date.now() - TAGE_ZURUECK * 86400000).toISOString();
 
-  const ausreisser = await findeAusreisserTage(env, db);
-  log(ausreisser.length + " Ausreisser-Tage gefunden (Schwelle: Median x " + AUSREISSER_FAKTOR + ")");
-  const zuAnalysieren = ausreisser.slice(0, opts.limit ?? MAX_TAGE);
+  log("Hole interne Transfers der Bridge bis " + abZeit.slice(0, 10) + " zurueck ...");
+  const { transfers, seiten, gedeckelt } = await fetchInternalTransactions(api, bridge, {
+    maxPages: MAX_SEITEN,
+    bisZeit: abZeit,
+  });
+  const aeltesterErreicht = transfers.length
+    ? transfers[transfers.length - 1].timestamp.slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  log("  " + seiten + " Seiten, " + transfers.length + " Transfers, zurueck bis " + aeltesterErreicht);
+
+  // Nur die grossen Einzelbetraege - und nur die im Zeitfenster.
+  const gross = transfers.filter((t) => t.etn >= schwelle && t.timestamp >= abZeit);
+  log("  davon >= " + Math.round(schwelle).toLocaleString("de-DE") + " ETN: " + gross.length);
+
+  // Nach Tag buendeln.
+  const proTag = new Map();
+  for (const t of gross) {
+    const tag = t.timestamp.slice(0, 10);
+    if (!proTag.has(tag)) proTag.set(tag, []);
+    proTag.get(tag).push(t);
+  }
+
+  const tage = [...proTag.entries()]
+    .map(([day, ts]) => ({
+      day,
+      summe: ts.reduce((s, t) => s + t.etn, 0),
+      transfers: ts.sort((a, b) => b.etn - a.etn),
+    }))
+    .sort((a, b) => b.summe - a.summe)
+    .slice(0, opts.limit ?? MAX_TAGE);
+
+  const jetzt = new Date().toISOString();
+
+  // Alte Eintraege verwerfen: sie stammen aus der Tagesbilanz-Rechnung und
+  // sind mit den neuen Zahlen nicht vergleichbar.
+  await db.prepare("DELETE FROM bridge_events").run();
 
   const upsert = db.prepare(
     "INSERT INTO bridge_events (day, outflow_etn, recipient_count, top_recipients, unvollstaendig, analyzed_at)" +
@@ -84,83 +92,31 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
       "   unvollstaendig=excluded.unvollstaendig, analyzed_at=excluded.analyzed_at"
   );
 
-  const jetzt = new Date().toISOString();
-  let analysiert = 0;
-
-  if (zuAnalysieren.length === 0) {
-    await db
-      .prepare(
-        "INSERT INTO bridge_event_runs (taken_at, day, tage_gefunden, tage_analysiert, status)" +
-          " VALUES (?,?,?,?,?)"
-      )
-      .bind(jetzt, jetzt.slice(0, 10), ausreisser.length, 0, "ok")
-      .run();
-    return { gefunden: 0, analysiert: 0 };
-  }
-
-  // Ein einziger gemeinsamer Durchlauf statt einem pro Tag: bis zum VORTAG
-  // des AELTESTEN zu analysierenden Ausreissers zurueckpaginieren, damit
-  // jeder Tag darin vollstaendig (00:00-23:59 UTC) enthalten ist.
-  const aeltesterTag = zuAnalysieren.reduce((a, b) => (a.day < b.day ? a : b)).day;
-  const bisZeit = new Date(Date.parse(aeltesterTag + "T00:00:00Z") - 86400000).toISOString();
-
-  log("Ein gemeinsamer Durchlauf bis " + aeltesterTag + " zurueck (Deckel " + MAX_SEITEN_GESAMT + " Seiten) ...");
-  const { transfers, seiten, gedeckelt } = await fetchInternalTransactions(api, bridge, {
-    maxPages: MAX_SEITEN_GESAMT,
-    bisZeit,
-  });
-  const tatsaechlichErreicht = transfers.length
-    ? transfers[transfers.length - 1].timestamp.slice(0, 10)
-    : jetzt.slice(0, 10);
-  log(
-    "  " + seiten + " Seiten, " + transfers.length + " Transfers, aeltester erreichter Tag: " + tatsaechlichErreicht
-  );
-
-  const proTag = new Map();
-  for (const t of transfers) {
-    const tag = t.timestamp.slice(0, 10);
-    if (!proTag.has(tag)) proTag.set(tag, []);
-    proTag.get(tag).push(t);
-  }
-
-  for (const tag of zuAnalysieren) {
-    // Wurde tatsaechlich bis zu diesem Tag zurueckpaginiert? Wenn der Deckel
-    // VOR dem Erreichen dieses Tages griff, waere "0 Empfaenger" eine
-    // Falschaussage - dann lieber ehrlich als unvollstaendig markieren.
-    const erreicht = !gedeckelt || tag.day >= tatsaechlichErreicht;
-    if (!erreicht) {
-      await upsert.bind(tag.day, tag.abfluss, null, null, 1, jetzt).run();
-      log("  " + tag.day + ": Deckel erreicht, bevor dieser Tag erreicht wurde - als unvollstaendig markiert");
-      continue;
-    }
-
-    const anDiesemTag = proTag.get(tag.day) ?? [];
-    const proEmpfaenger = new Map();
-    for (const t of anDiesemTag) {
-      proEmpfaenger.set(t.to, (proEmpfaenger.get(t.to) ?? 0) + t.etn);
-    }
-    const topEmpfaenger = [...proEmpfaenger.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([address, etn]) => ({ address, etn }));
-
+  for (const t of tage) {
+    const empfaenger = t.transfers.slice(0, 10).map((x) => ({ address: x.to, etn: x.etn }));
     await upsert
-      .bind(tag.day, tag.abfluss, proEmpfaenger.size, JSON.stringify(topEmpfaenger), 0, jetzt)
+      .bind(t.day, t.summe, t.transfers.length, JSON.stringify(empfaenger), 0, jetzt)
       .run();
-    analysiert++;
     log(
-      "  " + tag.day + ": Abfluss " + Math.round(tag.abfluss).toLocaleString("de-DE") + " ETN - " +
-        anDiesemTag.length + " Transfers, " + proEmpfaenger.size + " verschiedene Empfaenger gefunden"
+      "  " + t.day + ": " + Math.round(t.summe).toLocaleString("de-DE") + " ETN in " +
+        t.transfers.length + " grossen Transfer(s)"
     );
   }
 
   await db
     .prepare(
-      "INSERT INTO bridge_event_runs (taken_at, day, tage_gefunden, tage_analysiert, status)" +
-        " VALUES (?,?,?,?,?)"
+      "INSERT INTO bridge_event_runs (taken_at, day, tage_gefunden, tage_analysiert, zurueck_bis, status)" +
+        " VALUES (?,?,?,?,?,?)"
     )
-    .bind(jetzt, jetzt.slice(0, 10), ausreisser.length, analysiert, "ok")
+    .bind(jetzt, jetzt.slice(0, 10), proTag.size, tage.length, aeltesterErreicht,
+          gedeckelt ? "partial" : "ok")
     .run();
 
-  return { gefunden: ausreisser.length, analysiert };
+  return {
+    gefunden: proTag.size,
+    analysiert: tage.length,
+    grosse_transfers: gross.length,
+    zurueck_bis: aeltesterErreicht,
+    gedeckelt,
+  };
 }
