@@ -1960,6 +1960,16 @@ el("nav").onclick = (e) => {
   if (b) zeigeSeite(b.dataset.p);
 };
 
+// Anker-Wechsel NACH dem Laden beachten: geteilte Links wie
+// ".../#investigate", der Zurueck-Knopf des Browsers, oder ein nachtraeglich
+// gesetzter Anker. Ohne das wertet die Seite den Anker nur einmal beim Start
+// aus und ignoriert jede spaetere Aenderung stillschweigend.
+window.addEventListener("hashchange", () => {
+  const ziel = location.hash.slice(1);
+  const aktuell = document.querySelector("#nav button.on")?.dataset.p;
+  if (LADER[ziel] && ziel !== aktuell) zeigeSeite(ziel);
+});
+
 // ---------- Wiring ----------
 // ---------- Manual job triggers (census, clusters) ----------
 //
