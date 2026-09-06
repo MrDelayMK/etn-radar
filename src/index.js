@@ -1042,11 +1042,12 @@ async function network(env) {
     return r.json();
   };
 
-  let s, verlauf;
+  let s, verlauf, markt;
   try {
-    [s, verlauf] = await Promise.all([
+    [s, verlauf, markt] = await Promise.all([
       holen("/stats"),
       holen("/stats/charts/transactions").catch(() => null),
+      holen("/stats/charts/market").catch(() => null),
     ]);
   } catch (e) {
     return { leer: true, grund: e.message };
@@ -1067,6 +1068,26 @@ async function network(env) {
     .reverse()
     .map((d) => ({ day: d.date, tx: zahl(d.transaction_count) }));
 
+  // Preisverlauf. Der Explorer fuehrt in derselben Reihe ein Feld
+  // closing_price - das ist aber NUR fuer den jeweils neuesten Tag gefuellt
+  // und fuer alle aelteren null (nachgeprueft ueber die volle Reihe). Als
+  // Kurve waere davon ein einziger Punkt uebrig.
+  //
+  // Die Marktkapitalisierung ist dagegen fuer jeden Tag da. Geteilt durch die
+  // im selben Aufruf mitgelieferte Umlaufmenge ergibt sie den Tagespreis. Die
+  // Umlaufmenge ist ein aktueller Einzelwert, wird also auch auf aeltere Tage
+  // angewandt - bei einer festen Gesamtmenge wie hier faellt das nicht ins
+  // Gewicht, und der Verlauf der Kurve stimmt in jedem Fall.
+  const versorgung = Number(markt?.available_supply ?? 0);
+  const preisVerlauf = (markt?.chart_data ?? [])
+    .filter((d) => d.market_cap != null && versorgung > 0)
+    .map((d) => ({
+      day: d.date,
+      preis: Number(d.market_cap) / versorgung,
+      marktkapitalisierung: Number(d.market_cap),
+    }))
+    .sort((a, b) => (a.day < b.day ? -1 : 1));
+
   return {
     blockhoehe: zahl(s.total_blocks),
     transaktionen: zahl(s.total_transactions),
@@ -1080,6 +1101,7 @@ async function network(env) {
     marktkapitalisierung: zahl(s.market_cap),
     tx_verlauf: tage,
     tx_schnitt: tage.length ? tage.reduce((a, b) => a + b.tx, 0) / tage.length : null,
+    preis_verlauf: preisVerlauf,
   };
 }
 
