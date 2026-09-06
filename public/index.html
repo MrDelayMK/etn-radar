@@ -123,9 +123,11 @@ svg.chart{width:100%;display:block}
   border:1px solid #f4635e4d;border-radius:20px;padding:26px 28px 22px
 }
 .burncard .flames{
-  position:absolute;top:-14px;right:16px;font-size:96px;line-height:1;opacity:.16;
-  animation:flacker 2.6s ease-in-out infinite;pointer-events:none
+  position:absolute;top:14px;right:26px;font-size:76px;line-height:1;opacity:.15;
+  animation:flacker 2.6s ease-in-out infinite;pointer-events:none;
+  transform-origin:center bottom
 }
+@media (max-width:620px){ .burncard .flames{display:none} }
 @keyframes flacker{
   0%,100%{transform:scale(1) rotate(-2deg);opacity:.14}
   45%    {transform:scale(1.09) rotate(3deg);opacity:.22}
@@ -168,16 +170,24 @@ svg.chart{width:100%;display:block}
 .migbar-lbl b{color:var(--tx)}
 
 /* ---------- Big migration events ---------- */
-.evday{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 19px;margin-bottom:11px}
+.evday{background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:7px;overflow:hidden}
 .evday:last-child{margin-bottom:0}
-.evday .head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:2px}
-.evday .date{font-size:12.5px;color:var(--tx2);font-weight:600}
-.evday .out{text-align:right}
-.evday .out b{font-size:19px;font-weight:660;display:block;color:var(--down)}
-.evday .out span{font-size:11px;color:var(--tx2)}
-.evday .shape{margin-top:8px;font-size:12px;color:var(--tx2)}
+.evday summary{
+  display:flex;align-items:center;gap:14px;padding:11px 15px;cursor:pointer;
+  list-style:none;transition:background .12s
+}
+.evday summary::-webkit-details-marker{display:none}
+.evday summary::before{content:"▸";color:var(--tx3);font-size:11px;transition:transform .15s;flex-shrink:0}
+.evday[open] summary::before{transform:rotate(90deg)}
+.evday summary:hover{background:#ffffff08}
+.evday[open] summary{border-bottom:1px solid var(--line)}
+.evday .date{font-size:13px;font-weight:600;flex:1;min-width:105px}
+.evday .out{font-size:14.5px;font-weight:660;color:var(--down)}
+.evday .wer{font-size:11.5px;color:var(--tx2);min-width:98px;text-align:right}
+.evday .shape{padding:11px 15px 3px;font-size:12.5px;color:var(--tx2)}
 .evday .shape b{color:var(--tx)}
-.evday .incomplete{margin-top:8px;font-size:12px;color:var(--warn)}
+.evday .incomplete{padding:11px 15px;font-size:12.5px;color:var(--warn)}
+.evday .evrecip,.evday .dim3{padding-left:15px;padding-right:15px}
 .evrecip{display:flex;align-items:center;gap:11px;padding:7px 0;border-top:1px solid var(--line)}
 .evrecip .id{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .evrecip .val{flex-shrink:0;font-size:12.5px;font-weight:600}
@@ -377,6 +387,7 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 
 /* Baender und Balken: im Ruhezustand gedaempft, beim Zeigen leuchtet die
    angefasste Verbindung samt ihrer beiden Balken auf. */
+.sankeyholder .band,.sankeyholder .bar,.sankeyholder .lbl{cursor:pointer}
 .sankeyholder .band{fill-opacity:.28;transition:fill-opacity .12s}
 .sankeyholder.aktiv .band{fill-opacity:.07}
 .sankeyholder .band.on{fill-opacity:.72;filter:url(#glow)}
@@ -478,20 +489,20 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
             <span class="pill" id="deadlinePill">&mdash;</span>
           </div>
           <div class="big num" id="bridgeEtn">&mdash;</div>
-          <div class="bigsub" id="bridgeSub">legacy supply not yet migrated</div>
+          <div class="bigsub" id="bridgeSub">still waiting to be migrated</div>
         </div>
         <div class="stats">
-          <div class="fact"><div class="k">Outflow / day</div><div class="v num up" id="perDay">&mdash;</div></div>
+          <div class="fact"><div class="k">Migrating / day</div><div class="v num up" id="perDay">&mdash;</div></div>
           <div class="fact"><div class="k">Days to deadline</div><div class="v num" id="daysLeft">&mdash;</div></div>
-          <div class="fact"><div class="k">Circulating</div><div class="v num" id="circ">&mdash;</div></div>
-          <div class="fact"><div class="k">Total supply</div><div class="v num" id="supply">&mdash;</div></div>
+          <div class="fact"><div class="k">Already migrated</div><div class="v num" id="circ">&mdash;</div></div>
+          <div class="fact"><div class="k">Total ETN supply</div><div class="v num" id="supply">&mdash;</div></div>
         </div>
       </div>
 
       <div class="chartcard">
         <div class="top">
           <div>
-            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Bridge balance over time</div>
+            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Still to migrate, over time</div>
             <div style="font-size:12px;color:var(--tx3)" id="chartRange">&mdash;</div>
           </div>
           <div class="r">
@@ -508,7 +519,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
       <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i></div>
       <div class="migbar-lbl">
         <span>Migrated: <b id="migDoneLbl">&mdash;</b></span>
-        <span>Still in bridge: <b id="migRestLbl">&mdash;</b></span>
+        <span>Not migrated yet: <b id="migRestLbl">&mdash;</b></span>
       </div>
     </div>
   </section>
@@ -517,8 +528,9 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
     <div class="burncard">
       <div class="flames" aria-hidden="true">🔥</div>
       <div class="burnhead">
-        <span class="tag-burn">Burn forecast</span>
+        <span class="tag-burn">Deadline forecast</span>
         <span class="dim3" id="burnDeadline">&mdash;</span>
+        <button class="infoBtn" data-info="Straight-line projection: today's amount still to migrate, minus the recent daily migration rate, times the days left. It assumes the pace stays exactly as it is — it will not. Treat it as 'what if nothing changes', not as a prediction.">ⓘ</button>
       </div>
       <div class="burnbig num" id="burnEtn">&mdash;</div>
       <div class="burnsub" id="burnSub">&mdash;</div>
@@ -604,6 +616,7 @@ footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
 <div class="page" id="page-board">
   <section style="margin-top:22px">
     <h2>Leaderboard
+      <button class="infoBtn" data-info="Left-click any wallet to open it in the block explorer. Right-click anywhere in its row to investigate it here instead — balance history, money flow in and out, and everything known about it.">ⓘ</button>
       <div class="tabs" id="lbPeriods"></div>
       <div class="tabs" style="margin-left:auto">
         <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
@@ -1217,12 +1230,12 @@ async function ladeOverview() {
   el("bridgeEtn").innerHTML = kurz(d.bridge_etn) +
     ' <span style="font-size:.4em;color:var(--tx2);font-weight:500">ETN</span>';
   el("bridgeSub").innerHTML =
-    "<b>" + nf(d.bridge_anteil * 100, 1) + "%</b> of total supply still sits in the bridge";
+    "<b>" + nf(d.bridge_anteil * 100, 1) + "%</b> of all ETN has not made the move yet";
 
   const m = d.migration;
   el("deadlinePill").textContent = "Deadline " +
     new Date(m.deadline).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
-  el("perDay").textContent = "−" + kurz(m.abfluss_pro_tag);
+  el("perDay").textContent = kurz(m.abfluss_pro_tag);
   el("daysLeft").textContent = m.tage_bis_deadline ?? "—";
   el("circ").textContent = kurz(d.zirkulierend);
   el("supply").textContent = kurz(d.total_supply);
@@ -1298,10 +1311,11 @@ function zeichneBurnKarte(d, m) {
   const faktor = noetig / (m.abfluss_pro_tag || 1);
   const anteil = m.anteil_bei_deadline * 100;
 
-  el("burnEtn").textContent = kurz(rest) + " ETN";
+  el("burnEtn").innerHTML = kurz(rest) +
+    ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would miss the deadline</span>';
   el("burnSub").innerHTML =
-    "would still sit in the bridge on deadline day — and <b>burn</b>. " +
-    "That's <b>" + nf(anteil, 1) + "%</b> of the entire supply, gone for good.";
+    "At today's pace that's what is still waiting on " + deadline + " — <b>" +
+    nf(anteil, 1) + "%</b> of every ETN in existence, held by people who never made the move.";
 
   el("burnDays").textContent = nf(tage) + " days";
   el("burnPace").textContent = kurz(m.abfluss_pro_tag) + " /day";
@@ -1326,6 +1340,10 @@ function zeichneBurnKarte(d, m) {
   }
 }
 
+// Ab welchem Betrag ein einzelner Empfaenger im Ereignis aufgefuehrt wird.
+// Darunter ist es Alltagsverkehr, der an einem grossen Tag nur mitlaeuft.
+const EVENT_SCHWELLE = 500000;
+
 async function ladeBridgeEvents() {
   const box = el("bridgeEvents");
   try {
@@ -1339,30 +1357,45 @@ async function ladeBridgeEvents() {
     box.className = "";
     box.innerHTML = tage.map((t) => {
       const datum = new Date(t.day).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
+      const kopf =
+        '<summary><span class="date">' + datum + "</span>" +
+        '<span class="out num">−' + kurz(t.outflow_etn) + " ETN</span>" +
+        '<span class="wer">' +
+          (t.unvollstaendig ? "⏳ not traced yet"
+            : t.recipient_count === 1 ? "1 recipient"
+            : nf(t.recipient_count) + " recipients") +
+        "</span></summary>";
+
       if (t.unvollstaendig) {
-        return '<div class="evday"><div class="head">' +
-          '<div class="date">' + datum + '</div>' +
-          '<div class="out"><b>−' + kurz(t.outflow_etn) + ' ETN</b><span>bridge outflow</span></div>' +
-          '</div><div class="incomplete">⏳ Recipient search hasn\'t reached this far back yet — run the scan again to dig deeper.</div></div>';
+        return "<details class=\"evday\">" + kopf +
+          '<div class="incomplete">The recipient search hasn\'t reached this far back yet. Run the scan again to dig deeper.</div></details>';
       }
-      const empf = t.top_empfaenger ?? [];
-      const form = empf.length <= 1
-        ? "single large transfer"
-        : empf.length + "+ separate recipients";
-      return '<div class="evday"><div class="head">' +
-        '<div class="date">' + datum + '</div>' +
-        '<div class="out"><b>−' + kurz(t.outflow_etn) + ' ETN</b><span>bridge outflow</span></div>' +
-        '</div><div class="shape">' +
+
+      // Kleinbetraege ausblenden: an einem grossen Migrationstag haengen
+      // hunderte Alltags-Transfers mit dran, die niemanden interessieren -
+      // das Panel heisst schliesslich "Big migration events".
+      const empf = (t.top_empfaenger ?? []).filter((r) => r.etn >= EVENT_SCHWELLE);
+      const klein = (t.top_empfaenger ?? []).length - empf.length;
+
+      return "<details class=\"evday\">" + kopf +
+        '<div class="shape">' +
         (t.recipient_count === 1
-          ? 'One <b>single</b> recipient — looks like one large migration, not many small ones.'
-          : '<b>' + nf(t.recipient_count) + '</b> different recipients that day (' + form + ').') +
-        '</div>' +
-        empf.map((r) =>
-          '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
-            '<div class="id">' + kurzAdr(r.address) + '</div>' +
-            '<div class="val num">' + kurz(r.etn) + ' ETN</div></a>'
-        ).join("") +
-        "</div>";
+          ? "A <b>single</b> wallet took the whole amount — one large migration, not many small ones."
+          : "<b>" + nf(t.recipient_count) + "</b> wallets received ETN that day.") +
+        "</div>" +
+        (empf.length
+          ? empf.map((r) =>
+              '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
+                '<div class="id">' + kurzAdr(r.address) + "</div>" +
+                '<div class="val num">' + kurz(r.etn) + " ETN</div></a>"
+            ).join("")
+          : '<div class="dim3" style="font-size:12px;padding:8px 0">No single recipient above ' +
+            kurz(EVENT_SCHWELLE) + " ETN — this day was many small migrations.</div>") +
+        (klein > 0
+          ? '<div class="dim3" style="font-size:11.5px;padding-top:8px">' + klein +
+            " smaller recipient(s) below " + kurz(EVENT_SCHWELLE) + " ETN not shown</div>"
+          : "") +
+        "</details>";
     }).join("");
   } catch (e) {
     box.className = "empty";
@@ -1884,12 +1917,16 @@ function shareOeffnen(plattform) {
 // Betrag, Baender dazwischen als Bezier-Kurven.
 const FLUSS = { zeitraum: "7d", adresse: null, daten: null };
 
-function sankeyFarbe(p, rein) {
-  if (p.rest) return "#64748b";
-  if (p.label_type === "exchange" || p.label_type === "service") return "#fbbf24";
-  if (p.label_type === "bridge") return "#a78bfa";
-  if (p.is_contract) return "#5b9cff";
-  return rein ? "#22d3a7" : "#f4635e";
+// Jede Gegenpartei bekommt ihre eigene Farbe. Rot bzw. Gruen bleibt allein
+// dem untersuchten Wallet vorbehalten - so sieht man auf einen Blick, welcher
+// Balken "man selbst" ist, und die Gegenparteien lassen sich auseinanderhalten.
+const SANKEY_PALETTE = [
+  "#5b9cff", "#22d3a7", "#fbbf24", "#a78bfa", "#f472b6", "#38bdf8",
+  "#4ade80", "#fb923c", "#e879f9", "#2dd4bf", "#facc15", "#818cf8",
+];
+function sankeyFarbe(p, i) {
+  if (p.rest) return "#64748b"; // "N more" bewusst unauffaellig
+  return SANKEY_PALETTE[i % SANKEY_PALETTE.length];
 }
 
 function zeichneSankey(svg, seite, rein, eigenName) {
@@ -1910,10 +1947,10 @@ function zeichneSankey(svg, seite, rein, eigenName) {
     return;
   }
 
-  const PT = 12, PB = 12;
-  const zeilenHoehe = 30;
-  const H = Math.max(150, PT + PB + teile.length * zeilenHoehe);
-  const barW = 13;
+  const PT = 14, PB = 14;
+  const zeilenHoehe = 42;          // hoeher: mehr Luft zwischen den Baendern
+  const H = Math.max(190, PT + PB + teile.length * zeilenHoehe);
+  const barW = 14;
   const LABELW = Math.min(190, Math.max(120, W * 0.42));
   // Die vielen Gegenparteien stehen aussen, das eigene Wallet innen.
   const vieleX = rein ? LABELW : W - LABELW - barW;
@@ -1921,7 +1958,9 @@ function zeichneSankey(svg, seite, rein, eigenName) {
 
   const gesamt = teile.reduce((s, p) => s + p.etn, 0) || 1;
   const nutzH = H - PT - PB;
-  const luecke = teile.length > 1 ? Math.min(6, nutzH * 0.04 / (teile.length - 1)) : 0;
+  // Deutlich groessere Luecken als bisher: die Baender bekommen dadurch Raum
+  // und die Kurven wirken geschwungen statt gestapelt.
+  const luecke = teile.length > 1 ? Math.min(14, (nutzH * 0.22) / (teile.length - 1)) : 0;
   const balkenH = nutzH - luecke * (teile.length - 1);
 
   // Mindesthoehe pro Zeile, sonst kleben die Beschriftungen der kleinen
@@ -1934,11 +1973,11 @@ function zeichneSankey(svg, seite, rein, eigenName) {
   const proportional = verteilbar > 0;
 
   let y = PT;
-  const knoten = teile.map((p) => {
+  const knoten = teile.map((p, i) => {
     const h = proportional
       ? MIN_H + (p.etn / gesamt) * verteilbar
       : balkenH / teile.length;
-    const k = { p, y, h, farbe: sankeyFarbe(p, rein) };
+    const k = { p, y, h, farbe: sankeyFarbe(p, i) };
     y += h + luecke;
     return k;
   });
@@ -1956,9 +1995,12 @@ function zeichneSankey(svg, seite, rein, eigenName) {
     // Bezier von der Aussenseite zum eigenen Balken
     const x1 = rein ? vieleX + barW : vieleX;
     const x2 = rein ? einzelX : einzelX + barW;
-    const mx = (x1 + x2) / 2;
-    const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` +
-              ` L${x2},${y2 + h} C${mx},${y2 + h} ${mx},${y1 + h} ${x1},${y1 + h} Z`;
+    // Kontrollpunkte weiter aussen als die Mitte (0.68 statt 0.5): das gibt
+    // eine ausgepraegte S-Kurve statt einer flachen Diagonale.
+    const c1 = x1 + (x2 - x1) * 0.68;
+    const c2 = x2 - (x2 - x1) * 0.68;
+    const d = `M${x1},${y1} C${c1},${y1} ${c2},${y2} ${x2},${y2}` +
+              ` L${x2},${y2 + h} C${c2},${y2 + h} ${c1},${y1 + h} ${x1},${y1 + h} Z`;
     baender += `<path class="band" data-i="${i}" d="${d}" fill="${k.farbe}"/>`;
     balken += `<rect class="bar" data-i="${i}" x="${vieleX}" y="${y1}" width="${barW}" height="${h}" fill="${k.farbe}" rx="2"/>`;
 
@@ -2002,7 +2044,8 @@ function zeichneSankey(svg, seite, rein, eigenName) {
       "<div>" + nf(k.p.anteil * 100, 1) + "% of " + (rein ? "inflows" : "outflows") +
         " · " + nf(k.p.tx) + " tx</div>" +
       (k.p.address ? '<div class="adr">' + k.p.address + "</div>" : "") +
-      (k.p.balance_etn != null ? "<div>holds " + kurz(k.p.balance_etn) + " ETN</div>" : "");
+      (k.p.balance_etn != null ? "<div>holds " + kurz(k.p.balance_etn) + " ETN</div>" : "") +
+      (k.p.address ? '<div style="color:var(--acc);margin-top:5px">click to investigate →</div>' : "");
     tip.classList.add("on");
     tip.style.left = Math.min(ev.clientX + 16, window.innerWidth - 300) + "px";
     tip.style.top = Math.min(ev.clientY + 14, window.innerHeight - 130) + "px";
@@ -2195,7 +2238,15 @@ el("shareGoTG").onclick = () => shareOeffnen("tg");
   let menu = null;
   function schliessen() { if (menu) { menu.remove(); menu = null; } }
   document.addEventListener("contextmenu", (e) => {
-    const a = e.target.closest('a[href^="' + EXPLORER + '"]');
+    // Nicht nur der Link selbst: in einer Tabellenzeile muesste man sonst die
+    // Adresse millimetergenau treffen. Trifft der Klick irgendwo in eine
+    // Zeile/Karte mit genau einer Wallet-Adresse, ist die gemeint.
+    let a = e.target.closest('a[href^="' + EXPLORER + '"]');
+    if (!a) {
+      const zeile = e.target.closest("tr, .mv, .ev, .cmember, .evrecip, .flowex");
+      const treffer = zeile?.querySelectorAll('a[href^="' + EXPLORER + '"]');
+      if (treffer?.length === 1) a = treffer[0];
+    }
     if (!a) return;
     e.preventDefault();
     schliessen();
