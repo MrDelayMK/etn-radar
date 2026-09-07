@@ -541,95 +541,83 @@ async function watchlist(db, env, u) {
 
 /* ---------- Kursverlauf ------------------------------------------------
  *
- * Zwei Quellen, weil keine allein reicht:
+ * Quelle ist CoinGecko. Der Block-Explorer kam dafuer nicht in Frage: seine
+ * Reihe ist auf 30 Tage festgenagelt (mit ?days= und ?resolution= gegen-
+ * geprueft, beides wirkungslos), und ihr Kursfeld ist nur fuer den jeweils
+ * neuesten Tag gefuellt - der Verlauf musste aus Marktkapitalisierung geteilt
+ * durch Umlaufmenge zurueckgerechnet werden. Das war eine Naeherung, wo es
+ * den echten Kurs frei zu haben gibt.
  *
- *   snapshots.etn_price   Alle 30 Minuten ein Punkt - die einzige Quelle mit
- *                         Aufloesung unterhalb eines Tages. Reicht aber nur
- *                         so weit zurueck, wie dieses Dashboard laeuft.
- *   Explorer /stats/charts/market
- *                         30 Tage, ein Punkt je Tag. Feste Laenge; ein
- *                         Parameter fuer mehr existiert nicht (gegengeprueft
- *                         mit ?days= und ?resolution=). Der Kurs wird dort
- *                         aus Marktkapitalisierung geteilt durch Umlaufmenge
- *                         gerechnet, weil das Kursfeld nur fuer den neuesten
- *                         Tag gefuellt ist.
+ * CoinGecko liefert ohne Schluessel bis zu einem Jahr und waehlt die
+ * Aufloesung selbst: 5 Minuten bei einem Tag, stuendlich bis 90 Tage, taeglich
+ * darueber. "max" verlangt einen Bezahlplan - deshalb endet die Auswahl bei
+ * einem Jahr.
  *
- * Kurze Zeitraeume kommen darum aus den eigenen Snapshots, lange aus der
- * Tagesreihe. Die beiden Rechenwege liegen rund ein Prozent auseinander -
- * unterhalb der Tagesschwankung und innerhalb einer Reihe konsistent.
- *
- * "all" waechst von selbst: sobald die eigene Tageshistorie ueber die 30 Tage
- * des Explorers hinausreicht, deckt sie den aelteren Teil ab.
+ * Faellt CoinGecko aus (das Gratis-Kontingent ist knapp, und Worker teilen
+ * sich Adressen), wird auf die eigenen Snapshots zurueckgefallen. Die reichen
+ * nur so weit zurueck wie dieses Dashboard laeuft, sind aber besser als eine
+ * leere Karte.
  */
-const KURS_ZEITRAUM = { "24h": 1, "7d": 7, "30d": 30, all: null };
+const KURS_ZEITRAUM = { "24h": 1, "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+
+// Wie viele Punkte hoechstens zurueckgegeben werden. CoinGecko liefert fuer
+// 30 Tage ueber 700 Stundenwerte; auf einer 700 Pixel breiten Kurve ist jeder
+// zweite davon unsichtbar und kostet nur Uebertragung.
+const KURS_MAX_PUNKTE = 320;
+
+function ausduennen(punkte, max = KURS_MAX_PUNKTE) {
+  if (punkte.length <= max) return punkte;
+  const schritt = punkte.length / max;
+  const out = [];
+  for (let i = 0; i < max; i++) out.push(punkte[Math.floor(i * schritt)]);
+  // Der letzte Punkt ist der aktuelle Kurs - der darf nie wegfallen.
+  if (out[out.length - 1] !== punkte[punkte.length - 1]) out.push(punkte[punkte.length - 1]);
+  return out;
+}
 
 async function preisverlauf(env, u) {
   const p = u.searchParams.get("period") ?? "30d";
-  const tage = p in KURS_ZEITRAUM ? KURS_ZEITRAUM[p] : 30;
-  const db = env.DB;
+  const tage = KURS_ZEITRAUM[p] ?? 30;
 
-  // --- Kurze Zeitraeume: eigene Snapshots, halbstuendlich ---------------
-  if (tage != null && tage <= 7) {
-    const ab = new Date(Date.now() - tage * 86400000).toISOString();
-    const rows = (
-      await db
-        .prepare(
-          "SELECT taken_at, etn_price FROM snapshots" +
-            " WHERE etn_price IS NOT NULL AND taken_at >= ?" +
-            " ORDER BY taken_at ASC"
-        )
-        .bind(ab)
-        .all()
-    ).results;
+  try {
+    const r = await fetch(
+      "https://api.coingecko.com/api/v3/coins/electroneum/market_chart" +
+        "?vs_currency=usd&days=" + tage,
+      { headers: { accept: "application/json" } }
+    );
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    const preise = d?.prices ?? [];
+    if (!preise.length) throw new Error("leere Reihe");
     return {
       zeitraum: p,
-      quelle: "snapshots",
-      feinkoernig: true,
-      punkte: rows.map((r) => ({ zeit: r.taken_at, preis: r.etn_price })),
+      quelle: "coingecko",
+      feinkoernig: tage <= 7,
+      punkte: ausduennen(
+        preise.map(([ms, preis]) => ({ zeit: new Date(ms).toISOString(), preis }))
+      ),
     };
+  } catch (e) {
+    return { ...(await preisNotnagel(env, tage)), zeitraum: p, grund: e.message };
   }
+}
 
-  // --- Lange Zeitraeume: Tagesreihe ------------------------------------
-  const eigene = (
-    await db
-      .prepare(
-        "SELECT day, etn_price FROM network_daily WHERE etn_price IS NOT NULL ORDER BY day ASC"
-      )
+/** Rueckfall auf die eigenen Snapshots, wenn CoinGecko nicht antwortet. */
+async function preisNotnagel(env, tage) {
+  const ab = new Date(Date.now() - tage * 86400000).toISOString();
+  const rows = (
+    await env.DB.prepare(
+      "SELECT taken_at, etn_price FROM snapshots" +
+        " WHERE etn_price IS NOT NULL AND taken_at >= ? ORDER BY taken_at ASC"
+    )
+      .bind(ab)
       .all()
   ).results;
-
-  let vomExplorer = [];
-  try {
-    const r = await fetch(env.EXPLORER_API + "/stats/charts/market", {
-      headers: { accept: "application/json" },
-    });
-    if (r.ok) {
-      const m = await r.json();
-      const versorgung = Number(m?.available_supply ?? 0);
-      if (versorgung > 0) {
-        vomExplorer = (m.chart_data ?? [])
-          .filter((d) => d.market_cap != null)
-          .map((d) => ({ day: d.date, preis: Number(d.market_cap) / versorgung }));
-      }
-    }
-  } catch {
-    /* eigene Reihe reicht dann eben allein */
-  }
-
-  // Eigene Werte gewinnen: sie sind der Kurs, der auch in der Kopfzeile steht.
-  const nachTag = new Map(vomExplorer.map((d) => [d.day, d.preis]));
-  for (const e of eigene) nachTag.set(e.day, e.etn_price);
-
-  let punkte = [...nachTag.entries()]
-    .map(([day, preis]) => ({ zeit: day, preis }))
-    .sort((a, b) => (a.zeit < b.zeit ? -1 : 1));
-
-  if (tage != null) {
-    const ab = new Date(Date.now() - tage * 86400000).toISOString().slice(0, 10);
-    punkte = punkte.filter((d) => d.zeit >= ab);
-  }
-
-  return { zeitraum: p, quelle: "tage", feinkoernig: false, punkte };
+  return {
+    quelle: "snapshots",
+    feinkoernig: tage <= 7,
+    punkte: ausduennen(rows.map((r) => ({ zeit: r.taken_at, preis: r.etn_price }))),
+  };
 }
 
 async function events(db, u) {
@@ -1283,7 +1271,7 @@ export default {
       const db = env.DB;
       if (pfad === "/api/overview") antwort = json(await overview(db, env));
       else if (pfad === "/api/network") antwort = json(await network(env), 200, 60);
-      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 60);
+      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 300);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));

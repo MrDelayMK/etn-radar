@@ -30,6 +30,12 @@
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+/* Das eingebaute [hidden]{display:none} des Browsers ist die schwaechste
+   Regel ueberhaupt - jedes display:flex auf einer Klasse schlaegt sie. Genau
+   das ist hier schon zweimal passiert: der Clusters-Reiter blieb trotz hidden
+   sichtbar, und das Willkommens-Panel liess sich nicht wegklicken. Einmal
+   global, damit es kein drittes Mal gibt. */
+[hidden]{display:none !important}
 body{
   background:
     radial-gradient(1100px 520px at 12% -8%, #14224a 0%, transparent 60%),
@@ -89,7 +95,6 @@ nav button{
   padding:13px 20px;font:620 14.5px var(--sans);cursor:pointer;white-space:nowrap;
   border-radius:0;transition:.15s;display:flex;align-items:center;gap:9px
 }
-nav button[hidden]{display:none}
 nav button .ic{font-size:19px}
 nav button:hover{color:var(--tx)}
 nav button.on{color:var(--tx);border-bottom-color:var(--acc)}
@@ -514,6 +519,25 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .welcome .wclose{flex:0 0 auto;align-self:center}
 @media(max-width:640px){ .welcome .wclose{width:100%} }
 
+/* Das News-Panel teilt sich das Aussehen mit dem Willkommens-Panel: beide
+   sind dasselbe Versprechen - einmal lesen, wegklicken, weg. */
+.welcome.news{background:linear-gradient(150deg,#132038 0%,var(--card) 68%);
+              border-color:#5b9cff44}
+.welcome.news .gross{font-size:30px;line-height:1;color:var(--acc);opacity:.9;
+                     flex:0 0 auto;margin-top:2px}
+.newsrow{display:flex;align-items:center;gap:11px;padding:8px 0;
+         border-top:1px solid var(--line)}
+.newsrow:first-child{border-top:0}
+.newsrow .em{font-size:21px;line-height:1;flex:0 0 auto}
+.newsrow .id{flex:1;min-width:0}
+.newsrow .id b{font-size:13.5px;font-weight:620;color:var(--tx)}
+.newsrow .notiz{display:block;font-size:11.5px;color:var(--tx3);font-style:italic;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.newsrow .val{font-family:var(--mono);font-size:13.5px;font-weight:650;flex:0 0 auto}
+.newsmehr{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--acc);
+          font-weight:600;cursor:pointer}
+.newsmehr:hover{text-decoration:underline}
+
 /* ---------- Merkliste ---------- */
 /* Der Stern war mit 13px und 32% Deckkraft praktisch unsichtbar - wer nicht
    wusste, dass es die Merkliste gibt, konnte sie nicht finden. Groesser,
@@ -698,6 +722,16 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 
 <!-- ================= OVERVIEW ================= -->
 <div class="page on" id="page-overview">
+<div class="welcome news" id="newsPanel" hidden>
+  <span class="gross">👀</span>
+  <div class="wbody">
+    <b class="wtitel">While you were away</b>
+    <p id="newsSub"></p>
+    <div id="newsList"></div>
+    <span class="newsmehr" id="newsMehr">See the full watchlist →</span>
+  </div>
+  <button class="ghost wclose" id="newsClose">Got it</button>
+</div>
 <div class="welcome" id="welcome" hidden>
   <img src="/assets/logo.png" alt="">
   <div class="wbody">
@@ -1851,7 +1885,8 @@ const KURS_PERIODEN = [
   { k: "24h", t: "24H" },
   { k: "7d", t: "7D" },
   { k: "30d", t: "30D" },
-  { k: "all", t: "All" },
+  { k: "90d", t: "90D" },
+  { k: "1y", t: "1Y" },
 ];
 const KURS = { zeitraum: "30d", punkte: [], feinkoernig: false };
 
@@ -2457,6 +2492,76 @@ document.addEventListener("click", (e) => {
   feld.onblur = () => fertig(true);
 });
 
+/* ---------- Was ist mit den gemerkten Wallets passiert? --------------------
+ *
+ * Dasselbe Versprechen wie das Willkommens-Panel: einmal lesen, wegklicken,
+ * weg. Es erscheint erst wieder, wenn es wirklich etwas Neues gibt - die
+ * Quittung merkt sich den Vergleichsstand, gegen den gerechnet wurde, nicht
+ * bloss ein "schon gesehen".
+ *
+ * Nie gleichzeitig mit dem Willkommens-Panel: wer zum ersten Mal hier ist,
+ * hat noch keine Merkliste, und zwei Panels uebereinander waeren eine Wand.
+ */
+const NEWS_KEY = "etnr_news_quittiert";
+
+function zeichneNews(eintraege, vergleich) {
+  const panel = el("newsPanel");
+  const bewegt = vergleich
+    ? Object.entries(vergleich.diffs).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    : [];
+
+  let quittiert = null;
+  try {
+    quittiert = localStorage.getItem(NEWS_KEY);
+  } catch {
+    /* egal */
+  }
+
+  if (!bewegt.length || !el("welcome").hidden || String(vergleich.seit) === quittiert) {
+    panel.hidden = true;
+    return;
+  }
+
+  const nach = new Map(eintraege.map((e) => [e.address, e]));
+  const notiz = notizen();
+  el("newsSub").textContent =
+    bewegt.length + (bewegt.length === 1 ? " wallet" : " wallets") +
+    " on your watchlist moved since your last visit " +
+    zeitHer(new Date(vergleich.seit).toISOString()) + " ago.";
+
+  el("newsList").innerHTML = bewegt
+    .slice(0, 5)
+    .map(([adr, diff]) => {
+      const e = nach.get(adr) ?? {};
+      const n = notiz[adr];
+      return '<div class="newsrow">' +
+        '<div class="em">' + (e.tier_emoji ?? "👛") + "</div>" +
+        '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(adr)) + "</b>" +
+          (n ? '<span class="notiz">' + esc(n) + "</span>" : "") + "</div>" +
+        '<div class="val ' + (diff > 0 ? "up" : "down") + '">' + kurz(diff, true) + " ETN</div>" +
+        "</div>";
+    })
+    .join("") +
+    (bewegt.length > 5
+      ? '<div class="dim3" style="font-size:11.5px;padding-top:8px">and ' +
+        (bewegt.length - 5) + " more</div>"
+      : "");
+
+  panel.dataset.stand = String(vergleich.seit);
+  panel.hidden = false;
+}
+
+el("newsClose").onclick = () => {
+  el("newsPanel").hidden = true;
+  try {
+    localStorage.setItem(NEWS_KEY, el("newsPanel").dataset.stand ?? "");
+  } catch {
+    /* egal */
+  }
+};
+
+el("newsMehr").onclick = () => zeigeSeite("activity");
+
 async function ladeWatchlist() {
   const wrap = el("watchWrap");
   const liste = watchListe();
@@ -2469,6 +2574,7 @@ async function ladeWatchlist() {
     ? liste.length + (liste.length === 1 ? " wallet" : " wallets") + " · saved in this browser only"
     : "";
   if (!liste.length) {
+    el("newsPanel").hidden = true;
     zeichneWatchChips(null);
     el("watchBody").innerHTML =
       '<div class="watchempty"><span class="gross">☆</span><div>' +
@@ -2488,6 +2594,7 @@ async function ladeWatchlist() {
   zeichneWatchChips(d);
 
   const vergleich = d.eintraege.length ? besuchVergleich(d.eintraege) : null;
+  zeichneNews(d.eintraege, vergleich);
   const bewegt = vergleich ? Object.keys(vergleich.diffs).length : 0;
   const banner = bewegt
     ? '<div class="seitbanner">👀<div><b>' + bewegt + " of " + d.eintraege.length +

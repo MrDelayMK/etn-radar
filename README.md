@@ -20,8 +20,27 @@ Migrationsfortschritt der Bridge.
 | **Top Movers** | größte Zu- und Abflüsse über den gewählten Zeitraum |
 | **Leaderboard** | Rang, Balance, Δ, Ruhedauer, Börsen-/Contract-Markierung |
 | **Ereignisse** | Tier-Wechsel, geleerte Wallets, Neuzugänge, erwachte Schläfer |
+| **Netzwerk** | Blockhöhe, Transaktionen, Adressen, Auslastung, Gaspreis — live vom Explorer |
+| **ETN-Kurs** | 24H · 7D · 30D · 90D · 1Y, echte Kursdaten von CoinGecko |
+| **Merkliste** | Wallets mit einem Stern merken, Notiz dazu, und was sich seit dem letzten Besuch getan hat — alles nur im Browser |
 
 Zeiträume überall: **24H · 7D · 30D · 90D · 6M**.
+
+### Datenquellen
+
+Alles Kettenbezogene kommt aus **einer** Quelle: dem offiziellen Blockscout-
+Explorer `blockexplorer.electroneum.com`. Balancen, Ränge, Bridge-Transfers,
+Netzwerkzahlen — nichts davon wird von Dritten übernommen.
+
+Einzige Ausnahme ist der **Kursverlauf**: den liefert CoinGecko. Der Explorer
+führt zwar eine Kursreihe, sie ist aber auf 30 Tage festgenagelt (mit `?days=`
+und `?resolution=` gegengeprüft, beides wirkungslos) und ihr Kursfeld ist nur
+für den jeweils neuesten Tag gefüllt — der Verlauf ließe sich nur aus
+Marktkapitalisierung geteilt durch Umlaufmenge zurückrechnen. Das war eine
+Näherung, wo es den echten Kurs frei zu haben gibt. CoinGecko liefert ohne
+Schlüssel bis zu einem Jahr; `max` verlangt einen Bezahlplan. Fällt der Abruf
+aus, wird auf die eigenen Snapshot-Kurse zurückgefallen.
+
 Oberfläche auf Englisch (3 Reiter: Overview, Leaderboard, Activity),
 Code-Kommentare auf Deutsch.
 
