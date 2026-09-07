@@ -769,7 +769,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   </section>
   <section>
     <h2>🌉 Big migration events
-      <button class="infoBtn" id="bridgeEventsInfo" data-info="Single migration transfers of 500,000 ETN or more, grouped by day. Everyday traffic — the hundreds of small migrations that happen daily — is left out on purpose. Amounts are the transfers themselves, traced from the bridge's internal transactions.">ⓘ</button>
+      <button class="infoBtn" id="bridgeEventsInfo" data-info="The largest single migrations out of the bridge: transfers of 500,000 ETN or more, grouped by day. Everyday traffic — the hundreds of small migrations that happen daily — is left out on purpose. Amounts are the transfers themselves, traced from the bridge's internal transactions.">ⓘ</button>
     </h2>
     <div class="card" id="bridgeEventsCard">
       <div id="bridgeEvents" class="empty">Loading&hellip;</div>
@@ -1890,10 +1890,17 @@ async function ladeBridgeEvents() {
     // Den tatsaechlich geprueften Zeitraum in den Info-Punkt schreiben. Der
     // Durchlauf kommt nicht immer die vollen 90 Tage zurueck; ohne diese
     // Angabe sieht "keine Ereignisse" wie "es ist nichts passiert" aus.
+    // Der Durchgang durch die Bridge-Historie zieht sich ueber mehrere
+    // Laeufe. Bis er durch ist, gehoert in den Info-Punkt, wie weit die Suche
+    // bisher reicht - sonst liest sich eine kurze Liste wie "mehr gab es
+    // nicht", obwohl schlicht noch nicht alles angesehen wurde.
     const info = document.querySelector('#bridgeEventsInfo');
     if (info && d.abgedeckt_ab) {
-      info.dataset.info = info.dataset.info.replace(/ Checked back to.*$/, "") +
-        " Checked back to " + new Date(d.abgedeckt_ab).toLocaleDateString(LOC) + ".";
+      const ab = new Date(d.abgedeckt_ab).toLocaleDateString(LOC);
+      info.dataset.info = info.dataset.info.replace(/ (Checked|Covers).*$/, "") +
+        (d.historie_vollstaendig
+          ? " Covers the whole history of the bridge, back to " + ab + "."
+          : " Checked back to " + ab + " so far — the scan works further back each week.");
     }
     box.innerHTML = tage.map((t) => {
       const datum = new Date(t.day).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });

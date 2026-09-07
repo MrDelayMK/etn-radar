@@ -6,7 +6,7 @@
 // leer (gegengeprueft) -, sondern ausschliesslich ueber interne Transfers
 // innerhalb der Contract-Logik.
 //
-// WARUM NICHT UEBER DIE TAGESBILANZ (frueherer Ansatz, war falsch):
+// WARUM NICHT UEBER DIE TAGESBILANZ (erster Ansatz, war falsch):
 // Zuerst wurden Ausreisser aus daily_balances bestimmt (Tagesrueckgang >
 // 3x Median) und danach die Empfaenger gesucht. Das ergab widerspruechliche
 // Zahlen: fuer den 06.08.2026 stand ein Rueckgang von 6.970.369 ETN, waehrend
@@ -15,10 +15,27 @@
 // stimmt nicht mit der Tagesgrenze der Zeitstempel ueberein. Kopfzahl und
 // Empfaengerliste passten dadurch grundsaetzlich nicht zusammen.
 //
-// Jetzt wird ausschliesslich mit den Transfers selbst gerechnet. Damit ist
-// die Summe per Definition die Summe der aufgefuehrten Transfers, das Datum
-// kommt vom Zeitstempel, und Tage ohne grossen Einzelbetrag fallen von selbst
-// heraus - was das Panel "Big migration events" auch verspricht.
+// WARUM NICHT MEHR NUR 90 TAGE (zweiter Ansatz, war zu kurz):
+// Grosse Einzeltransfers sind selten - in drei Monaten zehn Stueck. Ein
+// Fenster von 90 Tagen zeigt also fast nichts, waehrend die interessante
+// Frage "was waren die groessten Migrationen ueberhaupt" unbeantwortet blieb.
+//
+// WIE ES JETZT LAEUFT:
+// Die Bridge existiert seit dem 03.03.2024, und ihre Transferliste ist nur
+// von der neuesten Seite aus rueckwaerts durchblaetterbar. Ein Durchgang
+// ueber die ganze Historie dauert rund zwei Stunden - jede Woche von vorn
+// waere Unfug und gegenueber dem Explorer unhoeflich. Darum:
+//
+//   1. Die grossen Transfers landen roh in `bridge_transfers`. Der Schluessel
+//      ist aus Transaktion, Empfaenger und Betrag gebaut, also ist ein
+//      zweites Einlesen derselben Zeile folgenlos.
+//   2. `bridge_scan` merkt sich den Cursor des Explorers. Der naechste Lauf
+//      macht exakt dort weiter, wo dieser aufgehoert hat.
+//   3. Jeder Lauf schaut ausserdem oben nach, was seit dem letzten Mal neu
+//      dazugekommen ist.
+//   4. `bridge_events` wird am Ende jedes Laufs aus dem Rohbestand neu
+//      aufgebaut. Damit ist die Kopfzahl eines Tages per Konstruktion die
+//      Summe der Transfers, die darunter stehen.
 
 import { fetchInternalTransactions } from "./blockscout.js";
 
@@ -27,17 +44,26 @@ import { fetchInternalTransactions } from "./blockscout.js";
 // Migrationen, die niemand einzeln sehen will.
 const MIN_TRANSFER_ETN = 500000;
 
-// Wie weit zurueck geschaut wird und wie viele Tage im Ergebnis landen.
-const TAGE_ZURUECK = 90;
-const MAX_TAGE = 12;
+// Wie viele Tage in `bridge_events` gehalten werden. Die Oberflaeche zeigt
+// zwoelf; der Rest ist Reserve, damit ein Tag nicht gleich verschwindet, wenn
+// weiter hinten in der Historie ein groesserer auftaucht.
+const MAX_TAGE = 40;
 
-// Sicherheitsdeckel fuer den einen Durchlauf. Die Bridge ist aktiv (~250
-// Seiten pro Monat gemessen); 1.100 Seiten decken rund zwei Monate ab und
-// kosten bei ~1,5 Seiten/s etwa 12 Minuten.
-const MAX_SEITEN = 1100;
+// Zeitbudget fuer den Weg zurueck in die Historie, in Minuten. Bei rund
+// 1,6 Seiten pro Sekunde sind 100 Minuten etwa 9.500 Seiten - genug, um die
+// gesamte Bridge-Historie in einem, spaetestens zwei Laeufen zu schaffen.
+// Danach kostet ein Lauf nur noch die paar Seiten seit dem letzten Mal.
+const STD_BUDGET_MINUTEN = 100;
+
+// Deckel fuer den Blick nach oben (was ist seit dem letzten Lauf neu). Eine
+// Woche Bridge-Verkehr sind je nach Andrang 15 bis 100 Seiten.
+const NACHLAUF_SEITEN = 400;
+
+/** Schluessel einer Transferzeile - zweimal einlesen aendert nichts. */
+const schluessel = (t) => t.hash + ":" + t.to + ":" + t.value_wei;
 
 /**
- * @param {object} env  { EXPLORER_API, BRIDGE_ADDRESS }
+ * @param {object} env  { EXPLORER_API, BRIDGE_ADDRESS, BRIDGE_SCAN_MINUTEN }
  * @param {object} db   D1-kompatible Datenbank
  */
 export async function runBridgeEventAnalysis(env, db, opts = {}) {
@@ -45,78 +71,183 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
   const api = env.EXPLORER_API;
   const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
   const schwelle = opts.schwelle ?? MIN_TRANSFER_ETN;
-  const abZeit = new Date(Date.now() - TAGE_ZURUECK * 86400000).toISOString();
-
-  log("Hole interne Transfers der Bridge bis " + abZeit.slice(0, 10) + " zurueck ...");
-  const { transfers, seiten, gedeckelt } = await fetchInternalTransactions(api, bridge, {
-    maxPages: MAX_SEITEN,
-    bisZeit: abZeit,
-  });
-  const aeltesterErreicht = transfers.length
-    ? transfers[transfers.length - 1].timestamp.slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
-  log("  " + seiten + " Seiten, " + transfers.length + " Transfers, zurueck bis " + aeltesterErreicht);
-
-  // Nur die grossen Einzelbetraege - und nur die im Zeitfenster.
-  const gross = transfers.filter((t) => t.etn >= schwelle && t.timestamp >= abZeit);
-  log("  davon >= " + Math.round(schwelle).toLocaleString("de-DE") + " ETN: " + gross.length);
-
-  // Nach Tag buendeln.
-  const proTag = new Map();
-  for (const t of gross) {
-    const tag = t.timestamp.slice(0, 10);
-    if (!proTag.has(tag)) proTag.set(tag, []);
-    proTag.get(tag).push(t);
-  }
-
-  const tage = [...proTag.entries()]
-    .map(([day, ts]) => ({
-      day,
-      summe: ts.reduce((s, t) => s + t.etn, 0),
-      transfers: ts.sort((a, b) => b.etn - a.etn),
-    }))
-    .sort((a, b) => b.summe - a.summe)
-    .slice(0, opts.limit ?? MAX_TAGE);
-
+  const budgetMs =
+    (opts.budgetMinuten || Number(env.BRIDGE_SCAN_MINUTEN) || STD_BUDGET_MINUTEN) * 60000;
   const jetzt = new Date().toISOString();
 
-  // Alte Eintraege verwerfen: sie stammen aus der Tagesbilanz-Rechnung und
-  // sind mit den neuen Zahlen nicht vergleichbar.
+  const stand = (await db.prepare("SELECT * FROM bridge_scan WHERE id = 1").first()) ?? {
+    neuestes_bekannt: null,
+    aeltestes_bekannt: null,
+    cursor: null,
+    fertig: 0,
+    seiten_gesamt: 0,
+  };
+
+  let seiten = 0;
+  let neueTransfers = 0;
+  let neuestes = stand.neuestes_bekannt;
+  let aeltestes = stand.aeltestes_bekannt;
+
+  /** Grosse Transfers wegschreiben, kleine verwerfen. */
+  const speichern = async (transfers) => {
+    const gross = transfers.filter((t) => t.etn >= schwelle);
+    if (!gross.length) return 0;
+    const ins = db.prepare(
+      "INSERT INTO bridge_transfers (id, day, timestamp, to_address, etn, value_wei)" +
+        " VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING"
+    );
+    for (const t of gross) {
+      await ins
+        .bind(schluessel(t), t.timestamp.slice(0, 10), t.timestamp, t.to, t.etn, t.value_wei)
+        .run();
+    }
+    return gross.length;
+  };
+
+  const spanne = (transfers) => {
+    for (const t of transfers) {
+      if (!neuestes || t.timestamp > neuestes) neuestes = t.timestamp;
+      if (!aeltestes || t.timestamp < aeltestes) aeltestes = t.timestamp;
+    }
+  };
+
+  // --- 1. Was ist oben neu dazugekommen? --------------------------------
+  //
+  // Nur sinnvoll, wenn ueberhaupt schon einmal gelesen wurde - beim ersten
+  // Lauf faengt Schritt 2 ohnehin bei der neuesten Seite an.
+  if (stand.neuestes_bekannt) {
+    log("Neues seit " + stand.neuestes_bekannt.slice(0, 16) + " einsammeln ...");
+    const r = await fetchInternalTransactions(api, bridge, {
+      maxPages: NACHLAUF_SEITEN,
+      bisZeit: stand.neuestes_bekannt,
+    });
+    seiten += r.seiten;
+    neueTransfers += await speichern(r.transfers);
+    spanne(r.transfers);
+    log("  " + r.seiten + " Seiten, " + r.transfers.length + " Transfers angesehen");
+  }
+
+  // --- 2. Weiter zurueck in die Historie --------------------------------
+  let fertig = stand.fertig;
+  let cursor = stand.cursor ? JSON.parse(stand.cursor) : null;
+
+  if (!fertig) {
+    log(
+      (cursor ? "Historie fortsetzen" : "Historie beginnen") +
+        " (Budget " + Math.round(budgetMs / 60000) + " Minuten) ..."
+    );
+    const r = await fetchInternalTransactions(api, bridge, {
+      maxPages: 100000,
+      startCursor: cursor,
+      fristMs: budgetMs,
+    });
+    seiten += r.seiten;
+    neueTransfers += await speichern(r.transfers);
+    spanne(r.transfers);
+    cursor = r.cursor;
+    fertig = r.cursor ? 0 : 1;
+    log(
+      "  " + r.seiten + " Seiten, " + r.transfers.length + " Transfers angesehen, zurueck bis " +
+        (r.transfers.length ? r.transfers[r.transfers.length - 1].timestamp.slice(0, 10) : "—") +
+        (fertig ? " - Anfang der Bridge erreicht" : " - Rest beim naechsten Lauf")
+    );
+  } else {
+    log("Historie ist vollstaendig erfasst - nur der Blick nach oben war noetig.");
+  }
+
+  await db
+    .prepare(
+      "INSERT INTO bridge_scan (id, neuestes_bekannt, aeltestes_bekannt, cursor, fertig," +
+        " seiten_gesamt, aktualisiert_am) VALUES (1,?,?,?,?,?,?)" +
+        " ON CONFLICT(id) DO UPDATE SET neuestes_bekannt=excluded.neuestes_bekannt," +
+        "   aeltestes_bekannt=excluded.aeltestes_bekannt, cursor=excluded.cursor," +
+        "   fertig=excluded.fertig, seiten_gesamt=excluded.seiten_gesamt," +
+        "   aktualisiert_am=excluded.aktualisiert_am"
+    )
+    .bind(
+      neuestes,
+      aeltestes,
+      cursor ? JSON.stringify(cursor) : null,
+      fertig,
+      (stand.seiten_gesamt ?? 0) + seiten,
+      jetzt
+    )
+    .run();
+
+  // --- 3. Die Anzeige-Tabelle aus dem Rohbestand neu aufbauen -----------
+  //
+  // Immer komplett neu statt zu ergaenzen: der Rohbestand ist die einzige
+  // Wahrheit, und so kann die Tagesbilanz gar nicht von den Transfers
+  // abweichen, aus denen sie sich zusammensetzt.
+  const tage = (
+    await db
+      .prepare(
+        "SELECT day, sum(etn) AS summe, count(*) AS anzahl FROM bridge_transfers" +
+          " GROUP BY day ORDER BY summe DESC LIMIT ?"
+      )
+      .bind(MAX_TAGE)
+      .all()
+  ).results;
+
   await db.prepare("DELETE FROM bridge_events").run();
 
-  const upsert = db.prepare(
-    "INSERT INTO bridge_events (day, outflow_etn, recipient_count, top_recipients, unvollstaendig, analyzed_at)" +
-      " VALUES (?,?,?,?,?,?)" +
-      " ON CONFLICT(day) DO UPDATE SET outflow_etn=excluded.outflow_etn," +
-      "   recipient_count=excluded.recipient_count, top_recipients=excluded.top_recipients," +
-      "   unvollstaendig=excluded.unvollstaendig, analyzed_at=excluded.analyzed_at"
-  );
+  if (tage.length) {
+    const platzhalter = tage.map(() => "?").join(",");
+    const empfaenger = (
+      await db
+        .prepare(
+          "SELECT day, to_address, etn FROM bridge_transfers WHERE day IN (" + platzhalter + ")" +
+            " ORDER BY etn DESC"
+        )
+        .bind(...tage.map((t) => t.day))
+        .all()
+    ).results;
 
-  for (const t of tage) {
-    const empfaenger = t.transfers.slice(0, 10).map((x) => ({ address: x.to, etn: x.etn }));
-    await upsert
-      .bind(t.day, t.summe, t.transfers.length, JSON.stringify(empfaenger), 0, jetzt)
-      .run();
-    log(
-      "  " + t.day + ": " + Math.round(t.summe).toLocaleString("de-DE") + " ETN in " +
-        t.transfers.length + " grossen Transfer(s)"
+    const proTag = new Map();
+    for (const e of empfaenger) {
+      if (!proTag.has(e.day)) proTag.set(e.day, []);
+      const liste = proTag.get(e.day);
+      if (liste.length < 10) liste.push({ address: e.to_address, etn: e.etn });
+    }
+
+    const ins = db.prepare(
+      "INSERT INTO bridge_events (day, outflow_etn, recipient_count, top_recipients," +
+        " unvollstaendig, analyzed_at) VALUES (?,?,?,?,0,?)"
     );
+    for (const t of tage) {
+      await ins
+        .bind(t.day, t.summe, t.anzahl, JSON.stringify(proTag.get(t.day) ?? []), jetzt)
+        .run();
+    }
   }
+
+  const gesamt = (await db.prepare("SELECT count(*) AS n FROM bridge_transfers").first())?.n ?? 0;
+  log(
+    "Rohbestand: " + gesamt + " grosse Transfers, daraus " + tage.length + " Ereignistage" +
+      (neueTransfers ? " (" + neueTransfers + " in diesem Lauf neu)" : "")
+  );
 
   await db
     .prepare(
       "INSERT INTO bridge_event_runs (taken_at, day, tage_gefunden, tage_analysiert, zurueck_bis, status)" +
         " VALUES (?,?,?,?,?,?)"
     )
-    .bind(jetzt, jetzt.slice(0, 10), proTag.size, tage.length, aeltesterErreicht,
-          gedeckelt ? "partial" : "ok")
+    .bind(
+      jetzt,
+      jetzt.slice(0, 10),
+      tage.length,
+      tage.length,
+      aeltestes ? aeltestes.slice(0, 10) : null,
+      fertig ? "ok" : "partial"
+    )
     .run();
 
   return {
-    gefunden: proTag.size,
-    analysiert: tage.length,
-    grosse_transfers: gross.length,
-    zurueck_bis: aeltesterErreicht,
-    gedeckelt,
+    seiten,
+    neue_transfers: neueTransfers,
+    grosse_transfers_gesamt: gesamt,
+    ereignistage: tage.length,
+    zurueck_bis: aeltestes ? aeltestes.slice(0, 10) : null,
+    historie_vollstaendig: !!fertig,
   };
 }

@@ -819,27 +819,28 @@ async function bridge_events_api(db) {
   ).results;
 
   const rows = alle.filter((r) => brauchbar(r)).slice(0, 12);
-  // Wie weit der letzte Lauf tatsaechlich zurueckkam - sonst sieht "nichts
+  // Wie weit die Suche tatsaechlich zurueckreicht - sonst sieht "nichts
   // gefunden" fuer einen aelteren Zeitraum wie "nichts passiert" aus.
   //
-  // Bewusst abgesichert: zurueck_bis kam erst spaeter dazu (siehe
-  // migrations.sql). Auf einer Datenbank, auf der die Migration noch nicht
-  // gelaufen ist, warf diese eine Zeile den KOMPLETTEN Endpoint mit 500 um -
-  // die Ereignisse selbst waren laengst da. Eine Zusatzangabe darf die
-  // Hauptantwort nicht mitreissen.
-  let lauf = null;
-  try {
-    lauf = await db
-      .prepare("SELECT zurueck_bis, taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
-      .first();
-  } catch {
-    lauf = await db
-      .prepare("SELECT taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
-      .first()
-      .catch(() => null);
-  }
+  // Der Durchgang durch die Bridge-Historie laeuft ueber mehrere Laeufe
+  // hinweg (siehe src/bridge-events.js); bis er durch ist, waechst das
+  // abgedeckte Fenster von Woche zu Woche. Solange gehoert beides in die
+  // Antwort: wie weit zurueck, und ob das schon alles ist.
+  //
+  // Bewusst abgesichert: beide Tabellen kamen erst spaeter dazu. Auf einer
+  // Datenbank ohne sie warf diese eine Zeile den KOMPLETTEN Endpoint mit 500
+  // um, obwohl die Ereignisse laengst da waren.
+  const lauf = await db
+    .prepare("SELECT taken_at FROM bridge_event_runs ORDER BY id DESC LIMIT 1")
+    .first()
+    .catch(() => null);
+  const stand = await db
+    .prepare("SELECT aeltestes_bekannt, fertig FROM bridge_scan WHERE id = 1")
+    .first()
+    .catch(() => null);
   return {
-    abgedeckt_ab: lauf?.zurueck_bis ?? null,
+    abgedeckt_ab: stand?.aeltestes_bekannt?.slice(0, 10) ?? null,
+    historie_vollstaendig: !!stand?.fertig,
     geprueft_am: lauf?.taken_at ?? null,
     ereignisse: rows.map((r) => ({
       day: r.day,

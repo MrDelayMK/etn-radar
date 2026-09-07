@@ -397,35 +397,56 @@ Minuten, freitags automatisch (`.github/workflows/exchange-detect.yml`).
 
 ## Große Migrations-Ereignisse (Bridge Events)
 
-Beantwortet die Frage „an welchem Tag ist ungewöhnlich viel ETN migriert
-worden, und wohin?" Zwei Schritte, siehe [`src/bridge-events.js`](src/bridge-events.js):
+Beantwortet die Frage „wann sind die **größten Einzelbeträge** aus der Bridge
+geflossen, und an wen?" Siehe [`src/bridge-events.js`](src/bridge-events.js).
 
-1. **Ausreisser-Tage finden** — kostenlos, reine Berechnung aus der bereits
-   vorhandenen Tages-Historie der Bridge (`daily_balances`): ein Tag zählt als
-   Ausreisser, wenn der Abfluss > 3× den Median der Vergleichstage ist
-   (Median statt Durchschnitt, damit ein einzelner Riesentag die Schwelle
-   nicht selbst anhebt).
-2. **Empfänger nachschlagen** — die Bridge selbst hat keine normalen
-   Top-Level-Transaktionen, sie bewegt ETN ausschliesslich über **interne**
-   Transaktionen (`fetchInternalTransactions` in
-   [`src/blockscout.js`](src/blockscout.js)). Ein **einziger gemeinsamer**
-   Durchlauf paginiert so weit zurück wie für den ältesten zu analysierenden
-   Ausreisser nötig, statt pro Tag neu ab Seite 1 zu starten — das war der
-   ursprüngliche Ansatz, kostete aber ein Vielfaches an Anfragen und reichte
-   trotzdem nie weit genug zurück.
+Aufgenommen wird nur, was einzeln über **500.000 ETN** liegt. Alles darunter
+ist Alltagsverkehr: an einem beliebigen Tag laufen hunderte kleine
+Migrationen, und ein Tag aus 710 Überweisungen zu je 50.000 ETN ist kein
+Ereignis. Von rund 27.500 Transfers in drei Monaten bleiben so etwa zehn.
 
-**Ehrliche Unvollständigkeit statt falscher Nullen:** die Bridge ist deutlich
-aktiver als ursprünglich angenommen (~2.000 echte Transfers allein in vier
-Wochen) — der Seitendeckel (`MAX_SEITEN_GESAMT`) reicht darum nicht
-zuverlässig bis zum ältesten Tag im 90-Tage-Fenster zurück. Statt einen nicht
-erreichten Tag fälschlich als „0 Empfänger" zu melden, markiert die Analyse
-ihn als `unvollstaendig` (Spalte in `bridge_events`) — das Dashboard zeigt
-dafür einen eigenen Hinweis statt einer Zahl.
+### Zwei Irrwege, die im Code dokumentiert sind
 
-**„Scan for events now"**-Knopf im Migration-Watch-Bereich: wie
-Census/Cluster-Analyse/Exchange Detection auslösbar, analysiert die 8
-größten Ausreisser der letzten 90 Tage, dauert je nach Bridge-Aktivität bis
-zu ~15-20 Minuten, montags automatisch (`.github/workflows/bridge-events.yml`).
+**Nicht mehr über die Tagesbilanz.** Zuerst wurden Ausreißer aus
+`daily_balances` bestimmt und danach die Empfänger gesucht. Das ergab
+widersprüchliche Zahlen: für den 06.08.2026 stand ein Rückgang von 6.970.369
+ETN, während an dem Tag ein einziger Transfer über 3.000.000 ETN lief — der
+Rest stammte vom Vortag, weil die Tagesgrenze von `coin-balance-history-by-day`
+nicht mit der Tagesgrenze der Zeitstempel übereinstimmt. Jetzt ist die
+Kopfzahl eines Tages per Konstruktion die Summe der Transfers, die darunter
+stehen; der Endpoint prüft das beim Lesen zusätzlich nach.
+
+**Nicht mehr nur 90 Tage.** Große Einzeltransfers sind selten — in drei
+Monaten zehn Stück. Ein Fenster von 90 Tagen zeigt also fast nichts,
+während die eigentlich interessante Frage („was waren die größten
+Migrationen überhaupt?") unbeantwortet blieb.
+
+### Warum der Lauf fortsetzbar ist
+
+Die Bridge existiert seit dem **03.03.2024**, und ihre Transferliste ist nur
+von der neuesten Seite aus rückwärts durchblätterbar. Gemessen: ~1,6 Seiten
+pro Sekunde, ein Durchgang über die ganze Historie also rund zwei Stunden.
+Jede Woche von vorn wäre Unfug und gegenüber dem Explorer unhöflich. Darum:
+
+1. Die großen Transfers landen roh in `bridge_transfers`. Der Schlüssel ist
+   aus Transaktion, Empfänger und Betrag gebaut — dieselbe Zeile ein zweites
+   Mal einzulesen ist folgenlos.
+2. `bridge_scan` merkt sich den Cursor des Explorers. Der nächste Lauf macht
+   exakt dort weiter, wo dieser aufgehört hat.
+3. Jeder Lauf schaut außerdem oben nach, was seit dem letzten Mal neu
+   dazugekommen ist — das kostet nur wenige Seiten.
+4. `bridge_events` wird am Ende jedes Laufs aus dem Rohbestand neu aufgebaut.
+
+Die ersten ein bis zwei Läufe sind lang (Zeitbudget `BRIDGE_SCAN_MINUTEN`,
+Standard 100 Minuten, Workflow-Zeitlimit 150). Danach kostet ein Lauf nur
+noch die paar Seiten seit dem letzten Mal. Solange der Durchgang läuft, steht
+im ⓘ des Panels, wie weit die Suche bisher zurückreicht — sonst liest sich
+eine kurze Liste wie „mehr gab es nicht", obwohl schlicht noch nicht alles
+angesehen wurde.
+
+**„Scan for events now"**-Knopf im Migration-Bereich: wie Census, Cluster-Analyse
+und Exchange Detection auslösbar, montags automatisch
+(`.github/workflows/bridge-events.yml`).
 
 ---
 

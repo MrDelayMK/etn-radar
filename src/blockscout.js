@@ -319,8 +319,17 @@ export async function fetchOutboundTransactions(apiBase, hash, opts = {}) {
 export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
   const maxPages = opts.maxPages ?? 10;
   const bisZeit = opts.bisZeit ? new Date(opts.bisZeit).getTime() : null;
+  // Zeitbudget statt reinem Seitendeckel: wie viele Seiten eine Stunde
+  // hergibt, haengt an der Aktivitaet der Bridge und an der Laune des
+  // Explorers. Ein Deckel in Sekunden ist die Groesse, die man wirklich
+  // planen kann - danach richtet sich das Zeitlimit des Workflows.
+  const frist = opts.fristMs ? Date.now() + opts.fristMs : null;
   const out = [];
-  let next = null;
+  // Mit startCursor setzt der Aufruf dort fort, wo ein frueherer aufgehoert
+  // hat. Die Bridge-Historie reicht bis Maerz 2024 zurueck und ist nur von
+  // der neuesten Seite aus rueckwaerts erreichbar - ohne Fortsetzen muesste
+  // jeder Lauf die ganze Strecke neu gehen.
+  let next = opts.startCursor ?? null;
   let seite = 0;
   for (; seite < maxPages; seite++) {
     const qs = next
@@ -342,10 +351,11 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
     next = d.next_page_params;
     const letzte = (d.items ?? [])[d.items.length - 1]?.timestamp;
     const amZiel = bisZeit && letzte && Date.parse(letzte) <= bisZeit;
-    if (!next || (d.items ?? []).length === 0 || amZiel) {
+    const zeitAus = frist != null && Date.now() >= frist;
+    if (!next || (d.items ?? []).length === 0 || amZiel || zeitAus) {
       seite++;
       break;
     }
   }
-  return { transfers: out, seiten: seite, gedeckelt: next != null };
+  return { transfers: out, seiten: seite, gedeckelt: next != null, cursor: next };
 }

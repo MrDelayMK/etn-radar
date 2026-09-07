@@ -195,6 +195,44 @@ CREATE TABLE IF NOT EXISTS exchange_detect_runs (
 
 -- Grosse Migrations-Tage (Bridge-Abfluss-Ausreisser) und wer das Geld erhalten
 -- hat, siehe src/bridge-events.js. top_recipients ist JSON: [{address, etn}].
+-- Die grossen Einzeltransfers der Bridge selbst, als Rohbestand.
+--
+-- Warum eine eigene Tabelle statt nur der Tagesbilanz in bridge_events:
+-- die Historie der Bridge reicht bis zum 03.03.2024 zurueck und laesst sich
+-- nur von der neuesten Seite aus rueckwaerts durchblaettern. Das ist ein Lauf
+-- von rund zwei Stunden - jede Woche von vorn waere Unfug. Also wird der
+-- Rohbestand hier gesammelt, der Lauf setzt beim naechsten Mal dort fort, wo
+-- er aufgehoert hat (siehe bridge_scan), und bridge_events wird daraus jedes
+-- Mal neu aufgebaut.
+--
+-- Aufgenommen wird nur, was ueber der Schwelle liegt (MIN_TRANSFER_ETN in
+-- src/bridge-events.js). Alles darunter ist Alltagsverkehr und waeren
+-- hunderttausende Zeilen ohne Aussage.
+CREATE TABLE IF NOT EXISTS bridge_transfers (
+  id          TEXT PRIMARY KEY,          -- Transaktions-Hash + Empfaenger + Betrag
+  day         TEXT NOT NULL,
+  timestamp   TEXT NOT NULL,
+  to_address  TEXT NOT NULL,
+  etn         REAL NOT NULL,
+  value_wei   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bridge_transfers_day ON bridge_transfers(day);
+CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn);
+
+-- Wie weit der Durchgang durch die Bridge-Historie gekommen ist. Genau eine
+-- Zeile; der Cursor ist das next_page_params des Explorers, mit dem der
+-- naechste Lauf exakt dort weitermacht, wo dieser aufgehoert hat.
+CREATE TABLE IF NOT EXISTS bridge_scan (
+  id                INTEGER PRIMARY KEY CHECK (id = 1),
+  neuestes_bekannt  TEXT,                -- Zeitstempel des neuesten erfassten Transfers
+  aeltestes_bekannt TEXT,
+  cursor            TEXT,                -- next_page_params als JSON, NULL = noch nicht begonnen
+  fertig            INTEGER NOT NULL DEFAULT 0,  -- 1 = bis zum Anfang der Bridge durch
+  seiten_gesamt     INTEGER NOT NULL DEFAULT 0,
+  aktualisiert_am   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS bridge_events (
   day             TEXT PRIMARY KEY,
   outflow_etn     REAL NOT NULL,

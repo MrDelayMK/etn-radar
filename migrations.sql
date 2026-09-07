@@ -21,3 +21,27 @@ ALTER TABLE addresses ADD COLUMN exchange_signale TEXT;
 ALTER TABLE bridge_events ADD COLUMN unvollstaendig INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE network_daily ADD COLUMN top1000_share REAL;
 ALTER TABLE bridge_event_runs ADD COLUMN zurueck_bis TEXT;
+
+-- Ab hier auch CREATE-Anweisungen: der Anwender (scripts/apply-migrations.mjs)
+-- fuehrt jede Zeile einzeln aus, und CREATE ... IF NOT EXISTS ist auf einer
+-- bestehenden Datenbank folgenlos. Dieselben Anweisungen stehen in schema.sql,
+-- damit eine frische Datenbank sie gleich mitbekommt.
+CREATE TABLE IF NOT EXISTS bridge_transfers (
+  id          TEXT PRIMARY KEY,
+  day         TEXT NOT NULL,
+  timestamp   TEXT NOT NULL,
+  to_address  TEXT NOT NULL,
+  etn         REAL NOT NULL,
+  value_wei   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bridge_transfers_day ON bridge_transfers(day);
+CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn);
+CREATE TABLE IF NOT EXISTS bridge_scan (
+  id                INTEGER PRIMARY KEY CHECK (id = 1),
+  neuestes_bekannt  TEXT,
+  aeltestes_bekannt TEXT,
+  cursor            TEXT,
+  fertig            INTEGER NOT NULL DEFAULT 0,
+  seiten_gesamt     INTEGER NOT NULL DEFAULT 0,
+  aktualisiert_am   TEXT
+);

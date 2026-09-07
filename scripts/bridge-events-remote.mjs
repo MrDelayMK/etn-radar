@@ -5,8 +5,8 @@
 import { fromEnv } from "../src/db-http.js";
 import { runBridgeEventAnalysis } from "../src/bridge-events.js";
 
-const limitArg = process.argv[2] || process.env.BRIDGE_EVENTS_LIMIT;
-const limit = limitArg ? Number(limitArg) : undefined;
+const minutenArg = process.argv[2] || process.env.BRIDGE_SCAN_MINUTEN;
+const budgetMinuten = minutenArg ? Number(minutenArg) : undefined;
 
 const db = fromEnv();
 const env = {
@@ -15,7 +15,7 @@ const env = {
     process.env.BRIDGE_ADDRESS ?? "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62",
 };
 
-const res = await runBridgeEventAnalysis(env, db, { limit, log: (m) => console.log(m) });
+const res = await runBridgeEventAnalysis(env, db, { budgetMinuten, log: (m) => console.log(m) });
 console.log("\nFertig:", JSON.stringify(res));
 console.log("D1-HTTP-Anfragen: " + db.requests);
 console.log(db.schreibBericht());
