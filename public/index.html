@@ -502,6 +502,17 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
        background:var(--card3);border:1px solid var(--line);color:var(--tx3);
        font-size:10.5px;font-weight:600;vertical-align:1px;letter-spacing:.01em}
 
+/* ---------- Frische der Daten ---------- */
+.chip.alt{border-color:#fbbf2455;background:#fbbf2412;color:#fcd34d}
+.chip.alt .dot{background:var(--warn);box-shadow:0 0 9px var(--warn)}
+.chip.tot{border-color:#f4635e66;background:#f4635e14;color:#ff9a96}
+.chip.tot .dot{background:var(--down);box-shadow:0 0 9px var(--down)}
+.stale{display:flex;align-items:center;gap:13px;margin-top:18px;padding:13px 17px;
+       border-radius:13px;background:#f4635e12;border:1px solid #f4635e44;
+       color:var(--tx2);font-size:13px;line-height:1.55}
+.stale .ic{font-size:22px;line-height:1;flex:0 0 auto}
+.stale b{color:var(--tx);font-weight:640}
+
 /* ---------- Willkommen (einmalig) ---------- */
 .welcome{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:22px;
          background:linear-gradient(150deg,var(--card2) 0%,var(--card) 68%);
@@ -708,6 +719,11 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <div class="chip"><span class="dot"></span><span id="snapTime">loading&hellip;</span></div>
   <div class="chip">ETN <b class="num" id="price" style="color:var(--tx)">&mdash;</b></div>
 </header>
+
+<div class="stale" id="staleWarn" hidden>
+  <span class="ic">⏳</span>
+  <div id="staleText"></div>
+</div>
 
 <nav id="nav">
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
@@ -1358,12 +1374,54 @@ const el = (id) => document.getElementById(id);
 // Jetzt zentral: jede Stelle, die einen snapshot-Zeitstempel bekommt, ruft
 // das hier auf, und nur der jeweils NEUESTE bekannte Stand gewinnt.
 let letzterBekannterSnapshot = null;
+/* ---------- Frische der Daten ---------------------------------------------
+ *
+ * Der Snapshot laeuft alle 30 Minuten. Bleibt er aus - das Schreibkontingent
+ * der Datenbank gerissen, der Explorer nicht erreichbar, ein fehlgeschlagener
+ * Lauf -, zeigt die Seite weiter Zahlen, die aussehen wie immer. Genau das ist
+ * einmal neun Stunden lang passiert, und sichtbar war es nur an einem kleinen
+ * "snapshot 6 h ago" in der Kopfzeile.
+ *
+ * Drei Stufen, gemessen am Abstand zum letzten Snapshot:
+ *
+ *   bis 90 Minuten    alles normal (drei Laeufe Spielraum - ein einzelner
+ *                     verpasster Lauf ist kein Ereignis)
+ *   bis 6 Stunden     Kopfzeile faerbt sich, die Zahl steht dort ohnehin
+ *   darueber          zusaetzlich ein Hinweis oben auf der Seite, weil die
+ *                     Zahlen dann nicht mehr als aktuell durchgehen
+ */
+const FRISCH_WARNEN_MIN = 90;
+const FRISCH_ALARM_MIN = 360;
+
+function pruefeFrische() {
+  if (!letzterBekannterSnapshot) return;
+  const minuten = (Date.now() - Date.parse(letzterBekannterSnapshot)) / 60000;
+  const chip = el("snapTime").closest(".chip");
+  const warn = el("staleWarn");
+
+  chip.classList.toggle("alt", minuten >= FRISCH_WARNEN_MIN && minuten < FRISCH_ALARM_MIN);
+  chip.classList.toggle("tot", minuten >= FRISCH_ALARM_MIN);
+
+  if (minuten < FRISCH_ALARM_MIN) {
+    warn.hidden = true;
+    return;
+  }
+  el("staleText").innerHTML =
+    "<b>These numbers are " + zeitHer(letzterBekannterSnapshot) + " old.</b> " +
+    "The snapshot normally runs every 30 minutes and has not come through since " +
+    new Date(letzterBekannterSnapshot).toLocaleString(LOC, {
+      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    }) + ". Balances, ranks and events on this page are from then, not from now.";
+  warn.hidden = false;
+}
+
 function setSnapTime(iso) {
   if (!iso) return;
   if (!letzterBekannterSnapshot || Date.parse(iso) > Date.parse(letzterBekannterSnapshot)) {
     letzterBekannterSnapshot = iso;
   }
   el("snapTime").textContent = "snapshot " + zeitHer(letzterBekannterSnapshot) + " ago";
+  pruefeFrische();
 }
 const esc = (s) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 
@@ -3824,6 +3882,14 @@ el("welcomeClose").onclick = () => {
 el("copyYear").textContent = new Date().getFullYear();
 
 willkommenPruefen();
+
+// Die Seite bleibt bei vielen offen liegen. Ohne diesen Takt bliebe "snapshot
+// 3 min ago" stundenlang stehen, obwohl nichts mehr nachkommt.
+setInterval(() => {
+  if (!letzterBekannterSnapshot) return;
+  el("snapTime").textContent = "snapshot " + zeitHer(letzterBekannterSnapshot) + " ago";
+  pruefeFrische();
+}, 60000);
 
 zeigeSeite(LADER[start] ? start : "overview");
 // Kopfzeile (Snapshot-Zeit, Preis) soll auch dann stimmen, wenn man per
