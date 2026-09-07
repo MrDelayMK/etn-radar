@@ -497,6 +497,20 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
        background:var(--card3);border:1px solid var(--line);color:var(--tx3);
        font-size:10.5px;font-weight:600;vertical-align:1px;letter-spacing:.01em}
 
+/* ---------- Merkliste ---------- */
+.star{background:none;border:0;cursor:pointer;padding:0 0 0 7px;font-size:13px;
+      line-height:1;color:var(--tx3);opacity:.32;transition:.13s;vertical-align:1px}
+.star:hover{opacity:1;color:var(--warn);transform:scale(1.18)}
+.star.on{opacity:1;color:var(--warn)}
+.watchhead{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.watchhead .cnt{font-size:12px;color:var(--tx3);font-weight:500}
+.watchhead .clear{margin-left:auto;background:none;border:1px solid var(--line2);
+                  border-radius:8px;color:var(--tx3);font-size:11.5px;padding:5px 11px;cursor:pointer}
+.watchhead .clear:hover{border-color:var(--down);color:var(--down)}
+.watchmiss{font-size:11.5px;color:var(--tx3);padding-top:10px;margin-top:4px;
+           border-top:1px solid var(--line)}
+.watchmiss code{font-family:var(--mono);color:var(--tx2)}
+
 /* ---------- ETN-Preiskarte ---------- */
 .pricecard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
            border:1px solid var(--line);border-radius:16px;padding:19px 21px 13px}
@@ -848,7 +862,16 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 
 <!-- ================= ACTIVITY ================= -->
 <div class="page" id="page-activity">
-  <section style="margin-top:22px">
+  <section id="watchWrap" style="display:none;margin-top:22px">
+    <h2 class="watchhead">⭐ Watchlist<span class="cnt" id="watchCnt"></span>
+      <button class="clear" id="watchClear">Clear all</button>
+    </h2>
+    <div class="card"><div id="watchBody"></div>
+      <div class="watchmiss" id="watchMiss" style="display:none"></div>
+    </div>
+  </section>
+
+  <section>
     <div class="activitybar">
       <span class="dim3" id="activityAsOf">&mdash;</span>
       <button class="ghost" id="activityRefresh">🔄 Refresh</button>
@@ -1983,7 +2006,10 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
 }
 
 // ---------- Movers ----------
-function zeileMover(e, gewinn) {
+function zeileMover(e) {
+  const d = e.delta_etn;
+  const klasse = d > 0 ? "up" : d < 0 ? "down" : "dim3";
+  const betrag = d == null ? "—" : d === 0 ? "±0" : kurz(d, true);
   return '<a class="mv" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
     '<div class="em">' + e.tier_emoji + "</div>" +
     '<div class="id"><b>' + esc(e.anzeige ?? kurzAdr(e.address)) + "</b>" +
@@ -1991,20 +2017,125 @@ function zeileMover(e, gewinn) {
     // Wallet vor der Bewegung hatte, musste man sich aus Betrag und Prozent
     // selbst zusammenrechnen.
     "<span>rank " + (e.rank_pos ?? "—") + " · " +
-      kurz(e.etn - e.delta_etn) + " → " + kurz(e.etn) + " ETN</span></div>" +
-    '<div class="val"><b class="num ' + (gewinn ? "up" : "down") + '">' + kurz(e.delta_etn, true) + "</b>" +
-    '<span class="num">' + pctSafe(e.delta_pct, e.etn - e.delta_etn) + "</span></div></a>";
+      (d == null ? kurz(e.etn) : kurz(e.etn - d) + " → " + kurz(e.etn)) + " ETN</span></div>" +
+    '<div class="val"><b class="num ' + klasse + '">' + betrag + "</b>" +
+    '<span class="num">' + (d == null ? "" : pctSafe(e.delta_pct, e.etn - d)) + "</span></div></a>";
 }
 let letzterMoverZeitraum = "7d";
+
+/* ---------- Merkliste -----------------------------------------------------
+ *
+ * Liegt ausschliesslich im Browser des Besuchers. Kein Konto, kein Server,
+ * keine geschriebene Datenbankzeile - und damit auch nichts, was auf ein
+ * Tageslimit anrechnet oder ueber Geraete hinweg abgeglichen werden muesste.
+ * Der Preis dafuer: die Liste gilt pro Browser. Das ist fuer ein paar
+ * beobachtete Wallets der richtige Tausch.
+ *
+ * Jeder Zugriff ist abgesichert: in einem privaten Fenster oder bei
+ * blockierten Seitendaten wirft localStorage, und daran soll nicht die
+ * ganze Seite haengen.
+ */
+const WATCH_KEY = "etnr_merkliste";
+
+function watchListe() {
+  try {
+    const roh = JSON.parse(localStorage.getItem(WATCH_KEY) ?? "[]");
+    return Array.isArray(roh) ? roh.filter((a) => /^0x[0-9a-f]{40}$/.test(a)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function watchSpeichern(liste) {
+  try {
+    localStorage.setItem(WATCH_KEY, JSON.stringify(liste.slice(0, 60)));
+  } catch {
+    /* privates Fenster o.ae. - die Liste gilt dann nur fuer diese Sitzung */
+  }
+}
+
+const watchHat = (adr) => watchListe().includes(String(adr).toLowerCase());
+
+function watchUmschalten(adr) {
+  const a = String(adr).toLowerCase();
+  const liste = watchListe();
+  const i = liste.indexOf(a);
+  if (i >= 0) liste.splice(i, 1);
+  else liste.push(a);
+  watchSpeichern(liste);
+  document.querySelectorAll('.star[data-addr="' + a + '"]').forEach((b) => {
+    const drin = i < 0;
+    b.classList.toggle("on", drin);
+    b.textContent = drin ? "★" : "☆";
+    b.title = drin ? "Remove from watchlist" : "Add to watchlist";
+  });
+  if (geladen.has("activity")) ladeWatchlist();
+  return i < 0;
+}
+
+/** Der Stern zum Anklicken - ueberall dieselbe Form. */
+function watchStern(adr) {
+  const a = String(adr).toLowerCase();
+  const drin = watchHat(a);
+  return '<button class="star' + (drin ? " on" : "") + '" data-addr="' + a +
+    '" title="' + (drin ? "Remove from" : "Add to") + ' watchlist">' +
+    (drin ? "★" : "☆") + "</button>";
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".star");
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  watchUmschalten(b.dataset.addr);
+});
+
+async function ladeWatchlist() {
+  const wrap = el("watchWrap");
+  const liste = watchListe();
+  if (!liste.length) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  el("watchCnt").textContent =
+    liste.length + (liste.length === 1 ? " wallet" : " wallets") + " · saved in this browser only";
+
+  let d;
+  try {
+    d = await hole("/api/watchlist?period=" + letzterMoverZeitraum + "&addrs=" + liste.join(","));
+  } catch {
+    el("watchBody").innerHTML = '<div class="empty">Could not load the watchlist right now.</div>';
+    return;
+  }
+
+  el("watchBody").innerHTML = d.eintraege.length
+    ? d.eintraege.map((e) => zeileMover(e)).join("")
+    : '<div class="empty">None of the saved wallets is in the tracked top 3,000 right now.</div>';
+
+  // Gemerkte Adressen, die gerade nicht in den Top N liegen, wortlos
+  // verschwinden zu lassen waere die schlechtere Antwort - sie wurden ja
+  // bewusst gemerkt.
+  const miss = el("watchMiss");
+  if (d.fehlend?.length) {
+    miss.style.display = "";
+    miss.innerHTML = "Not in the tracked top 3,000 right now: " +
+      d.fehlend.map((a) => '<code>' + kurzAdr(a) + "</code>").join(", ");
+  } else {
+    miss.style.display = "none";
+  }
+}
+
+
 async function ladeMovers(p, bust) {
   letzterMoverZeitraum = p;
   el("gainers").innerHTML = el("losers").innerHTML = '<div class="skel" style="height:60px"></div>';
   const d = await hole("/api/movers?period=" + p + "&limit=8", bust);
   el("gainers").innerHTML = d.gewinner.length
-    ? d.gewinner.map((e) => zeileMover(e, true)).join("")
+    ? d.gewinner.map((e) => zeileMover(e)).join("")
     : '<div class="empty">No inflows in this period</div>';
   el("losers").innerHTML = d.verlierer.length
-    ? d.verlierer.map((e) => zeileMover(e, false)).join("")
+    ? d.verlierer.map((e) => zeileMover(e)).join("")
     : '<div class="empty">No outflows in this period</div>';
 
   // Eigener Zeitstempel statt sich nur auf die Kopfzeile zu verlassen: wer
@@ -2051,7 +2182,7 @@ async function ladeLeaderboard() {
       '<td class="rk">' + rTxt + "</td>" +
       '<td><a class="addr" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
         (e.anzeige ? "<b style='color:var(--tx)'>" + esc(e.anzeige) + "</b>" : kurzAdr(e.address)) +
-      "</a>" + tags + "</td>" +
+      "</a>" + watchStern(e.address) + tags + "</td>" +
       '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
       '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
       '<td class="r num ' + (dEtn > 0 ? "up" : dEtn < 0 ? "down" : "dim3") + '">' + dTxt + "</td>" +
@@ -2629,6 +2760,7 @@ function renderWalletDetail(d) {
     '<div style="font-size:60px;line-height:1">' + d.tier_emoji + "</div>" +
     '<div style="flex:1;min-width:210px">' +
     '<div style="font-size:21px;font-weight:640">' + esc(d.anzeige ?? d.tier_name) +
+      watchStern(d.address) +
       '<span style="font-size:11px;font-weight:400">' + walletTags(d) + "</span></div>" +
     (d.anzeige ? '<div class="dim" style="font-size:12.5px">' + esc(d.tier_name) + "</div>" : "") +
     '<a class="addr" href="' + EXPLORER + d.address + '" target="_blank" rel="noopener" style="margin-top:3px;display:inline-block">' +
@@ -2877,7 +3009,8 @@ const LADER = {
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),
-  activity: () => Promise.all([ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
+  activity: () =>
+    Promise.all([ladeWatchlist(), ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
   investigate: () => Promise.resolve(), // wartet auf eine Suche, laedt nichts von sich aus
 };
@@ -2903,6 +3036,16 @@ function zeigeSeite(name) {
   if (name === "overview" || name === "tiers" || name === "migration") alleChartsNachziehen();
   if (name === "activity" && FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
+
+el("watchClear").onclick = () => {
+  if (!confirm("Remove all wallets from your watchlist?")) return;
+  watchSpeichern([]);
+  document.querySelectorAll(".star.on").forEach((b) => {
+    b.classList.remove("on");
+    b.textContent = "☆";
+  });
+  ladeWatchlist();
+};
 
 el("nav").onclick = (e) => {
   const b = e.target.closest("button");

@@ -483,6 +483,62 @@ function buendeln(rows) {
   return [...nach.values()];
 }
 
+/**
+ * Merkliste: mehrere Wallets in EINER Abfrage.
+ *
+ * Die Liste selbst liegt im Browser des Besuchers (localStorage) - hier wird
+ * nichts gespeichert, es gibt kein Konto und keine geschriebene Zeile. Der
+ * Endpoint bekommt nur die Adressen mitgeschickt und liefert dieselben Felder
+ * wie das Leaderboard zurueck.
+ *
+ * Adressen, die nicht in den verfolgten Top N liegen, stehen in "fehlend":
+ * sie einfach wegzulassen waere die schlechtere Antwort - der Besucher hat sie
+ * ja bewusst gemerkt und wuerde sie wortlos verlieren.
+ */
+async function watchlist(db, env, u) {
+  const adressen = [
+    ...new Set(
+      (u.searchParams.get("addrs") ?? "")
+        .toLowerCase()
+        .split(",")
+        .map((a) => a.trim())
+        .filter((a) => /^0x[0-9a-f]{40}$/.test(a))
+    ),
+  ].slice(0, 60);
+  if (!adressen.length) return { eintraege: [], fehlend: [] };
+
+  const tage = ZEITRAUM[u.searchParams.get("period") ?? STD_ZEITRAUM] ?? 7;
+  const platzhalter = adressen.map(() => "?").join(",");
+  const rows = (
+    await db
+      .prepare(
+        "SELECT " + WALLET_FELDER +
+          ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
+          "   ORDER BY d.day DESC LIMIT 1) AS etn_vorher" +
+          " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
+          " WHERE c.address IN (" + platzhalter + ")" +
+          " ORDER BY c.etn DESC"
+      )
+      .bind(tagVor(tage), ...adressen)
+      .all()
+  ).results;
+
+  const jetzt = Date.now();
+  const gefunden = new Set(rows.map((r) => r.address));
+  return {
+    zeitraum: u.searchParams.get("period") ?? STD_ZEITRAUM,
+    eintraege: rows.map((r) => ({
+      ...schmuecken(r, jetzt),
+      delta_etn: r.etn_vorher != null ? r.etn - r.etn_vorher : null,
+      delta_pct:
+        r.etn_vorher != null && r.etn_vorher > 0
+          ? ((r.etn - r.etn_vorher) / r.etn_vorher) * 100
+          : null,
+    })),
+    fehlend: adressen.filter((a) => !gefunden.has(a)),
+  };
+}
+
 async function events(db, u) {
   const limit = Math.min(200, Number(u.searchParams.get("limit") ?? 50));
   const typ = u.searchParams.get("type");
@@ -1161,6 +1217,7 @@ export default {
       else if (pfad === "/api/movers") antwort = json(await movers(db, env, u));
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));
       else if (pfad === "/api/events") antwort = json(await events(db, u));
+      else if (pfad === "/api/watchlist") antwort = json(await watchlist(db, env, u), 200, 30);
       else if (pfad === "/api/exchange-flow") antwort = json(await exchange_flow(db, u));
       else if (pfad === "/api/tiers") antwort = json({ tiers: TIERS });
       else if (pfad === "/api/search") {
