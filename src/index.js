@@ -539,6 +539,99 @@ async function watchlist(db, env, u) {
   };
 }
 
+/* ---------- Kursverlauf ------------------------------------------------
+ *
+ * Zwei Quellen, weil keine allein reicht:
+ *
+ *   snapshots.etn_price   Alle 30 Minuten ein Punkt - die einzige Quelle mit
+ *                         Aufloesung unterhalb eines Tages. Reicht aber nur
+ *                         so weit zurueck, wie dieses Dashboard laeuft.
+ *   Explorer /stats/charts/market
+ *                         30 Tage, ein Punkt je Tag. Feste Laenge; ein
+ *                         Parameter fuer mehr existiert nicht (gegengeprueft
+ *                         mit ?days= und ?resolution=). Der Kurs wird dort
+ *                         aus Marktkapitalisierung geteilt durch Umlaufmenge
+ *                         gerechnet, weil das Kursfeld nur fuer den neuesten
+ *                         Tag gefuellt ist.
+ *
+ * Kurze Zeitraeume kommen darum aus den eigenen Snapshots, lange aus der
+ * Tagesreihe. Die beiden Rechenwege liegen rund ein Prozent auseinander -
+ * unterhalb der Tagesschwankung und innerhalb einer Reihe konsistent.
+ *
+ * "all" waechst von selbst: sobald die eigene Tageshistorie ueber die 30 Tage
+ * des Explorers hinausreicht, deckt sie den aelteren Teil ab.
+ */
+const KURS_ZEITRAUM = { "24h": 1, "7d": 7, "30d": 30, all: null };
+
+async function preisverlauf(env, u) {
+  const p = u.searchParams.get("period") ?? "30d";
+  const tage = p in KURS_ZEITRAUM ? KURS_ZEITRAUM[p] : 30;
+  const db = env.DB;
+
+  // --- Kurze Zeitraeume: eigene Snapshots, halbstuendlich ---------------
+  if (tage != null && tage <= 7) {
+    const ab = new Date(Date.now() - tage * 86400000).toISOString();
+    const rows = (
+      await db
+        .prepare(
+          "SELECT taken_at, etn_price FROM snapshots" +
+            " WHERE etn_price IS NOT NULL AND taken_at >= ?" +
+            " ORDER BY taken_at ASC"
+        )
+        .bind(ab)
+        .all()
+    ).results;
+    return {
+      zeitraum: p,
+      quelle: "snapshots",
+      feinkoernig: true,
+      punkte: rows.map((r) => ({ zeit: r.taken_at, preis: r.etn_price })),
+    };
+  }
+
+  // --- Lange Zeitraeume: Tagesreihe ------------------------------------
+  const eigene = (
+    await db
+      .prepare(
+        "SELECT day, etn_price FROM network_daily WHERE etn_price IS NOT NULL ORDER BY day ASC"
+      )
+      .all()
+  ).results;
+
+  let vomExplorer = [];
+  try {
+    const r = await fetch(env.EXPLORER_API + "/stats/charts/market", {
+      headers: { accept: "application/json" },
+    });
+    if (r.ok) {
+      const m = await r.json();
+      const versorgung = Number(m?.available_supply ?? 0);
+      if (versorgung > 0) {
+        vomExplorer = (m.chart_data ?? [])
+          .filter((d) => d.market_cap != null)
+          .map((d) => ({ day: d.date, preis: Number(d.market_cap) / versorgung }));
+      }
+    }
+  } catch {
+    /* eigene Reihe reicht dann eben allein */
+  }
+
+  // Eigene Werte gewinnen: sie sind der Kurs, der auch in der Kopfzeile steht.
+  const nachTag = new Map(vomExplorer.map((d) => [d.day, d.preis]));
+  for (const e of eigene) nachTag.set(e.day, e.etn_price);
+
+  let punkte = [...nachTag.entries()]
+    .map(([day, preis]) => ({ zeit: day, preis }))
+    .sort((a, b) => (a.zeit < b.zeit ? -1 : 1));
+
+  if (tage != null) {
+    const ab = new Date(Date.now() - tage * 86400000).toISOString().slice(0, 10);
+    punkte = punkte.filter((d) => d.zeit >= ab);
+  }
+
+  return { zeitraum: p, quelle: "tage", feinkoernig: false, punkte };
+}
+
 async function events(db, u) {
   const limit = Math.min(200, Number(u.searchParams.get("limit") ?? 50));
   const typ = u.searchParams.get("type");
@@ -1099,12 +1192,11 @@ async function network(env) {
     return r.json();
   };
 
-  let s, verlauf, markt;
+  let s, verlauf;
   try {
-    [s, verlauf, markt] = await Promise.all([
+    [s, verlauf] = await Promise.all([
       holen("/stats"),
       holen("/stats/charts/transactions").catch(() => null),
-      holen("/stats/charts/market").catch(() => null),
     ]);
   } catch (e) {
     return { leer: true, grund: e.message };
@@ -1125,26 +1217,6 @@ async function network(env) {
     .reverse()
     .map((d) => ({ day: d.date, tx: zahl(d.transaction_count) }));
 
-  // Preisverlauf. Der Explorer fuehrt in derselben Reihe ein Feld
-  // closing_price - das ist aber NUR fuer den jeweils neuesten Tag gefuellt
-  // und fuer alle aelteren null (nachgeprueft ueber die volle Reihe). Als
-  // Kurve waere davon ein einziger Punkt uebrig.
-  //
-  // Die Marktkapitalisierung ist dagegen fuer jeden Tag da. Geteilt durch die
-  // im selben Aufruf mitgelieferte Umlaufmenge ergibt sie den Tagespreis. Die
-  // Umlaufmenge ist ein aktueller Einzelwert, wird also auch auf aeltere Tage
-  // angewandt - bei einer festen Gesamtmenge wie hier faellt das nicht ins
-  // Gewicht, und der Verlauf der Kurve stimmt in jedem Fall.
-  const versorgung = Number(markt?.available_supply ?? 0);
-  const preisVerlauf = (markt?.chart_data ?? [])
-    .filter((d) => d.market_cap != null && versorgung > 0)
-    .map((d) => ({
-      day: d.date,
-      preis: Number(d.market_cap) / versorgung,
-      marktkapitalisierung: Number(d.market_cap),
-    }))
-    .sort((a, b) => (a.day < b.day ? -1 : 1));
-
   return {
     blockhoehe: zahl(s.total_blocks),
     transaktionen: zahl(s.total_transactions),
@@ -1158,7 +1230,6 @@ async function network(env) {
     marktkapitalisierung: zahl(s.market_cap),
     tx_verlauf: tage,
     tx_schnitt: tage.length ? tage.reduce((a, b) => a + b.tx, 0) / tage.length : null,
-    preis_verlauf: preisVerlauf,
   };
 }
 
@@ -1212,6 +1283,7 @@ export default {
       const db = env.DB;
       if (pfad === "/api/overview") antwort = json(await overview(db, env));
       else if (pfad === "/api/network") antwort = json(await network(env), 200, 60);
+      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 60);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
