@@ -497,11 +497,74 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
        background:var(--card3);border:1px solid var(--line);color:var(--tx3);
        font-size:10.5px;font-weight:600;vertical-align:1px;letter-spacing:.01em}
 
+/* ---------- Willkommen (einmalig) ---------- */
+.welcome{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:22px;
+         background:linear-gradient(150deg,var(--card2) 0%,var(--card) 68%);
+         border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.welcome>img{width:58px;height:58px;border-radius:50%;flex:0 0 auto;
+             filter:drop-shadow(0 0 18px #5b9cff55)}
+.welcome .wbody{flex:1;min-width:260px}
+.welcome b.wtitel{display:block;font-size:17px;font-weight:660;letter-spacing:-.01em}
+.welcome p{color:var(--tx2);line-height:1.6;margin:6px 0 12px;max-width:56em}
+.welcome ul{list-style:none;display:grid;gap:7px}
+.welcome li{display:flex;gap:10px;align-items:baseline;color:var(--tx2);
+            font-size:13px;line-height:1.55}
+.welcome li i{font-style:normal;flex:0 0 auto;width:1.3em;text-align:center}
+.welcome li b{color:var(--tx);font-weight:620}
+.welcome .wclose{flex:0 0 auto;align-self:center}
+@media(max-width:640px){ .welcome .wclose{width:100%} }
+
 /* ---------- Merkliste ---------- */
-.star{background:none;border:0;cursor:pointer;padding:0 0 0 7px;font-size:13px;
-      line-height:1;color:var(--tx3);opacity:.32;transition:.13s;vertical-align:1px}
-.star:hover{opacity:1;color:var(--warn);transform:scale(1.18)}
-.star.on{opacity:1;color:var(--warn)}
+/* Der Stern war mit 13px und 32% Deckkraft praktisch unsichtbar - wer nicht
+   wusste, dass es die Merkliste gibt, konnte sie nicht finden. Groesser,
+   deutlich sichtbar, und in der Farbe, die er im aktiven Zustand hat. */
+.star{background:none;border:0;cursor:pointer;padding:0 2px 0 8px;font-size:17px;
+      line-height:1;color:var(--warn);opacity:.42;transition:.13s;vertical-align:-1px}
+.star:hover{opacity:1;transform:scale(1.2)}
+.star.on{opacity:1}
+
+/* Auf der Wallet-Seite ein beschrifteter Knopf statt eines blossen Zeichens -
+   dort hat man Platz, und dort faellt die Entscheidung "das behalte ich im
+   Auge" am ehesten. */
+.watchbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:11px;
+          background:var(--card2);border:1px solid var(--line2);color:var(--tx2);
+          font:600 12.5px var(--sans);cursor:pointer;transition:.13s}
+.watchbtn:hover{border-color:var(--warn);color:var(--tx)}
+.watchbtn.on{background:#fbbf2418;border-color:#fbbf2455;color:var(--warn)}
+
+/* Merklisten-Zeile: wie eine Bewegungszeile, aber mit Notiz darunter. Die
+   Bewegungszeile ist ein <a> - darin kann kein Eingabefeld stehen. */
+.wlrow{display:flex;align-items:flex-start;gap:13px;padding:13px 2px;border-top:1px solid var(--line)}
+.wlrow:first-child{border-top:0;padding-top:2px}
+.wlrow .em{font-size:27px;line-height:1;flex:0 0 auto}
+.wlrow .id{flex:1;min-width:0}
+.wlrow .id .name{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.wlrow .id b{font-size:14px;font-weight:620}
+.wlrow .sub{font-size:12px;color:var(--tx3);font-family:var(--mono);margin-top:2px}
+.wlrow .val{text-align:right;flex:0 0 auto}
+.wlrow .val b{display:block;font-size:14.5px;font-weight:650}
+.wlrow .val span{font-size:11.5px;color:var(--tx3)}
+.wlnote{margin-top:7px;font-size:12.5px;color:var(--tx2);cursor:text;
+        border-left:2px solid var(--line2);padding-left:9px;line-height:1.5}
+.wlnote.leer{color:var(--tx3);opacity:.65;font-style:italic}
+.wlnote:hover{border-left-color:var(--acc);color:var(--tx)}
+.wlnote input{width:100%;background:#0a0f1b;border:1px solid var(--acc);border-radius:8px;
+              padding:6px 9px;color:var(--tx);font:12.5px var(--sans);outline:none}
+
+/* Leerer Zustand als Einladung statt als Nichts. */
+.watchempty{border:1px dashed var(--line2);border-radius:13px;padding:17px 19px;
+            display:flex;align-items:center;gap:14px;color:var(--tx3);font-size:13px;line-height:1.55}
+.watchempty .gross{font-size:26px;line-height:1;color:var(--warn);opacity:.7}
+.watchempty b{color:var(--tx2);font-weight:620}
+
+/* Seit dem letzten Besuch */
+.seitbanner{display:flex;align-items:center;gap:10px;margin-bottom:13px;padding:10px 14px;
+            border-radius:11px;background:#5b9cff14;border:1px solid #5b9cff33;
+            font-size:12.5px;color:var(--tx2)}
+.seitbanner b{color:var(--tx);font-weight:620}
+.seitbadge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:5px;
+           background:#5b9cff1c;border:1px solid #5b9cff33;color:#9dc4ff;
+           font-size:10.5px;font-weight:650;vertical-align:1px}
 .watchhead{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
 .watchhead .cnt{font-size:12px;color:var(--tx3);font-weight:500}
 .watchhead .clear{margin-left:auto;background:var(--card2);border:1px solid var(--line2);
@@ -635,6 +698,26 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 
 <!-- ================= OVERVIEW ================= -->
 <div class="page on" id="page-overview">
+<div class="welcome" id="welcome" hidden>
+  <img src="/assets/logo.png" alt="">
+  <div class="wbody">
+    <b class="wtitel">Welcome to ETN Radar 👋</b>
+    <p>Public tracking for the Electroneum Smart Chain: who holds the large balances,
+    which long-dormant wallets wake up, and how much of the legacy supply still has to
+    cross the bridge before <b>31 January 2027</b>.</p>
+    <ul>
+      <li><i>⭐</i><span><b>Star any wallet</b> to keep an eye on it. Your watchlist shows
+        what changed since your last visit, and you can leave yourself a note on each one —
+        saved in this browser, no account needed.</span></li>
+      <li><i>🔎</i><span><b>Check your own wallet</b> under Investigate: balance over time,
+        where the ETN came from, which tier you are in and how far to the next one.</span></li>
+      <li><i>🌉</i><span><b>Migration</b> shows how much legacy ETN is still waiting, how fast
+        it is moving, and whether that pace reaches the deadline.</span></li>
+    </ul>
+  </div>
+  <button class="ghost wclose" id="welcomeClose">Got it</button>
+</div>
+
   <section style="margin-top:22px">
     <div class="netcard">
       <div class="nethead">
@@ -2177,11 +2260,16 @@ function watchStern(adr) {
 }
 
 document.addEventListener("click", (e) => {
-  const b = e.target.closest(".star");
+  const b = e.target.closest(".star, [data-watchbtn]");
   if (!b) return;
   e.preventDefault();
   e.stopPropagation();
-  watchUmschalten(b.dataset.addr);
+  const adr = b.dataset.addr ?? b.dataset.watchbtn;
+  const drin = watchUmschalten(adr);
+  document.querySelectorAll('[data-watchbtn="' + adr + '"]').forEach((k) => {
+    k.classList.toggle("on", drin);
+    k.textContent = drin ? "★ Watching" : "☆ Watch this wallet";
+  });
 });
 
 /* Die Merkliste erscheint an drei Stellen: ausfuehrlich auf der
@@ -2229,17 +2317,168 @@ document.addEventListener("click", (e) => {
   if (b) investigateAddress(b.dataset.watchGo);
 });
 
+/* ---------- Notizen zu gemerkten Wallets ---------------------------------
+ *
+ * Liegen wie die Merkliste selbst nur im Browser. Wer ein Wallet beobachtet,
+ * weiss nach zwei Wochen nicht mehr, warum - genau dafuer ist das Feld da.
+ */
+const NOTIZ_KEY = "etnr_notizen";
+
+function notizen() {
+  try {
+    const o = JSON.parse(localStorage.getItem(NOTIZ_KEY) ?? "{}");
+    return o && typeof o === "object" ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+function notizSetzen(adr, text) {
+  const alle = notizen();
+  const t = String(text ?? "").trim().slice(0, 140);
+  if (t) alle[adr] = t;
+  else delete alle[adr];
+  try {
+    localStorage.setItem(NOTIZ_KEY, JSON.stringify(alle));
+  } catch {
+    /* privates Fenster - gilt dann nur fuer diese Sitzung */
+  }
+}
+
+/* ---------- Was hat sich seit dem letzten Besuch getan? -------------------
+ *
+ * Der Vergleich laeuft ueber einen eigenen Staendestand im Browser: bei jedem
+ * Besuch werden die Bestaende der gemerkten Wallets gemerkt, beim naechsten
+ * Mal dagegen gerechnet. Das ist exakt (kein Tagesraster) und braucht weder
+ * Konto noch eine Zeile auf dem Server.
+ *
+ * Der Stand rollt erst weiter, wenn wirklich Zeit vergangen ist - sonst
+ * loescht ein Neuladen der Seite die Information, die gerade angezeigt wird.
+ */
+const BESUCH_KEY = "etnr_besuch";
+const BESUCH_PAUSE_MS = 30 * 60000;
+
+let besuchErgebnis; // undefined = in diesem Seitenaufruf noch nicht gerechnet
+
+function besuchVergleich(eintraege) {
+  // ladeWatchlist() laeuft pro Seitenaufruf mehrfach (Uebersicht, Investigate,
+  // Activity, nach jedem Stern). Ohne diese Sperre wuerde der erste Aufruf den
+  // Stand weiterrollen und jeder weitere haette nichts mehr zu vergleichen.
+  if (besuchErgebnis !== undefined) return besuchErgebnis;
+  let alt = null;
+  try {
+    alt = JSON.parse(localStorage.getItem(BESUCH_KEY) ?? "null");
+  } catch {
+    alt = null;
+  }
+  const jetzt = Date.now();
+  const stand = Object.fromEntries(eintraege.map((e) => [e.address, e.etn]));
+
+  const schreiben = (basisZeit) => {
+    try {
+      localStorage.setItem(BESUCH_KEY, JSON.stringify({ basisZeit, stand }));
+    } catch {
+      /* egal */
+    }
+  };
+
+  if (!alt?.stand) {
+    schreiben(jetzt);
+    besuchErgebnis = null; // erster Besuch - es gibt noch nichts zu vergleichen
+    return besuchErgebnis;
+  }
+
+  const diffs = {};
+  for (const e of eintraege) {
+    const vorher = alt.stand[e.address];
+    if (vorher != null && Math.abs(e.etn - vorher) > 0.000001) diffs[e.address] = e.etn - vorher;
+  }
+
+  // Weit genug weg gewesen: der Stand rollt weiter, angezeigt wird der alte
+  // Vergleich. Innerhalb der halben Stunde bleibt alles stehen, damit ein
+  // Neuladen dieselbe Auskunft gibt.
+  if (jetzt - (alt.basisZeit ?? 0) >= BESUCH_PAUSE_MS) schreiben(jetzt);
+
+  besuchErgebnis = { seit: alt.basisZeit, diffs };
+  return besuchErgebnis;
+}
+
+/** Eine Zeile der Merkliste: wie eine Bewegungszeile, aber mit Notiz. */
+function zeileMerkliste(e, vergleich) {
+  const d = e.delta_etn;
+  const klasse = d > 0 ? "up" : d < 0 ? "down" : "dim3";
+  const betrag = d == null ? "—" : d === 0 ? "±0" : kurz(d, true);
+  const notiz = notizen()[e.address];
+  const seit = vergleich?.diffs?.[e.address];
+
+  return '<div class="wlrow">' +
+    '<div class="em">' + e.tier_emoji + "</div>" +
+    '<div class="id">' +
+      '<div class="name">' +
+        '<a href="' + EXPLORER + e.address + '" target="_blank" rel="noopener"><b>' +
+        esc(e.anzeige ?? kurzAdr(e.address)) + "</b></a>" +
+        watchStern(e.address) +
+        (seit != null
+          ? '<span class="seitbadge">' + kurz(seit, true) + " since your last visit</span>"
+          : "") +
+      "</div>" +
+      '<div class="sub">rank ' + (e.rank_pos ?? "—") + " · " +
+        (d == null ? kurz(e.etn) : kurz(e.etn - d) + " → " + kurz(e.etn)) + " ETN</div>" +
+      '<div class="wlnote' + (notiz ? "" : " leer") + '" data-notiz="' + e.address + '">' +
+        (notiz ? esc(notiz) : "+ add a note — why are you watching this one?") +
+      "</div>" +
+    "</div>" +
+    '<div class="val"><b class="num ' + klasse + '">' + betrag + "</b>" +
+      '<span class="num">' + (d == null ? "" : pctSafe(e.delta_pct, e.etn - d)) + "</span></div>" +
+    "</div>";
+}
+
+// Notiz anklicken -> Eingabefeld. Enter oder Verlassen speichert, Escape
+// verwirft.
+document.addEventListener("click", (e) => {
+  const box = e.target.closest("[data-notiz]");
+  if (!box || box.querySelector("input")) return;
+  const adr = box.dataset.notiz;
+  const vorher = notizen()[adr] ?? "";
+  box.classList.remove("leer");
+  box.innerHTML = '<input type="text" maxlength="140" placeholder="e.g. suspected exchange hot wallet">';
+  const feld = box.querySelector("input");
+  feld.value = vorher;
+  feld.focus();
+  feld.select();
+  const fertig = (speichern) => {
+    if (speichern) notizSetzen(adr, feld.value);
+    ladeWatchlist();
+  };
+  feld.onkeydown = (ev) => {
+    if (ev.key === "Enter") fertig(true);
+    if (ev.key === "Escape") fertig(false);
+  };
+  feld.onblur = () => fertig(true);
+});
+
 async function ladeWatchlist() {
   const wrap = el("watchWrap");
   const liste = watchListe();
+  // Der leere Zustand ist die einzige Stelle, an der die Merkliste sich
+  // ueberhaupt zeigen kann, solange niemand einen Stern gedrueckt hat.
+  // Verstecken hiesse: wer nicht weiss, dass es sie gibt, findet sie nie.
+  wrap.style.display = "";
+  el("watchClear").style.display = liste.length ? "" : "none";
+  el("watchCnt").textContent = liste.length
+    ? liste.length + (liste.length === 1 ? " wallet" : " wallets") + " · saved in this browser only"
+    : "";
   if (!liste.length) {
-    wrap.style.display = "none";
     zeichneWatchChips(null);
+    el("watchBody").innerHTML =
+      '<div class="watchempty"><span class="gross">☆</span><div>' +
+      "Tap the <b>star</b> next to any wallet — in the leaderboard, in the top movers, " +
+      "or on its profile — and it shows up here with what it did since your last visit. " +
+      "Saved in this browser only." +
+      "</div></div>";
+    el("watchMiss").style.display = "none";
     return;
   }
-  wrap.style.display = "";
-  el("watchCnt").textContent =
-    liste.length + (liste.length === 1 ? " wallet" : " wallets") + " · saved in this browser only";
 
   const d = await watchDaten();
   if (!d) {
@@ -2248,8 +2487,16 @@ async function ladeWatchlist() {
   }
   zeichneWatchChips(d);
 
+  const vergleich = d.eintraege.length ? besuchVergleich(d.eintraege) : null;
+  const bewegt = vergleich ? Object.keys(vergleich.diffs).length : 0;
+  const banner = bewegt
+    ? '<div class="seitbanner">👀<div><b>' + bewegt + " of " + d.eintraege.length +
+      "</b> watched wallets moved since your last visit " +
+      zeitHer(new Date(vergleich.seit).toISOString()) + " ago.</div></div>"
+    : "";
+
   el("watchBody").innerHTML = d.eintraege.length
-    ? d.eintraege.map((e) => zeileMover(e)).join("")
+    ? banner + d.eintraege.map((e) => zeileMerkliste(e, vergleich)).join("")
     : '<div class="empty">None of the saved wallets is in the tracked top 3,000 right now.</div>';
 
   // Gemerkte Adressen, die gerade nicht in den Top N liegen, wortlos
@@ -2662,8 +2909,11 @@ function shareBlock(addr) {
     ? '<a class="ghost" href="https://t.me/' + TELEGRAM_BOT + '?start=' + addr.slice(2) +
       '" target="_blank" rel="noopener">🔔 Alert me if this wallet wakes up</a>'
     : "";
+  const drin = watchHat(addr);
   return '<div class="sharebar">' +
     '<button id="shareOpen">📢 Share my rank</button>' +
+    '<button class="watchbtn' + (drin ? " on" : "") + '" data-watchbtn="' +
+      String(addr).toLowerCase() + '">' + (drin ? "★ Watching" : "☆ Watch this wallet") + "</button>" +
     alarm +
     "</div>";
 }
@@ -2899,7 +3149,6 @@ function renderWalletDetail(d) {
     '<div style="font-size:60px;line-height:1">' + d.tier_emoji + "</div>" +
     '<div style="flex:1;min-width:210px">' +
     '<div style="font-size:21px;font-weight:640">' + esc(d.anzeige ?? d.tier_name) +
-      watchStern(d.address) +
       '<span style="font-size:11px;font-weight:400">' + walletTags(d) + "</span></div>" +
     (d.anzeige ? '<div class="dim" style="font-size:12.5px">' + esc(d.tier_name) + "</div>" : "") +
     '<a class="addr" href="' + EXPLORER + d.address + '" target="_blank" rel="noopener" style="margin-top:3px;display:inline-block">' +
@@ -3433,7 +3682,41 @@ el("lbSearchBtn").onclick = lbSpringeZuWallet;
 el("lbSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSpringeZuWallet(); });
 
 const start = location.hash.slice(1);
+/* ---------- Willkommen -----------------------------------------------------
+ *
+ * Einmal je Browser. Der Grund ist handfest: der Stern an einer Wallet-Zeile
+ * erklaert sich nicht von selbst - wer nicht weiss, dass es die Merkliste
+ * gibt, druckt ihn nie. Ein Panel beim ersten Besuch sagt es einmal und
+ * verschwindet dann fuer immer.
+ *
+ * Ueber die Adresszeile mit "?intro" wieder hervorzuholen, damit man es sich
+ * ansehen kann, ohne die Seitendaten des Browsers loeschen zu muessen.
+ */
+const WILLKOMMEN_KEY = "etnr_willkommen";
+
+function willkommenPruefen() {
+  let gesehen = false;
+  try {
+    gesehen = localStorage.getItem(WILLKOMMEN_KEY) === "1";
+  } catch {
+    gesehen = true; // keine Seitendaten - dann lieber nicht bei jedem Aufruf
+  }
+  if (gesehen && !new URLSearchParams(location.search).has("intro")) return;
+  el("welcome").hidden = false;
+}
+
+el("welcomeClose").onclick = () => {
+  el("welcome").hidden = true;
+  try {
+    localStorage.setItem(WILLKOMMEN_KEY, "1");
+  } catch {
+    /* egal */
+  }
+};
+
 el("copyYear").textContent = new Date().getFullYear();
+
+willkommenPruefen();
 
 zeigeSeite(LADER[start] ? start : "overview");
 // Kopfzeile (Snapshot-Zeit, Preis) soll auch dann stimmen, wenn man per
