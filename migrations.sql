@@ -26,6 +26,10 @@ ALTER TABLE bridge_event_runs ADD COLUMN zurueck_bis TEXT;
 -- fuehrt jede Zeile einzeln aus, und CREATE ... IF NOT EXISTS ist auf einer
 -- bestehenden Datenbank folgenlos. Dieselben Anweisungen stehen in schema.sql,
 -- damit eine frische Datenbank sie gleich mitbekommt.
+CREATE TABLE IF NOT EXISTS price_history (
+  day   TEXT PRIMARY KEY,
+  preis REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS bridge_transfers (
   id          TEXT PRIMARY KEY,
   day         TEXT NOT NULL,

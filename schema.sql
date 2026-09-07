@@ -195,6 +195,24 @@ CREATE TABLE IF NOT EXISTS exchange_detect_runs (
 
 -- Grosse Migrations-Tage (Bridge-Abfluss-Ausreisser) und wer das Geld erhalten
 -- hat, siehe src/bridge-events.js. top_recipients ist JSON: [{address, etn}].
+-- Kurshistorie aus der Zeit VOR diesem Dashboard.
+--
+-- Der Kursverlauf wurde zuerst live bei jedem Aufruf von aussen geholt. Das
+-- scheiterte nicht an der Programmierung, sondern an IP-Sperren: CoinGecko
+-- antwortet Workern ohne User-Agent mit 403 und mit Kennung dann 429 (das
+-- Gratis-Kontingent haengt an der IP, und Worker teilen sich ihre Adressen),
+-- Coinpaprika weist sie mit 402 ab, waehrend dieselbe URL von einem
+-- gewoehnlichen Anschluss 200 liefert.
+--
+-- Darum einmalig befuellt (scripts/price-backfill.mjs) und danach aus den
+-- eigenen Snapshots weitergeschrieben: network_daily traegt den Tageskurs
+-- ohnehin mit. Im Betrieb braucht die Seite damit gar keine fremde
+-- Kursquelle mehr.
+CREATE TABLE IF NOT EXISTS price_history (
+  day   TEXT PRIMARY KEY,
+  preis REAL NOT NULL
+);
+
 -- Die grossen Einzeltransfers der Bridge selbst, als Rohbestand.
 --
 -- Warum eine eigene Tabelle statt nur der Tagesbilanz in bridge_events:

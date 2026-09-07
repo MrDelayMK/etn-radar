@@ -32,14 +32,32 @@ Alles Kettenbezogene kommt aus **einer** Quelle: dem offiziellen Blockscout-
 Explorer `blockexplorer.electroneum.com`. Balancen, Ränge, Bridge-Transfers,
 Netzwerkzahlen — nichts davon wird von Dritten übernommen.
 
-Einzige Ausnahme ist der **Kursverlauf**: den liefert CoinGecko. Der Explorer
-führt zwar eine Kursreihe, sie ist aber auf 30 Tage festgenagelt (mit `?days=`
-und `?resolution=` gegengeprüft, beides wirkungslos) und ihr Kursfeld ist nur
-für den jeweils neuesten Tag gefüllt — der Verlauf ließe sich nur aus
-Marktkapitalisierung geteilt durch Umlaufmenge zurückrechnen. Das war eine
-Näherung, wo es den echten Kurs frei zu haben gibt. CoinGecko liefert ohne
-Schlüssel bis zu einem Jahr; `max` verlangt einen Bezahlplan. Fällt der Abruf
-aus, wird auf die eigenen Snapshot-Kurse zurückgefallen.
+Der **Kursverlauf** kommt ebenfalls aus der eigenen Datenbank. Drei Anläufe
+mit fremden Zugängen sind vorher gescheitert — nicht an der Programmierung,
+sondern an IP-Sperren:
+
+| Quelle | Was passierte |
+|---|---|
+| Block-Explorer | Kursreihe auf 30 Tage festgenagelt (`?days=`, `?resolution=` gegengeprüft), Kursfeld nur für den neuesten Tag gefüllt |
+| CoinGecko | **403** ohne User-Agent — Cloudflare Workers schicken keinen. Mit Kennung dann **429**: das Gratis-Kontingent hängt an der IP, und Worker teilen sich ihre Adressen |
+| Coinpaprika | **402** aus dem Worker heraus, während dieselbe URL von einem gewöhnlichen Anschluss 200 liefert |
+
+Gegen fremde IP-Sperren ist nichts auszurichten. Die Vergangenheit wurde daher
+**einmalig** von einem normalen Anschluss aus geholt
+([`scripts/price-backfill.mjs`](scripts/price-backfill.mjs) → Tabelle
+`price_history`) und wird seither aus den eigenen Snapshots weitergeschrieben.
+Im Betrieb braucht die Seite damit **gar keine fremde Kursquelle** mehr.
+
+Warum CoinGecko und nicht Coinpaprika für den Backfill: gegengerechnet an
+denselben Tagen liegt Coinpaprika systematisch 4–6 % über dem Kurs, den der
+Explorer meldet — an der Nahtstelle wäre das ein sichtbarer Knick geworden.
+CoinGecko stimmt mit den eigenen Werten auf unter ein halbes Prozent überein.
+
+Beide Seiten meinen dabei denselben Zeitpunkt: die nachgeladene Reihe führt den
+Stand um 00:00, und aus den eigenen Snapshots wird darum der **früheste** eines
+Tages genommen — nicht `network_daily`, das den letzten des Tages hält. Ohne
+diese Angleichung lagen die beiden am 07.09. um 10 % auseinander, obwohl die
+Quellen sich einig sind.
 
 Oberfläche auf Englisch (3 Reiter: Overview, Leaderboard, Activity),
 Code-Kommentare auf Deutsch.

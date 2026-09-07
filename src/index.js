@@ -541,28 +541,34 @@ async function watchlist(db, env, u) {
 
 /* ---------- Kursverlauf ------------------------------------------------
  *
- * Quelle ist CoinGecko. Der Block-Explorer kam dafuer nicht in Frage: seine
- * Reihe ist auf 30 Tage festgenagelt (mit ?days= und ?resolution= gegen-
- * geprueft, beides wirkungslos), und ihr Kursfeld ist nur fuer den jeweils
- * neuesten Tag gefuellt - der Verlauf musste aus Marktkapitalisierung geteilt
- * durch Umlaufmenge zurueckgerechnet werden. Das war eine Naeherung, wo es
- * den echten Kurs frei zu haben gibt.
+ * Kommt ausschliesslich aus der eigenen Datenbank. Drei Anlaeufe mit fremden
+ * Zugaengen sind vorher gescheitert, und zwar nicht an der Programmierung:
  *
- * CoinGecko liefert ohne Schluessel bis zu einem Jahr und waehlt die
- * Aufloesung selbst: 5 Minuten bei einem Tag, stuendlich bis 90 Tage, taeglich
- * darueber. "max" verlangt einen Bezahlplan - deshalb endet die Auswahl bei
- * einem Jahr.
+ *   Block-Explorer   Kursreihe auf 30 Tage festgenagelt (?days= und
+ *                    ?resolution= gegengeprueft, wirkungslos), Kursfeld nur
+ *                    fuer den neuesten Tag gefuellt.
+ *   CoinGecko        403 ohne User-Agent - Workers schicken keinen. Mit
+ *                    Kennung dann 429: das Gratis-Kontingent haengt an der
+ *                    IP, und Worker teilen sich ihre Adressen mit allen.
+ *   Coinpaprika      402 aus dem Worker heraus, waehrend dieselbe URL von
+ *                    einem gewoehnlichen Anschluss 200 liefert.
  *
- * Faellt CoinGecko aus (das Gratis-Kontingent ist knapp, und Worker teilen
- * sich Adressen), wird auf die eigenen Snapshots zurueckgefallen. Die reichen
- * nur so weit zurueck wie dieses Dashboard laeuft, sind aber besser als eine
- * leere Karte.
+ * Gegen fremde IP-Sperren ist nichts auszurichten. Also wurde die
+ * Vergangenheit EINMAL geholt (scripts/price-backfill.mjs -> price_history)
+ * und wird seither aus den eigenen Snapshots weitergeschrieben. Damit ist der
+ * Kurs so verfuegbar wie alles andere hier: ohne fremde Zusage, ohne
+ * Kontingent, ohne Schluessel.
+ *
+ *   bis 24 Stunden   snapshots, alle 30 Minuten ein Punkt
+ *   darueber         price_history (Vergangenheit) + network_daily (seither),
+ *                    plus der aktuelle Kurs als letzter Punkt - sonst endete
+ *                    die Kurve beim Stand von Mitternacht, waehrend darueber
+ *                    gross der Kurs von jetzt steht.
  */
 const KURS_ZEITRAUM = { "24h": 1, "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
 
-// Wie viele Punkte hoechstens zurueckgegeben werden. CoinGecko liefert fuer
-// 30 Tage ueber 700 Stundenwerte; auf einer 700 Pixel breiten Kurve ist jeder
-// zweite davon unsichtbar und kostet nur Uebertragung.
+// Auf 700 Pixel Breite ist jeder zweite Punkt einer feineren Reihe unsichtbar
+// und kostet nur Uebertragung.
 const KURS_MAX_PUNKTE = 320;
 
 function ausduennen(punkte, max = KURS_MAX_PUNKTE) {
@@ -570,7 +576,6 @@ function ausduennen(punkte, max = KURS_MAX_PUNKTE) {
   const schritt = punkte.length / max;
   const out = [];
   for (let i = 0; i < max; i++) out.push(punkte[Math.floor(i * schritt)]);
-  // Der letzte Punkt ist der aktuelle Kurs - der darf nie wegfallen.
   if (out[out.length - 1] !== punkte[punkte.length - 1]) out.push(punkte[punkte.length - 1]);
   return out;
 }
@@ -578,46 +583,58 @@ function ausduennen(punkte, max = KURS_MAX_PUNKTE) {
 async function preisverlauf(env, u) {
   const p = u.searchParams.get("period") ?? "30d";
   const tage = KURS_ZEITRAUM[p] ?? 30;
+  const db = env.DB;
 
-  try {
-    const r = await fetch(
-      "https://api.coingecko.com/api/v3/coins/electroneum/market_chart" +
-        "?vs_currency=usd&days=" + tage,
-      { headers: { accept: "application/json" } }
-    );
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    const preise = d?.prices ?? [];
-    if (!preise.length) throw new Error("leere Reihe");
-    return {
-      zeitraum: p,
-      quelle: "coingecko",
-      feinkoernig: tage <= 7,
-      punkte: ausduennen(
-        preise.map(([ms, preis]) => ({ zeit: new Date(ms).toISOString(), preis }))
-      ),
-    };
-  } catch (e) {
-    return { ...(await preisNotnagel(env, tage)), zeitraum: p, grund: e.message };
+  const snapshots = async (abZeit) =>
+    (
+      await db
+        .prepare(
+          "SELECT taken_at AS zeit, etn_price AS preis FROM snapshots" +
+            " WHERE etn_price IS NOT NULL AND taken_at >= ? ORDER BY taken_at ASC"
+        )
+        .bind(abZeit)
+        .all()
+    ).results;
+
+  if (tage === 1) {
+    const punkte = await snapshots(new Date(Date.now() - 86400000).toISOString());
+    return { zeitraum: p, quelle: "snapshots", feinkoernig: true, punkte: ausduennen(punkte) };
   }
-}
 
-/** Rueckfall auf die eigenen Snapshots, wenn CoinGecko nicht antwortet. */
-async function preisNotnagel(env, tage) {
-  const ab = new Date(Date.now() - tage * 86400000).toISOString();
-  const rows = (
-    await env.DB.prepare(
-      "SELECT taken_at, etn_price FROM snapshots" +
-        " WHERE etn_price IS NOT NULL AND taken_at >= ? ORDER BY taken_at ASC"
-    )
-      .bind(ab)
+  // Tagesreihe: die nachgeladene Vergangenheit, dahinter die eigenen Tage.
+  //
+  // Beide Seiten muessen DIESELBE Tageszeit meinen, sonst entsteht an der
+  // Nahtstelle ein Knick, der wie ein Fehler aussieht. Gemessen: die
+  // nachgeladene Reihe fuehrt den Stand um 00:00, network_daily dagegen den
+  // LETZTEN Snapshot des Tages - am 07.09. lagen die beiden dadurch 10
+  // Prozent auseinander, obwohl beide Quellen sich auf 0,4 Prozent einig
+  // sind. Darum hier nicht network_daily, sondern der jeweils FRUEHESTE
+  // Snapshot eines Tages: das ist derselbe Tagesbeginn.
+  //
+  // Die nachgeladene Reihe gewinnt, wo es sie gibt; die eigenen Tage fuellen
+  // alles auf, was danach kam.
+  const abTag = new Date(Date.now() - tage * 86400000).toISOString().slice(0, 10);
+  const tageReihe = (
+    await db
+      .prepare(
+        "SELECT day AS zeit, preis, min(rang) FROM (" +
+          "  SELECT day, preis, 1 AS rang FROM price_history WHERE day >= ?1" +
+          "  UNION ALL" +
+          "  SELECT substr(taken_at,1,10) AS day, etn_price AS preis, 2 AS rang" +
+          "    FROM snapshots WHERE etn_price IS NOT NULL AND substr(taken_at,1,10) >= ?1" +
+          "   GROUP BY substr(taken_at,1,10) HAVING taken_at = min(taken_at)" +
+          ") GROUP BY day ORDER BY day ASC"
+      )
+      .bind(abTag)
       .all()
   ).results;
-  return {
-    quelle: "snapshots",
-    feinkoernig: tage <= 7,
-    punkte: ausduennen(rows.map((r) => ({ zeit: r.taken_at, preis: r.etn_price }))),
-  };
+
+  // Der aktuelle Kurs als letzter Punkt.
+  const jetzt = (await snapshots(new Date(Date.now() - 86400000).toISOString())).pop();
+  const punkte = [...tageReihe];
+  if (jetzt && (!punkte.length || jetzt.zeit > punkte[punkte.length - 1].zeit)) punkte.push(jetzt);
+
+  return { zeitraum: p, quelle: "eigene", feinkoernig: false, punkte: ausduennen(punkte) };
 }
 
 async function events(db, u) {
@@ -1271,7 +1288,7 @@ export default {
       const db = env.DB;
       if (pfad === "/api/overview") antwort = json(await overview(db, env));
       else if (pfad === "/api/network") antwort = json(await network(env), 200, 60);
-      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 300);
+      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 900);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
