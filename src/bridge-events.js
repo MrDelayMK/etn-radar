@@ -59,6 +59,16 @@ const STD_BUDGET_MINUTEN = 100;
 // Woche Bridge-Verkehr sind je nach Andrang 15 bis 100 Seiten.
 const NACHLAUF_SEITEN = 400;
 
+// In wie grossen Haeppchen die Historie abgearbeitet wird.
+//
+// Der Weg zurueck dauert Stunden. Wuerde erst am Ende geschrieben, waere ein
+// Abbruch bei Minute 95 - Zeitlimit, Aussetzer beim Explorer, abgebrochener
+// Lauf - komplett verloren, und der naechste Lauf finge an derselben Stelle
+// wieder an. Nach jedem Haeppchen werden darum die gefundenen Transfers UND
+// der Cursor festgehalten. Schlimmstenfalls gehen die paar hundert Seiten des
+// laufenden Haeppchens verloren.
+const HAEPPCHEN_SEITEN = 400;
+
 /** Schluessel einer Transferzeile - zweimal einlesen aendert nichts. */
 const schluessel = (t) => t.hash + ":" + t.to + ":" + t.value_wei;
 
@@ -131,48 +141,66 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
   let fertig = stand.fertig;
   let cursor = stand.cursor ? JSON.parse(stand.cursor) : null;
 
+  const zustandSchreiben = () =>
+    db
+      .prepare(
+        "INSERT INTO bridge_scan (id, neuestes_bekannt, aeltestes_bekannt, cursor, fertig," +
+          " seiten_gesamt, aktualisiert_am) VALUES (1,?,?,?,?,?,?)" +
+          " ON CONFLICT(id) DO UPDATE SET neuestes_bekannt=excluded.neuestes_bekannt," +
+          "   aeltestes_bekannt=excluded.aeltestes_bekannt, cursor=excluded.cursor," +
+          "   fertig=excluded.fertig, seiten_gesamt=excluded.seiten_gesamt," +
+          "   aktualisiert_am=excluded.aktualisiert_am"
+      )
+      .bind(
+        neuestes,
+        aeltestes,
+        cursor ? JSON.stringify(cursor) : null,
+        fertig,
+        (stand.seiten_gesamt ?? 0) + seiten,
+        new Date().toISOString()
+      )
+      .run();
+
+  // Nach dem Blick nach oben schon einmal sichern - der hat ja auch Zeit
+  // gekostet.
+  await zustandSchreiben();
+
   if (!fertig) {
     log(
       (cursor ? "Historie fortsetzen" : "Historie beginnen") +
-        " (Budget " + Math.round(budgetMs / 60000) + " Minuten) ..."
+        " (Budget " + Math.round(budgetMs / 60000) + " Minuten, " +
+        HAEPPCHEN_SEITEN + " Seiten je Haeppchen) ..."
     );
-    const r = await fetchInternalTransactions(api, bridge, {
-      maxPages: 100000,
-      startCursor: cursor,
-      fristMs: budgetMs,
-    });
-    seiten += r.seiten;
-    neueTransfers += await speichern(r.transfers);
-    spanne(r.transfers);
-    cursor = r.cursor;
-    fertig = r.cursor ? 0 : 1;
+    let rest = budgetMs;
+    while (!fertig && rest > 0) {
+      const t0 = Date.now();
+      const r = await fetchInternalTransactions(api, bridge, {
+        maxPages: HAEPPCHEN_SEITEN,
+        startCursor: cursor,
+        fristMs: rest,
+      });
+      if (!r.seiten) break;
+      seiten += r.seiten;
+      neueTransfers += await speichern(r.transfers);
+      spanne(r.transfers);
+      cursor = r.cursor;
+      fertig = r.cursor ? 0 : 1;
+      await zustandSchreiben();
+      rest -= Date.now() - t0;
+      log(
+        "  " + seiten + " Seiten gesamt, zurueck bis " +
+          (aeltestes ? aeltestes.slice(0, 10) : "—") +
+          ", noch " + Math.max(0, Math.round(rest / 60000)) + " Minuten Budget"
+      );
+    }
     log(
-      "  " + r.seiten + " Seiten, " + r.transfers.length + " Transfers angesehen, zurueck bis " +
-        (r.transfers.length ? r.transfers[r.transfers.length - 1].timestamp.slice(0, 10) : "—") +
-        (fertig ? " - Anfang der Bridge erreicht" : " - Rest beim naechsten Lauf")
+      fertig
+        ? "  Anfang der Bridge erreicht - die Historie ist vollstaendig."
+        : "  Budget aufgebraucht, der Rest kommt beim naechsten Lauf."
     );
   } else {
     log("Historie ist vollstaendig erfasst - nur der Blick nach oben war noetig.");
   }
-
-  await db
-    .prepare(
-      "INSERT INTO bridge_scan (id, neuestes_bekannt, aeltestes_bekannt, cursor, fertig," +
-        " seiten_gesamt, aktualisiert_am) VALUES (1,?,?,?,?,?,?)" +
-        " ON CONFLICT(id) DO UPDATE SET neuestes_bekannt=excluded.neuestes_bekannt," +
-        "   aeltestes_bekannt=excluded.aeltestes_bekannt, cursor=excluded.cursor," +
-        "   fertig=excluded.fertig, seiten_gesamt=excluded.seiten_gesamt," +
-        "   aktualisiert_am=excluded.aktualisiert_am"
-    )
-    .bind(
-      neuestes,
-      aeltestes,
-      cursor ? JSON.stringify(cursor) : null,
-      fertig,
-      (stand.seiten_gesamt ?? 0) + seiten,
-      jetzt
-    )
-    .run();
 
   // --- 3. Die Anzeige-Tabelle aus dem Rohbestand neu aufbauen -----------
   //

@@ -596,9 +596,25 @@ async function preisverlauf(env, u) {
         .all()
     ).results;
 
-  if (tage === 1) {
-    const punkte = await snapshots(new Date(Date.now() - 86400000).toISOString());
-    return { zeitraum: p, quelle: "snapshots", feinkoernig: true, punkte: ausduennen(punkte) };
+  // Kurze Zeitraeume aus den eigenen Snapshots: alle 30 Minuten ein Punkt,
+  // feiner als jede Tagesreihe. Aber nur, wenn sie den Zeitraum auch wirklich
+  // abdecken - sonst zeigte die 7-Tage-Kurve nach einer frisch aufgesetzten
+  // Datenbank zwei Tage und behauptete, das seien sieben. Reicht die eigene
+  // Historie nicht, uebernimmt weiter unten die Tagesreihe.
+  if (tage <= 7) {
+    const punkte = await snapshots(new Date(Date.now() - tage * 86400000).toISOString());
+    const abgedeckt =
+      punkte.length >= 2
+        ? (Date.parse(punkte[punkte.length - 1].zeit) - Date.parse(punkte[0].zeit)) / 86400000
+        : 0;
+    if (abgedeckt >= tage * 0.85) {
+      return { zeitraum: p, quelle: "snapshots", feinkoernig: true, punkte: ausduennen(punkte) };
+    }
+    if (tage === 1) {
+      // Fuer einen Tag gibt es keinen Ersatz - die Tagesreihe haette dort
+      // genau einen Punkt.
+      return { zeitraum: p, quelle: "snapshots", feinkoernig: true, punkte: ausduennen(punkte) };
+    }
   }
 
   // Tagesreihe: die nachgeladene Vergangenheit, dahinter die eigenen Tage.
