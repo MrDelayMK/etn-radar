@@ -294,10 +294,32 @@ export async function runIngest(env, db, opts = {}) {
   // gefallen markiert und loest erneut ein rank_exit-Ereignis aus - dauerhaft,
   // fuer immer. Bei 7.000 alten Adressen waren das 14.000 ueberfluessige
   // Schreibvorgaenge pro Lauf und eine Ereignisliste voller Wiederholungen.
+  // Aber nur, wenn die geholte Liste ueberhaupt vollstaendig aussieht.
+  //
+  // Beim Test mit einer verkuerzten Liste kam heraus, was sonst passiert
+  // waere: 400 statt 3.000 Adressen, und der Lauf markierte 2.601 Wallets als
+  // herausgefallen und schrieb ebenso viele "Left top N"-Ereignisse - aus
+  // einem reinen Abbruch beim Blaettern. Der naechste vollstaendige Lauf
+  // haette sie alle wieder hereingeholt, samt weiterer 2.601 Zeilen. Rund
+  // 5 Prozent des Tagesbudgets fuer eine Falschmeldung.
+  //
+  // Gemessen wird gegen die ANGEFORDERTE Groesse, nicht gegen den letzten
+  // Lauf: wer TRACK_TOP_N bewusst herabsetzt, bekommt genau so viele Zeilen
+  // wie angefordert und wird davon nicht ausgebremst.
   const seen = new Set(rows.map((r) => r.hash));
-  const dropped = [...prev.entries()]
-    .filter(([a, p]) => !seen.has(a) && p.in_top_n !== 0)
-    .map(([a]) => a);
+  const listeGlaubhaft = bootstrap || rows.length >= topN * 0.8;
+  if (!listeGlaubhaft) {
+    log(
+      "  WARNUNG: nur " + rows.length + " von " + topN + " Adressen geliefert - " +
+        "Abgaenge werden diesmal NICHT ausgewertet, sonst gaelten " +
+        (prev.size - rows.length) + " Wallets faelschlich als herausgefallen."
+    );
+  }
+  const dropped = !listeGlaubhaft
+    ? []
+    : [...prev.entries()]
+        .filter(([a, p]) => !seen.has(a) && p.in_top_n !== 0)
+        .map(([a]) => a);
   for (const a of dropped) {
     stmts.push(markDropped.bind(a));
     if (!bootstrap) {

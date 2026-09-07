@@ -23,6 +23,21 @@ const json = (data, status = 200, cache = CACHE_SEKUNDEN) =>
 
 const fehler = (msg, status = 400) => json({ error: msg }, status, 0);
 
+/**
+ * Zahl aus einem Abfrageparameter - mit Rueckfall und Grenzen.
+ *
+ * Number("abc") ist NaN, und NaN geht durch Math.min/Math.max unveraendert
+ * hindurch: aus Math.min(200, Math.max(10, NaN)) wird wieder NaN. Genau so
+ * landete "?limit=abc" als Bindungswert in der Abfrage und quittierte mit 500.
+ * Einmal hier abgefangen statt an zehn Aufrufstellen.
+ */
+function zahlParam(u, name, standard, min = -Infinity, max = Infinity) {
+  const roh = u.searchParams.get(name);
+  const n = roh == null || roh === "" ? standard : Number(roh);
+  if (!Number.isFinite(n)) return standard;
+  return Math.min(max, Math.max(min, n));
+}
+
 /** Tag N Tage in der Vergangenheit als YYYY-MM-DD. */
 const tagVor = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -248,16 +263,16 @@ async function overview(db, env) {
 }
 
 async function leaderboard(db, env, u) {
-  const limit = Math.min(250, Math.max(10, Number(u.searchParams.get("limit") ?? 50)));
-  const offset = Math.max(0, Number(u.searchParams.get("offset") ?? 0));
+  const limit = zahlParam(u, "limit", 50, 10, 250);
+  const offset = zahlParam(u, "offset", 0, 0);
   const tage = ZEITRAUM[u.searchParams.get("period") ?? STD_ZEITRAUM] ?? 7;
   const tier = u.searchParams.get("tier");
   // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
   // was tatsaechlich einer Person oder Gruppe gehoert.
   const nurEcht = u.searchParams.get("nur_wallets") === "1";
   // Balance-Bereich, z.B. "zeig mir nur 100k-500k ETN".
-  const minEtn = u.searchParams.get("min_etn") ? Number(u.searchParams.get("min_etn")) : null;
-  const maxEtn = u.searchParams.get("max_etn") ? Number(u.searchParams.get("max_etn")) : null;
+  const minEtn = u.searchParams.has("min_etn") ? zahlParam(u, "min_etn", NaN) : null;
+  const maxEtn = u.searchParams.has("max_etn") ? zahlParam(u, "max_etn", NaN) : null;
 
   const filter =
     " WHERE c.in_top_n = 1 AND c.address != ?" +
@@ -294,8 +309,12 @@ async function leaderboard(db, env, u) {
     "  FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
     filter +
     "), gereiht AS (" +
-    "  SELECT *, ROW_NUMBER() OVER (ORDER BY etn DESC) AS platz," +
-    "         ROW_NUMBER() OVER (ORDER BY COALESCE(etn_vorher, etn) DESC) AS platz_vorher" +
+    // Die Adresse als zweites Sortierkriterium: bei gleichem Bestand ist die
+    // Reihenfolge sonst nicht festgelegt, und zwei Wallets mit demselben
+    // Betrag koennten zwischen zwei Aufrufen die Plaetze tauschen - im
+    // Leaderboard als erfundene Rangaenderung sichtbar.
+    "  SELECT *, ROW_NUMBER() OVER (ORDER BY etn DESC, address) AS platz," +
+    "         ROW_NUMBER() OVER (ORDER BY COALESCE(etn_vorher, etn) DESC, address) AS platz_vorher" +
     "  FROM stand" +
     ") SELECT * FROM gereiht WHERE platz > ? AND platz <= ? ORDER BY platz";
 
@@ -371,7 +390,7 @@ async function movers(db, env, u) {
     .prepare("SELECT taken_at FROM snapshots WHERE status='ok' ORDER BY id DESC LIMIT 1")
     .first();
   const tage = ZEITRAUM[u.searchParams.get("period") ?? STD_ZEITRAUM] ?? 7;
-  const limit = Math.min(50, Number(u.searchParams.get("limit") ?? 10));
+  const limit = zahlParam(u, "limit", 10, 1, 50);
   const sql =
     "SELECT * FROM (SELECT " + WALLET_FELDER +
     ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
@@ -404,9 +423,9 @@ async function movers(db, env, u) {
 }
 
 async function sleepers(db, env, u) {
-  const minEtn = Number(u.searchParams.get("min_etn") ?? 1000000);
-  const minTage = Number(u.searchParams.get("min_tage") ?? 90);
-  const limit = Math.min(200, Number(u.searchParams.get("limit") ?? 50));
+  const minEtn = zahlParam(u, "min_etn", 1000000, 0);
+  const minTage = zahlParam(u, "min_tage", 90, 0, 3650);
+  const limit = zahlParam(u, "limit", 50, 1, 200);
   const grenze = new Date(Date.now() - minTage * 86400000).toISOString();
 
   const rows = (
@@ -654,9 +673,9 @@ async function preisverlauf(env, u) {
 }
 
 async function events(db, u) {
-  const limit = Math.min(200, Number(u.searchParams.get("limit") ?? 50));
+  const limit = zahlParam(u, "limit", 50, 1, 200);
   const typ = u.searchParams.get("type");
-  const minSev = Number(u.searchParams.get("min_severity") ?? 0);
+  const minSev = zahlParam(u, "min_severity", 0, 0, 100);
   let sql =
     "SELECT e.*, a.label, a.ens_name, a.checksum_hash, c.etn, c.tier" +
     " FROM events e LEFT JOIN addresses a ON a.hash = e.address" +
@@ -1070,7 +1089,7 @@ async function wallet_flows(db, env, adresse, u) {
   const zeitraum = u.searchParams.get("period") ?? "7d";
   const tage = ZEITRAUM[zeitraum] ?? 7;
   const abZeit = new Date(Date.now() - tage * 86400000).toISOString();
-  const topN = Math.min(20, Math.max(3, Number(u.searchParams.get("top") ?? 12)));
+  const topN = zahlParam(u, "top", 12, 3, 20);
 
   const { fetchInboundTransactions, fetchOutboundTransactions } = await import("./blockscout.js");
   const api = env.EXPLORER_API;

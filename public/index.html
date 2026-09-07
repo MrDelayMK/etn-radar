@@ -1344,7 +1344,11 @@ function pctSafe(p, vorher) {
   if (Math.abs(p) >= 100000) return "new";
   return pct(p);
 }
-const kurzAdr = (a) => (a ? a.slice(0, 8) + "…" + a.slice(-6) : "—");
+// Die gekuerzte Adresse landet an sieben Stellen direkt im HTML, teils in
+// einem href. Sie stammt zwar aus der Kette und ist praktisch immer sauberes
+// Hex - aber "praktisch immer" ist bei etwas, das ungeprueft ins Markup geht,
+// kein Argument. Einmal hier abgesichert statt siebenmal an der Verwendung.
+const kurzAdr = (a) => (a ? esc(a.slice(0, 8) + "…" + a.slice(-6)) : "—");
 const EXPLORER = "https://blockexplorer.electroneum.com/address/";
 
 const PERIODEN = [
@@ -2742,7 +2746,8 @@ async function ladeLeaderboard() {
       "</tr>";
   }).join("");
 
-  const von = LB.offset + 1, bis = Math.min(LB.offset + LB.limit, LB.gesamt);
+  const von = Math.min(LB.offset + 1, Math.max(1, LB.gesamt));
+  const bis = Math.min(LB.offset + LB.limit, LB.gesamt);
   const seiteAktuell = Math.floor(LB.offset / LB.limit) + 1;
   const seitenGesamt = Math.max(1, Math.ceil(LB.gesamt / LB.limit));
   el("pageInfo").textContent = nf(von) + "–" + nf(bis) + " of " + nf(LB.gesamt) +
@@ -3747,7 +3752,12 @@ el("hideEx").onclick = (e) => {
 
 // ---------- Seitensprung ----------
 function lbSeiteSpringen() {
-  const seite = Math.max(1, parseInt(el("pageJump").value, 10) || 1);
+  // Nach oben begrenzen, nicht nur nach unten. Ein Sprung auf Seite 60 bei
+  // zwei vorhandenen Seiten ergab sonst eine leere Tabelle und die Zeile
+  // "2.951-71 of 71 (page 60/2)" - eine rueckwaerts laufende Spanne.
+  const letzte = Math.max(1, Math.ceil((LB.gesamt || 1) / LB.limit));
+  const seite = Math.min(letzte, Math.max(1, parseInt(el("pageJump").value, 10) || 1));
+  el("pageJump").value = "";
   LB.offset = (seite - 1) * LB.limit;
   ladeLeaderboard();
 }

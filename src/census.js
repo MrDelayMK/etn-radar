@@ -59,7 +59,28 @@ export async function runCensus(env, db, opts = {}) {
   log("  Ergebnis:");
   for (const z of zaehlungen) log("    " + z.tier.padEnd(10) + String(z.count).padStart(8) + " Wallets");
 
-  const stmts = zaehlungen.map((z) =>
+  // Nur Stufen schreiben, die der Lauf auch WIRKLICH ganz gesehen hat.
+  //
+  // Reichte die Tiefe nicht bis unter die Untergrenze einer Stufe, ist deren
+  // Zahl kein Ergebnis, sondern ein Ausschnitt - meist eine glatte Null. Die
+  // Leseseite nimmt je Stufe den zuletzt geschriebenen Tag; ein zu flacher
+  // Lauf haette also die richtigen Zahlen der Vorwoche durch Nullen ersetzt.
+  // Genau das kam beim Test mit geringer Tiefe heraus: shrimp, plankton und
+  // microbe standen auf 0, obwohl es sie zu Hunderttausenden gibt.
+  const tiefste = letzte?.etn ?? Infinity;
+  const belastbar = zaehlungen.filter((z) => {
+    const t = CENSUS_TIERS.find((x) => x.key === z.tier);
+    return t && t.min > tiefste;
+  });
+  const uebersprungen = zaehlungen.filter((z) => !belastbar.includes(z));
+  if (uebersprungen.length) {
+    log(
+      "  NICHT gespeichert (Tiefe reichte nicht bis unter ihre Grenze): " +
+        uebersprungen.map((z) => z.tier).join(", ")
+    );
+  }
+
+  const stmts = belastbar.map((z) =>
     db
       .prepare(
         "INSERT INTO tier_census (day, tier, count, etn_sum) VALUES (?,?,?,?)" +
@@ -67,7 +88,7 @@ export async function runCensus(env, db, opts = {}) {
       )
       .bind(day, z.tier, z.count, z.etn_sum)
   );
-  await db.batch(stmts);
+  if (stmts.length) await db.batch(stmts);
 
   const ms = Date.now() - t0;
   await db

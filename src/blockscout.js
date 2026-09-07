@@ -131,8 +131,22 @@ export async function fetchTopAddresses(apiBase, topN, onProgress) {
   }
 
   const rows = items.slice(0, topN).map(normalizeAddress);
-  // Rang defensiv selbst vergeben statt der API-Reihenfolge zu vertrauen
-  rows.sort((a, b) => (BigInt(b.balance_wei) > BigInt(a.balance_wei) ? 1 : -1));
+  // Rang defensiv selbst vergeben statt der API-Reihenfolge zu vertrauen.
+  //
+  // Der Vergleich muss bei GLEICHEM Bestand 0 liefern und dann nach der
+  // Adresse entscheiden. Vorher gab er auch bei Gleichstand -1 zurueck - eine
+  // in sich widerspruechliche Ordnung, aus der die Sortierung bei jedem Lauf
+  // eine andere Reihenfolge machen kann. Zwei Wallets mit demselben Betrag
+  // haetten dann alle 30 Minuten die Raenge getauscht: erfundene
+  // Rangaenderungen im Leaderboard und zwei ueberfluessige Schreibvorgaenge
+  // pro Snapshot, dauerhaft.
+  rows.sort((a, b) => {
+    const x = BigInt(a.balance_wei);
+    const y = BigInt(b.balance_wei);
+    if (y > x) return 1;
+    if (y < x) return -1;
+    return a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0;
+  });
   rows.forEach((r, i) => (r.rank_pos = i + 1));
 
   return {
