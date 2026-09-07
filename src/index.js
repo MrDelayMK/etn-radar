@@ -789,7 +789,12 @@ const JOBS = {
   census: { workflow: "census.yml", runsTable: "census_runs" },
   clusters: { workflow: "clusters.yml", runsTable: "cluster_runs" },
   exchanges: { workflow: "exchange-detect.yml", runsTable: "exchange_detect_runs" },
-  bridge: { workflow: "bridge-events.yml", runsTable: "bridge_event_runs" },
+  // Der Bridge-Durchgang arbeitet sich ueber mehrere Laeufe durch die
+  // Historie und setzt jedes Mal dort fort, wo er aufgehoert hat. Mit der
+  // gleichen 24-Stunden-Sperre wie die anderen Jobs braeuchte das Wochen -
+  // und ein fehlgeschlagener Lauf verbrennt den Versuch fuer den ganzen Tag.
+  // Drei Stunden sind gegenueber dem Explorer immer noch zurueckhaltend.
+  bridge: { workflow: "bridge-events.yml", runsTable: "bridge_event_runs", sperreMs: 3 * 3600000 },
 };
 
 /**
@@ -817,7 +822,7 @@ async function job_status(db, name) {
     .first();
   const letzterTrigger = row?.last_triggered_at ?? null;
   const rest = letzterTrigger
-    ? TRIGGER_COOLDOWN_MS - (Date.now() - Date.parse(letzterTrigger))
+    ? (job.sperreMs ?? TRIGGER_COOLDOWN_MS) - (Date.now() - Date.parse(letzterTrigger))
     : 0;
   return {
     letzter_trigger: letzterTrigger,

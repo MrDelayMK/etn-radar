@@ -174,11 +174,25 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
     let rest = budgetMs;
     while (!fertig && rest > 0) {
       const t0 = Date.now();
-      const r = await fetchInternalTransactions(api, bridge, {
-        maxPages: HAEPPCHEN_SEITEN,
-        startCursor: cursor,
-        fristMs: rest,
-      });
+
+      // Ein Fehler im Haeppchen beendet den Durchgang, ohne ihn scheitern zu
+      // lassen: der Stand bis hierher ist gespeichert, der naechste Lauf
+      // setzt dort fort. Vorher schlug ein Aussetzer beim Explorer bis nach
+      // oben durch - genau daran ist der erste grosse Durchgang nach 68
+      // Minuten gestorben, und weil damals erst am Ende geschrieben wurde,
+      // war die ganze Zeit verloren.
+      let r;
+      try {
+        r = await fetchInternalTransactions(api, bridge, {
+          maxPages: HAEPPCHEN_SEITEN,
+          startCursor: cursor,
+          fristMs: rest,
+        });
+      } catch (e) {
+        log("  Abbruch beim Blaettern: " + e.message);
+        log("  Der Stand ist gesichert - der naechste Lauf macht dort weiter.");
+        break;
+      }
       if (!r.seiten) break;
       seiten += r.seiten;
       neueTransfers += await speichern(r.transfers);
