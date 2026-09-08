@@ -2176,13 +2176,17 @@ function zeichnePreisChart(punkte) {
     linieEl.setAttribute("x1", X(i));
     linieEl.setAttribute("x2", X(i));
     linieEl.setAttribute("opacity", ".7");
-    tip.style.display = "block";
+    // Ueber die Klasse, nicht ueber display: Das Stylesheet blendet .tip mit
+    // opacity ein (.tip.on). Mit display allein blieb der Kasten unsichtbar -
+    // korrekt befuellt und positioniert, aber durchsichtig. Die drei anderen
+    // Charts der Seite machen es seit jeher richtig, nur dieser nicht.
+    tip.classList.add("on");
     tip.style.left = Math.min(kasten.width - 130, Math.max(0, (X(i) / W) * kasten.width - 60)) + "px";
     tip.style.top = ((Y(p.preis) / H) * kasten.height - 52) + "px";
     tip.innerHTML = "<b>$" + p.preis.toFixed(6) + "</b><span>" + punktText(p.zeit) + "</span>";
   };
   svg.onmouseleave = () => {
-    tip.style.display = "none";
+    tip.classList.remove("on");
     linieEl.setAttribute("opacity", "0");
   };
 }

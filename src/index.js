@@ -456,7 +456,7 @@ async function leaderboardSchnell(db, env, u, { limit, offset, tage }) {
 
 async function leaderboard(db, env, u) {
   const limit = zahlParam(u, "limit", 50, 10, 250);
-  const offset = zahlParam(u, "offset", 0, 0);
+  const offset = zahlParam(u, "offset", 0, 0, 100000);
   const tage = ZEITRAUM[u.searchParams.get("period") ?? STD_ZEITRAUM] ?? 7;
   const tier = u.searchParams.get("tier");
   // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
@@ -1559,7 +1559,13 @@ async function suche(db, env, q) {
           " FROM current_balances c JOIN addresses a ON a.hash = c.address" +
           " WHERE a.label LIKE ? OR a.ens_name LIKE ? ORDER BY c.etn DESC LIMIT 25"
       )
-      .bind("%" + q + "%", "%" + q + "%")
+      // Auf 40 Zeichen: D1 lehnt laengere LIKE-Muster ab ("pattern too
+      // complex") und antwortete darauf mit HTTP 500 statt "nichts gefunden" -
+      // gemessen an der Live-Seite, schon bei 50 Zeichen. Das Kuerzen gehoert
+      // genau hierhin und NICHT an den Aufruf: Eine vollstaendige Adresse hat
+      // 42 Zeichen und wird oben abgefangen, bevor es zum LIKE kommt. Frueher
+      // gekuerzt, waere sie 40 Zeichen lang gewesen und keine Adresse mehr.
+      .bind("%" + q.slice(0, 40) + "%", "%" + q.slice(0, 40) + "%")
       .all()
   ).results;
   return { quelle: "db", treffer: rows.map((r) => schmuecken(r)) };
@@ -1790,7 +1796,9 @@ export default {
       else if (pfad === "/api/stand") antwort = json(await stand(db), 200, 20);
       else if (pfad === "/api/search") {
         const q = u.searchParams.get("q");
-        antwort = q ? json(await suche(db, env, q)) : fehler("Parameter q fehlt");
+        antwort = q
+          ? json(await suche(db, env, q.slice(0, 200)))
+          : fehler("Parameter q fehlt");
       } else if (pfad.startsWith("/api/wallet-flows/")) {
         antwort = json(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
       } else if (pfad.startsWith("/api/wallet/")) {
@@ -1801,7 +1809,14 @@ export default {
       // Lieber alte Zahlen mit Datum als eine leere Seite - siehe "Notlauf".
       const ersatz = await notlaufLesen(cache, u);
       if (ersatz) return ersatz;
-      antwort = json({ error: e.message, stack: String(e.stack).split("\n")[1] }, 500, 0);
+      antwort = json(
+        {
+          error: e.message,
+          stack: adminOk(request, env) ? String(e.stack).split("\n")[1] : undefined,
+        },
+        500,
+        0
+      );
     }
 
     if (antwort.status === 200) {
