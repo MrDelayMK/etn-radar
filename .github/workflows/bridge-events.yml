@@ -37,7 +37,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # Best effort: schlaegt das fehl, laeuft der Job trotzdem. Am 06.09.
+      # hat ein erschoepftes D1-Schreibkontingent hier die Boersen-Erkennung
+      # blockiert, obwohl sie das neue Schema gar nicht brauchte. Braucht ein
+      # Job wirklich eine neue Spalte, scheitert er daran selbst - mit einer
+      # Meldung, die sagt, welche.
       - name: Migrationen anwenden
+        continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}

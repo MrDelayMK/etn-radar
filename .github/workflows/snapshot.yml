@@ -38,7 +38,13 @@ jobs:
       # stuende er bis zu sieben Tage lang auf einer Datenbank, die sie nicht
       # kennt. Hier bei JEDEM Lauf zu migrieren waeren dagegen 192 sinnlose
       # Anlaeufe taeglich - darum die Stunde als Schalter.
+      # Best effort: schlaegt das fehl, laeuft der Job trotzdem. Am 06.09.
+      # hat ein erschoepftes D1-Schreibkontingent hier die Boersen-Erkennung
+      # blockiert, obwohl sie das neue Schema gar nicht brauchte. Braucht ein
+      # Job wirklich eine neue Spalte, scheitert er daran selbst - mit einer
+      # Meldung, die sagt, welche.
       - name: Migrationen anwenden (einmal taeglich)
+        continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
