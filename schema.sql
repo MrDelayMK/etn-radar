@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
                                              --  alles, was unter der Erfassung liegt)
   changed_count   INTEGER,                   -- davon mit geaenderter Balance
   duration_ms     INTEGER,
+  rows_written    INTEGER,                   -- gemessene Schreiblast des Laufs
   status          TEXT NOT NULL DEFAULT 'ok' -- ok|partial|failed
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_day ON snapshots(day);
@@ -356,3 +357,75 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, detected_at DESC);
 -- Fehler ("duplicate column name") - die Spalte steht ja schon im CREATE
 -- TABLE. Damit war die dokumentierte Ersteinrichtung nicht durchfuehrbar.
 -- ===================================================================
+
+-- ---------------------------------------------------------------
+-- Vorberechnete Kennzahlen fuer die Uebersicht.
+--
+-- Gemessen am 08.09.2026: /api/overview las 7.179 Zeilen pro Aufruf -
+-- dreimal ein voller Durchlauf durch current_balances, um am Ende rund
+-- zwanzig Zahlen anzuzeigen. Ein Index half nicht: in_top_n ist bei fast
+-- allen Zeilen gleich, da muss die Datenbank ohnehin alles ansehen.
+--
+-- Der Snapshot-Lauf hat diese Zahlen ohnehin im Speicher. Er legt sie hier
+-- als eine Zeile ab, der Worker liest sie. Aus 7.179 gelesenen Zeilen wird
+-- eine. Genau daran riss am 08.09. das Tageslimit.
+--
+-- Als JSON, damit eine neue Kennzahl keine Schemaaenderung braucht - gelesen
+-- wird der Block ohnehin immer am Stueck.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS kennzahlen (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  daten        TEXT NOT NULL,             -- JSON-Block, siehe src/ingest.js
+  snapshot_id  INTEGER,
+  erstellt_am  TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------
+-- Rang-Historie, ein Eintrag je Wallet und Tag.
+--
+-- Fuer "hat die Bewegung dem Wallet auch Plaetze gekostet". Der Rang ergibt
+-- sich aus dem Vergleich mit ALLEN anderen und verschiebt sich auch dann,
+-- wenn ein Wallet selbst nichts tut - er laesst sich darum nachtraeglich
+-- nicht aus der Bestandshistorie ableiten. Er muss aufgehoben werden.
+--
+-- Nur beim ERSTEN Snapshot eines Tages geschrieben: 3.000 Zeilen taeglich,
+-- rund 3% des Gratis-Schreibbudgets. Snapshot-genau waeren es 144.000 und
+-- damit 144% - das ist die Genauigkeit nicht wert.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS daily_ranks (
+  address   TEXT NOT NULL,
+  day       TEXT NOT NULL,               -- YYYY-MM-DD
+  rank_pos  INTEGER NOT NULL,
+  PRIMARY KEY (address, day)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_ranks_day ON daily_ranks(day);
+
+-- ---------------------------------------------------------------
+-- Bremse fuer die Live-Abfrage einzelner Wallets.
+--
+-- Wer ein Wallet aufschlaegt, bekommt den Bestand direkt vom Explorer statt
+-- aus dem letzten Snapshot. Damit daraus kein Dauerfeuer auf fremde
+-- Infrastruktur wird, zwei Sperren aus dieser einen Tabelle:
+--
+--   je Wallet   Innerhalb von LIVE_SPERRE_MS kein zweites Mal. Faengt den
+--               Fall ab, dass hundert Leute denselben geteilten Link oeffnen -
+--               das kostet EINE Anfrage, nicht hundert.
+--   global      Hoechstens LIVE_PRO_MINUTE Abfragen fuer die ganze Seite.
+--
+-- Die Tabelle steht bewusst in D1 und nicht im Cache: der Cache liegt je
+-- Rechenzentrum getrennt, ein Deckel darin waere keiner. Die Datenbank ist
+-- eine Instanz - hier gilt die Grenze wirklich global, auch bei zehntausend
+-- Besuchern.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS live_abrufe (
+  address    TEXT PRIMARY KEY,
+  geholt_am  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_live_abrufe_zeit ON live_abrufe(geholt_am);
+
+-- Teilindex fuer den "Services only"-Filter: enthaelt nur die markierten
+-- Adressen (rund zwanzig), nicht alle dreitausend. Ohne ihn muss die
+-- Datenbank die nach Bestand sortierte Liste komplett durchgehen, um eine
+-- Handvoll Treffer zu finden - gemessen 6.012 gelesene Zeilen statt 71.
+CREATE INDEX IF NOT EXISTS idx_addresses_markiert ON addresses(hash)
+  WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1;

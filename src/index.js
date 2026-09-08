@@ -8,13 +8,117 @@
 import { TIERS, tierProgress, tierFor, tierMax, FAST_TIER_MIN } from "./tiers.js";
 import { clusterGruppen } from "./clusters.js";
 import { handleTelegramWebhook } from "./telegram.js";
+import { fetchAddress } from "./blockscout.js";
 
 // Die Daten aendern sich nur alle 30 Minuten - zwei Minuten waren also
 // fuenfzehnmal haeufiger nachgefragt als noetig. Bei Andrang ist das der
 // Unterschied zwischen "haelt" und "Leselimit gerissen": jede Antwort, die
 // aus dem Zwischenspeicher kommt, beruehrt die Datenbank gar nicht.
 // Wie alt die Zahlen sind, sagt die Kopfzeile ohnehin ("snapshot X ago").
-const CACHE_SEKUNDEN = 600;
+// 60 Sekunden. Der Snapshot kommt alle ~30 Minuten - laenger zu cachen macht
+// die Zahlen also nicht stabiler, nur aelter. Zehn Minuten waren noetig,
+// solange /api/overview 7.179 Zeilen je Cache-Miss las; seit der Snapshot-Lauf
+// diese Zahlen vorberechnet (src/ingest.js, 7b), kostet ein Miss fast nichts.
+const CACHE_SEKUNDEN = 60;
+
+/* ---------- Live-Abfrage einzelner Wallets ------------------------------
+ *
+ * Wer ein Wallet aufschlaegt, soll den Bestand von JETZT sehen, nicht den vom
+ * letzten Snapshot. Das kostet genau eine Anfrage an den Explorer - gegen die
+ * ~2.900 taeglichen des Snapshot-Laufs ist das Rauschen, und es faellt nur an,
+ * wenn wirklich jemand hinschaut.
+ *
+ * Zwei Sperren, beide ueber die Tabelle live_abrufe:
+ *
+ *   je Wallet   Innerhalb von LIVE_SPERRE_MS kein zweites Mal. Oeffnen hundert
+ *               Leute denselben geteilten Link, kostet das EINE Anfrage.
+ *   global      Hoechstens LIVE_PRO_MINUTE fuer die ganze Seite.
+ *
+ * Die Sperren stehen in D1 und nicht im Cache: Der Cache liegt je
+ * Rechenzentrum getrennt, ein Deckel darin waere keiner. Die Datenbank ist
+ * eine Instanz - hier gilt die Grenze wirklich global, auch bei zehntausend
+ * Besuchern. Mehr Andrang heisst dann nicht mehr Last fuer den Explorer von
+ * Electroneum, sondern nur oefter den gespeicherten statt einen frischen Wert.
+ *
+ * Greift eine Sperre, ist das kein Fehler: Dann zeigt die Seite den Stand aus
+ * der Datenbank - der oft selbst erst Sekunden alt ist, weil der letzte
+ * Live-Abruf zurueckgeschrieben wurde.
+ */
+const LIVE_SPERRE_MS = 60000;
+const LIVE_PRO_MINUTE = 4;
+
+async function liveBestand(db, env, adr, bekannt) {
+  const jetzt = Date.now();
+  try {
+    const eigen = await db
+      .prepare("SELECT geholt_am FROM live_abrufe WHERE address = ?")
+      .bind(adr)
+      .first();
+    if (eigen && jetzt - Date.parse(eigen.geholt_am) < LIVE_SPERRE_MS) return null;
+
+    const zaehler = await db
+      .prepare("SELECT count(*) n FROM live_abrufe WHERE geholt_am >= ?")
+      .bind(new Date(jetzt - 60000).toISOString())
+      .first();
+    if ((zaehler?.n ?? 0) >= LIVE_PRO_MINUTE) return null;
+
+    const frisch = await fetchAddress(env.EXPLORER_API, adr);
+    if (!frisch || frisch.balance_wei == null) return null;
+    const zeit = new Date(jetzt).toISOString();
+
+    const geaendert = String(bekannt?.balance_wei ?? "") !== String(frisch.balance_wei);
+    const schreiben = [
+      db
+        .prepare(
+          "INSERT INTO live_abrufe (address, geholt_am) VALUES (?,?)" +
+            " ON CONFLICT(address) DO UPDATE SET geholt_am=excluded.geholt_am"
+        )
+        .bind(adr, zeit),
+    ];
+
+    if (geaendert) {
+      // Bestand ja, Rang NEIN: Der Rang ergibt sich aus dem Vergleich mit
+      // allen anderen, und die stehen noch auf dem Stand des letzten
+      // Snapshots. Ihn hier mitzuziehen ergaebe eine Rangliste, in der zwei
+      // Wallets denselben Platz belegen. Er wird beim naechsten Lauf richtig.
+      //
+      // updated_at nur bei echter Aenderung: Die Spalte markiert die letzte
+      // BEWEGUNG und ist die Grundlage der Schlaefer-Erkennung. Sie bei jedem
+      // Hinsehen fortzuschreiben wuerde ausgerechnet die Kernfrage des
+      // Trackers zerstoeren - welche lange stillen Wallets aufwachen.
+      schreiben.push(
+        db
+          .prepare(
+            "UPDATE current_balances SET balance_wei = ?, etn = ?, updated_at = ?" +
+              " WHERE address = ?"
+          )
+          .bind(String(frisch.balance_wei), frisch.etn, zeit, adr)
+      );
+    }
+    await db.batch(schreiben);
+
+    return { balance_wei: String(frisch.balance_wei), etn: frisch.etn, geholt_am: zeit };
+  } catch {
+    // Explorer stumm, Sperre nicht lesbar, was auch immer: Der gespeicherte
+    // Stand ist immer noch eine gute Antwort. Nie deshalb die Seite brechen.
+    return null;
+  }
+}
+
+/**
+ * Nur der Zeitstempel des letzten Snapshots - fuer das Nachladen im Browser.
+ *
+ * Absichtlich winzig: Eine offene Seite fragt hier jede Minute nach und laedt
+ * erst dann wirklich neu, wenn sich der Wert geaendert hat. Wuerde sie
+ * stattdessen im Takt alles neu ziehen, kostete jeder offene Tab zehn
+ * Abfragen pro Minute.
+ */
+async function stand(db) {
+  const r = await db
+    .prepare("SELECT id, taken_at FROM snapshots WHERE status='ok' ORDER BY id DESC LIMIT 1")
+    .first();
+  return { snapshot_id: r?.id ?? null, taken_at: r?.taken_at ?? null };
+}
 
 const json = (data, status = 200, cache = CACHE_SEKUNDEN) =>
   new Response(JSON.stringify(data), {
@@ -75,6 +179,23 @@ function schmuecken(r, jetzt = Date.now()) {
     naechster_tier: p.next?.name ?? null,
     ruhetage,
   };
+}
+
+/**
+ * Vorberechnete Kennzahlen des letzten Snapshots - eine gelesene Zeile.
+ *
+ * Gibt null zurueck, wenn es sie (noch) nicht gibt: frisch aufgesetzt, oder
+ * der Snapshot-Lauf hat seit dem Deploy noch nicht gearbeitet. Jeder Aufrufer
+ * rechnet dann wie frueher selbst - langsamer und teurer, aber die Seite
+ * steht nie still, nur weil eine Optimierung noch nicht gegriffen hat.
+ */
+async function kennzahlen(db) {
+  try {
+    const row = await db.prepare("SELECT daten FROM kennzahlen WHERE id = 1").first();
+    return row?.daten ? JSON.parse(row.daten) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function overview(db, env) {
@@ -152,17 +273,28 @@ async function overview(db, env) {
     );
   }).join(", ");
 
+  // Gemessen am 08.09.2026: die drei Abfragen hier lasen zusammen 7.179
+  // Zeilen - dreimal ein voller Durchlauf durch current_balances, um zwanzig
+  // Zahlen anzuzeigen. Ein Index half nicht, in_top_n ist bei fast allen
+  // Zeilen gleich. Der Snapshot-Lauf hat die Zahlen ohnehin im Speicher und
+  // legt sie ab (src/ingest.js, Abschnitt 7b); hier kostet das eine Zeile.
+  const kz = await kennzahlen(db);
+
   const proTier =
+    kz?.pro_tier ??
     (await db
       .prepare(
         "SELECT " + faelle + " FROM current_balances WHERE in_top_n=1 AND address != ?"
       )
       .bind(String(env.BRIDGE_ADDRESS).toLowerCase())
-      .first()) ?? {};
+      .first()) ??
+    {};
 
-  const grenze = await db
-    .prepare("SELECT MIN(etn) m, COUNT(*) n FROM current_balances WHERE in_top_n=1")
-    .first();
+  const grenze = kz?.grenze
+    ? { m: kz.grenze.min_etn, n: kz.grenze.anzahl }
+    : await db
+        .prepare("SELECT MIN(etn) m, COUNT(*) n FROM current_balances WHERE in_top_n=1")
+        .first();
   const tiefsteErfasst = grenze?.m ?? null;
   const erfasst = grenze?.n ?? 0;
 
@@ -196,13 +328,21 @@ async function overview(db, env) {
       ? Math.max(0, snap.total_addresses - ueberDust)
       : null;
 
-  const schlaefer = await db
-    .prepare(
-      "SELECT COUNT(*) anzahl, SUM(etn) etn FROM current_balances" +
-        " WHERE etn >= 1000000 AND updated_at <= ? AND address != ?"
-    )
-    .bind(new Date(Date.now() - 90 * 86400000).toISOString(), String(env.BRIDGE_ADDRESS).toLowerCase())
-    .all();
+  const schlaefer =
+    kz?.schlaefer ??
+    (
+      await db
+        .prepare(
+          "SELECT COUNT(*) anzahl, SUM(etn) etn FROM current_balances" +
+            " WHERE etn >= 1000000 AND updated_at <= ? AND address != ?"
+        )
+        .bind(
+          new Date(Date.now() - 90 * 86400000).toISOString(),
+          String(env.BRIDGE_ADDRESS).toLowerCase()
+        )
+        .all()
+    ).results?.[0] ??
+    null;
 
   return {
     snapshot: snap,
@@ -227,7 +367,7 @@ async function overview(db, env) {
       top100_anteil: heute?.top100_share ?? null,
       top1000_anteil: heute?.top1000_share ?? null,
     },
-    schlaefer: schlaefer.results?.[0] ?? null,
+    schlaefer,
     tier_info: {
       erfasst,
       tiefste_erfasste_balance: tiefsteErfasst,
@@ -322,6 +462,10 @@ async function leaderboard(db, env, u) {
   // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
   // was tatsaechlich einer Person oder Gruppe gehoert.
   const nurEcht = u.searchParams.get("nur_wallets") === "1";
+  // Das genaue Gegenteil davon: Boersen, Bridges, Dienste und Contracts.
+  // In den Top 3.000 sind das 17 Adressen - handlich genug, um sie am Stueck
+  // anzusehen.
+  const nurDienste = u.searchParams.get("nur_dienste") === "1";
   // Balance-Bereich, z.B. "zeig mir nur 100k-500k ETN".
   const minEtn = u.searchParams.has("min_etn") ? zahlParam(u, "min_etn", NaN) : null;
   const maxEtn = u.searchParams.has("max_etn") ? zahlParam(u, "max_etn", NaN) : null;
@@ -335,6 +479,16 @@ async function leaderboard(db, env, u) {
       ? " AND COALESCE(a.is_excluded,0) = 0" +
         " AND COALESCE(a.label_type,'') NOT IN ('exchange','bridge','service')" +
         " AND COALESCE(a.is_contract,0) = 0"
+      : "") +
+    (nurDienste
+      ? // Als Vorauswahl und nicht als Bedingung auf dem JOIN: So kann die
+        // Datenbank den Teilindex idx_addresses_markiert benutzen, der genau
+        // diese rund zwanzig Adressen enthaelt. Gemessen 71 gelesene Zeilen
+        // statt 6.012 - als OR-Bedingung auf a.* half kein Index, weil das
+        // ORDER BY die ganze Liste durchgehen liess, um siebzehn Treffer zu
+        // finden.
+        " AND c.address IN (SELECT hash FROM addresses" +
+        "   WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1)"
       : "");
 
   const filterArgs = [String(env.BRIDGE_ADDRESS).toLowerCase()];
@@ -354,7 +508,7 @@ async function leaderboard(db, env, u) {
   // so 50 statt 15.014 Zeilen. Genau dieser Weg wird beim Aufruf der Seite
   // genommen; die teure Fassung bleibt fuer die Filter, die selten und dann
   // bewusst benutzt werden.
-  const ohneFilter = !tier && minEtn == null && maxEtn == null && !nurEcht;
+  const ohneFilter = !tier && minEtn == null && maxEtn == null && !nurEcht && !nurDienste;
   if (ohneFilter) return leaderboardSchnell(db, env, u, { limit, offset, tage });
 
   // Rangberechnung ueber die GEFILTERTE Menge: wer Boersen ausblendet, will
@@ -475,12 +629,51 @@ async function movers(db, env, u) {
     db.prepare(sql + " AND etn < etn_vorher ORDER BY (etn - etn_vorher) ASC LIMIT ?")
       .bind(...args, limit).all(),
   ]);
+  // Rang von damals - erst JETZT nachschlagen, fuer die zwanzig angezeigten
+  // Zeilen statt fuer alle dreitausend.
+  //
+  // Der Rang laesst sich nicht aus dem Bestand ableiten: Er verschiebt sich
+  // auch, wenn ein Wallet selbst nichts tut - bewegt sich jemand darueber,
+  // rutscht es ohne eigenes Zutun. Darum haelt der Snapshot-Lauf ihn einmal
+  // taeglich fest (Tabelle daily_ranks).
+  //
+  // Als Teil der grossen Abfrage kostete dieser Nachschlag gemessene 3.110
+  // zusaetzliche Zeilen, weil er vor dem Sortieren fuer jede Zeile lief. Hier
+  // sind es ueber den Primaerschluessel (address, day) ein paar Dutzend.
+  const gezeigt = [...gewinner.results, ...verlierer.results];
+  const rangVorher = new Map();
+  if (gezeigt.length) {
+    const platzhalter = gezeigt.map(() => "?").join(",");
+    try {
+      const rows = (
+        await db
+          .prepare(
+            "SELECT address, rank_pos, max(day) FROM daily_ranks" +
+              " WHERE day <= ? AND address IN (" + platzhalter + ")" +
+              " GROUP BY address"
+          )
+          .bind(tagVor(tage), ...gezeigt.map((r) => r.address))
+          .all()
+      ).results;
+      for (const r of rows) rangVorher.set(r.address, r.rank_pos);
+    } catch {
+      // Tabelle noch nicht angelegt oder leer: Dann bleibt die Spalte eben
+      // leer. Eine fehlende Zusatzangabe darf die Liste nicht kosten.
+    }
+  }
+
   const jetzt = Date.now();
-  const auf = (r) => ({
-    ...schmuecken(r, jetzt),
-    delta_etn: r.etn - r.etn_vorher,
-    delta_pct: r.etn_vorher ? ((r.etn - r.etn_vorher) / r.etn_vorher) * 100 : null,
-  });
+  const auf = (r) => {
+    const rv = rangVorher.get(r.address) ?? null;
+    return {
+      ...schmuecken(r, jetzt),
+      delta_etn: r.etn - r.etn_vorher,
+      delta_pct: r.etn_vorher ? ((r.etn - r.etn_vorher) / r.etn_vorher) * 100 : null,
+      // Die kleinere Zahl ist der bessere Platz: von Rang 12 auf 14 sind -2.
+      rang_vorher: rv,
+      rang_delta: rv != null && r.rank_pos != null ? rv - r.rank_pos : null,
+    };
+  };
   return {
     zeitraum: u.searchParams.get("period") ?? STD_ZEITRAUM,
     snapshot_taken_at: snap?.taken_at ?? null,
@@ -735,10 +928,9 @@ function ausduennen(punkte, max = KURS_MAX_PUNKTE) {
   return out;
 }
 
-async function preisverlauf(env, u) {
+async function preisverlauf(db, env, u) {
   const p = u.searchParams.get("period") ?? "30d";
   const tage = KURS_ZEITRAUM[p] ?? 30;
-  const db = env.DB;
 
   const snapshots = async (abZeit) =>
     (
@@ -801,7 +993,17 @@ async function preisverlauf(env, u) {
   ).results;
 
   // Der aktuelle Kurs als letzter Punkt.
-  const jetzt = (await snapshots(new Date(Date.now() - 86400000).toISOString())).pop();
+  //
+  // Zuerst aus den Netzwerk-Statistiken, die der Snapshot-Lauf ohnehin ablegt:
+  // Der Explorer fuehrt den Kurs dort mit, und die Zahl ist damit so frisch wie
+  // der letzte Lauf, ohne eine einzige zusaetzliche Anfrage. Sonst wie bisher
+  // aus dem juengsten eigenen Snapshot.
+  const kz = await kennzahlen(db);
+  const kursJetzt = kz?.netz?.stats?.coin_price ? Number(kz.netz.stats.coin_price) : null;
+  const jetzt =
+    kursJetzt && Number.isFinite(kursJetzt)
+      ? { zeit: (kz?.erstellt_am ?? new Date().toISOString()).slice(0, 19) + "Z", preis: kursJetzt }
+      : (await snapshots(new Date(Date.now() - 86400000).toISOString())).pop();
   const punkte = [...tageReihe];
   if (jetzt && (!punkte.length || jetzt.zeit > punkte[punkte.length - 1].zeit)) punkte.push(jetzt);
 
@@ -897,8 +1099,21 @@ async function wallet(db, env, hash) {
       .all()
   ).results;
 
+  // Bestand von JETZT statt vom letzten Snapshot - eine Anfrage, nur wenn
+  // wirklich jemand hinsieht, und doppelt gedeckelt (siehe liveBestand).
+  // Greift eine Sperre, bleibt es beim gespeicherten Stand; das ist kein
+  // Fehler und wird auch nicht als solcher gemeldet.
+  const live = await liveBestand(db, env, adr, r);
+  if (live) {
+    r.balance_wei = live.balance_wei;
+    r.etn = live.etn;
+  }
+
   return {
     ...schmuecken(r),
+    // Der Rang bleibt der des letzten Snapshots, auch wenn der Bestand frisch
+    // ist - er laesst sich nur im Vergleich mit allen anderen bestimmen.
+    live: live ? { stand: live.geholt_am, rang_vom_snapshot: true } : null,
     verlauf,
     ereignisse: ereignisseGebuendelt,
     cluster: {
@@ -1365,22 +1580,43 @@ async function suche(db, env, q) {
  * Worker-Cache. Faellt der Explorer aus, kommt eine leere Antwort statt
  * eines Fehlers: der Rest der Uebersicht soll deswegen nicht kippen.
  */
-async function network(env) {
-  const api = env.EXPLORER_API;
-  const holen = async (pfad) => {
-    const r = await fetch(api + pfad, { headers: { accept: "application/json" } });
-    if (!r.ok) throw new Error(pfad + ": HTTP " + r.status);
-    return r.json();
-  };
+/**
+ * Netzwerk-Kacheln.
+ *
+ * Kamen frueher bei jedem Cache-Miss direkt vom Explorer. Das sah harmlos aus
+ * - zwei Anfragen je Minute -, war es aber nicht: Der Cloudflare-Cache liegt
+ * JE RECHENZENTRUM getrennt. Bei Besuchern aus dreissig Laendern holen
+ * dreissig Standorte ihre eigene Kopie, und die Last waere mit der
+ * Besucherzahl mitgewachsen. Genau das soll die Seite dem Explorer von
+ * Electroneum nicht antun.
+ *
+ * Der Snapshot-Lauf holt dieselben Zahlen ohnehin. Er legt sie jetzt mit ab,
+ * hier werden sie nur gelesen: null Anfragen nach draussen, egal wie viele
+ * Leute zuschauen. Preis dafuer sind Zahlen vom letzten Snapshot statt von
+ * vor einer Minute - fuer Blockhoehe und Gaspreis verschmerzbar.
+ */
+async function network(db, env) {
+  const kz = await kennzahlen(db);
+  let s = kz?.netz?.stats ?? null;
+  let verlauf = kz?.netz?.tx_chart ? { chart_data: kz.netz.tx_chart } : null;
 
-  let s, verlauf;
-  try {
-    [s, verlauf] = await Promise.all([
-      holen("/stats"),
-      holen("/stats/charts/transactions").catch(() => null),
-    ]);
-  } catch (e) {
-    return { leer: true, grund: e.message };
+  // Rueckfall, solange der Snapshot-Lauf die Zahlen noch nicht abgelegt hat
+  // (frisch deployt, frische Datenbank).
+  if (!s) {
+    const api = env.EXPLORER_API;
+    const holen = async (pfad) => {
+      const r = await fetch(api + pfad, { headers: { accept: "application/json" } });
+      if (!r.ok) throw new Error(pfad + ": HTTP " + r.status);
+      return r.json();
+    };
+    try {
+      [s, verlauf] = await Promise.all([
+        holen("/stats"),
+        holen("/stats/charts/transactions").catch(() => null),
+      ]);
+    } catch (e) {
+      return { leer: true, grund: e.message };
+    }
   }
 
   const zahl = (v) => (v == null || v === "" ? null : Number(v));
@@ -1414,6 +1650,58 @@ async function network(env) {
   };
 }
 
+/* ---------- Notlauf ----------------------------------------------------
+ *
+ * Faellt die Datenbank aus - gerissenes Tageslimit, Stoerung, was auch immer -,
+ * lieferte die Seite bisher eine 500 und blieb leer. Von aussen sieht das aus
+ * wie ein kaputtes Projekt, obwohl die Zahlen von vor zehn Minuten voellig
+ * brauchbar gewesen waeren: sie aendern sich ohnehin nur alle 30 Minuten.
+ *
+ * Darum liegt von jeder geglueckten Antwort eine Zweitschrift im
+ * Cloudflare-Cache. Scheitert die Datenbank, wird sie ausgeliefert, mit dem
+ * Vermerk, von wann sie ist. Die Seite wird dann alt, aber sie steht.
+ *
+ * Best effort, keine Zusage: Der Cache gehoert Cloudflare, liegt je
+ * Rechenzentrum getrennt und wird geraeumt, wann Cloudflare will. Ein
+ * Standort, der noch nie eine gute Antwort gesehen hat, hat auch keine
+ * Zweitschrift. Dafuer kostet er nichts und braucht keinen weiteren Dienst.
+ */
+const NOTLAUF_TAGE = 7;
+
+/** Schluessel der Zweitschrift: dieselbe URL, aber ohne Cache-Buster - sonst
+ *  legte jeder Aufruf mit ?_=<zeit> seine eigene an und faende nie eine. */
+function notlaufSchluessel(u) {
+  const k = new URL(u);
+  k.searchParams.delete("_");
+  k.pathname = "/__notlauf" + k.pathname;
+  return new Request(k.toString());
+}
+
+async function notlaufSchreiben(cache, u, antwort) {
+  const kopie = new Response(antwort.body, antwort);
+  kopie.headers.set("cache-control", "public, max-age=" + NOTLAUF_TAGE * 86400);
+  kopie.headers.set("x-notlauf-stand", new Date().toISOString());
+  await cache.put(notlaufSchluessel(u), kopie);
+}
+
+/** Liefert die Zweitschrift, falls es eine gibt - sonst null. */
+async function notlaufLesen(cache, u) {
+  const alt = await cache.match(notlaufSchluessel(u));
+  if (!alt) return null;
+  let daten;
+  try {
+    daten = await alt.json();
+  } catch {
+    return null;
+  }
+  if (!daten || typeof daten !== "object" || Array.isArray(daten)) return null;
+  return json(
+    { ...daten, notlauf: true, notlauf_stand: alt.headers.get("x-notlauf-stand") },
+    200,
+    0
+  );
+}
+
 export default {
   async fetch(request, env, ctx) {
     const u = new URL(request.url);
@@ -1439,6 +1727,21 @@ export default {
         return json({ error: "Der Posteingang ist dem Betreiber vorbehalten." }, 403, 0);
       }
       return json(await feedbackLesen(env.DB), 200, 0);
+    }
+
+    // Einzelnen Eintrag loeschen. Den Knopf im Browser zu verstecken reicht
+    // nicht - loeschen kann sonst jeder, der die Adresse kennt. Also dieselbe
+    // Pruefung wie beim Lesen des Posteingangs.
+    const fbMatch = pfad.match(/^\/api\/feedback\/(\d+)$/);
+    if (fbMatch) {
+      if (request.method !== "DELETE") {
+        return new Response("DELETE erforderlich", { status: 405 });
+      }
+      if (!adminOk(request, env)) {
+        return json({ error: "Nur der Betreiber darf loeschen." }, 403, 0);
+      }
+      await env.DB.prepare("DELETE FROM feedback WHERE id = ?").bind(Number(fbMatch[1])).run();
+      return json({ ok: true }, 200, 0);
     }
 
     const jobMatch = pfad.match(/^\/api\/(census|clusters|exchanges|bridge)\/(status|trigger)$/);
@@ -1471,8 +1774,8 @@ export default {
     try {
       const db = env.DB;
       if (pfad === "/api/overview") antwort = json(await overview(db, env));
-      else if (pfad === "/api/network") antwort = json(await network(env), 200, 60);
-      else if (pfad === "/api/price") antwort = json(await preisverlauf(env, u), 200, 900);
+      else if (pfad === "/api/network") antwort = json(await network(db, env), 200, 120);
+      else if (pfad === "/api/price") antwort = json(await preisverlauf(db, env, u), 200, 300);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
@@ -1482,6 +1785,9 @@ export default {
       else if (pfad === "/api/watchlist") antwort = json(await watchlist(db, env, u), 200, 30);
       else if (pfad === "/api/exchange-flow") antwort = json(await exchange_flow(db, u));
       else if (pfad === "/api/tiers") antwort = json({ tiers: TIERS });
+      // Nur der Snapshot-Zeitstempel. Kurz gecacht, damit offene Seiten
+      // haeufig nachfragen koennen, ohne die Datenbank zu belasten.
+      else if (pfad === "/api/stand") antwort = json(await stand(db), 200, 20);
       else if (pfad === "/api/search") {
         const q = u.searchParams.get("q");
         antwort = q ? json(await suche(db, env, q)) : fehler("Parameter q fehlt");
@@ -1492,10 +1798,16 @@ export default {
         antwort = w ? json(w) : fehler("Wallet nicht gefunden", 404);
       } else antwort = fehler("Unbekannter Endpoint", 404);
     } catch (e) {
+      // Lieber alte Zahlen mit Datum als eine leere Seite - siehe "Notlauf".
+      const ersatz = await notlaufLesen(cache, u);
+      if (ersatz) return ersatz;
       antwort = json({ error: e.message, stack: String(e.stack).split("\n")[1] }, 500, 0);
     }
 
-    if (antwort.status === 200) ctx.waitUntil(cache.put(request, antwort.clone()));
+    if (antwort.status === 200) {
+      ctx.waitUntil(cache.put(request, antwort.clone()));
+      ctx.waitUntil(notlaufSchreiben(cache, u, antwort.clone()));
+    }
     return antwort;
   },
 };

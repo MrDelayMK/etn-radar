@@ -58,3 +58,25 @@ CREATE TABLE IF NOT EXISTS bridge_scan (
   seiten_gesamt     INTEGER NOT NULL DEFAULT 0,
   aktualisiert_am   TEXT
 );
+CREATE TABLE IF NOT EXISTS kennzahlen (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  daten        TEXT NOT NULL,             -- JSON-Block, siehe src/ingest.js
+  snapshot_id  INTEGER,
+  erstellt_am  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS daily_ranks (
+  address   TEXT NOT NULL,
+  day       TEXT NOT NULL,               -- YYYY-MM-DD
+  rank_pos  INTEGER NOT NULL,
+  PRIMARY KEY (address, day)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_ranks_day ON daily_ranks(day);
+CREATE TABLE IF NOT EXISTS live_abrufe (
+  address    TEXT PRIMARY KEY,
+  geholt_am  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_live_abrufe_zeit ON live_abrufe(geholt_am);
+
+ALTER TABLE snapshots ADD COLUMN rows_written INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_addresses_markiert ON addresses(hash) WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1;

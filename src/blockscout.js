@@ -1,7 +1,7 @@
 // Client fuer die Blockscout-API der Electroneum Smart Chain.
 // Getestet gegen Blockscout v7.0.2 auf blockexplorer.electroneum.com.
 
-const UA = "etn-whale-tracker/0.1";
+const UA = "etn-radar/0.1 (+https://etn-radar.galacticsl.com)";
 const schlaf = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------------------
@@ -166,7 +166,21 @@ export async function fetchStats(apiBase) {
     coin_price: d.coin_price ? Number(d.coin_price) : null,
     market_cap: d.market_cap ? Number(d.market_cap) : null,
     gas_prices: d.gas_prices ?? null,
+    roh: d,
   };
+}
+
+/**
+ * Transaktionsverlauf der letzten Tage (fuer die Netzwerk-Kachel).
+ * Fehlt der Endpoint, ist das kein Grund, den Lauf abzubrechen.
+ */
+export async function fetchTxChart(apiBase) {
+  try {
+    const d = await getJson(`${apiBase}/stats/charts/transactions`);
+    return d?.chart_data ?? d?.chartData ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

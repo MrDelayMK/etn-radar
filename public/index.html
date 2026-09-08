@@ -523,7 +523,27 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .fbhinweis{font-size:12px;color:var(--tx3);margin-top:9px;line-height:1.55}
 .fbstatus{font-size:13px;margin-top:11px;font-weight:560}
 .fbhp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+/* Rechts angedockt statt in der Reihe - die Fusszeile allein findet
+   niemand, der nicht ohnehin sucht. */
+#nav .navrechts{margin-left:auto}
+@media (max-width:760px){#nav .navrechts{margin-left:0}}
+
+/* Rangaenderung neben dem Platz: ob eine Bewegung das Wallet auch Plaetze
+   gekostet hat, sieht man dem Betrag allein nicht an. */
+.rk{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:0 4px;
+    border-radius:4px;margin-left:5px;letter-spacing:0}
+.rk.up{color:#34d399;background:#34d3991c}
+.rk.down{color:#f4635e;background:#f4635e1c}
+
 .fbinbox{margin-top:18px;padding-top:15px;border-top:1px solid var(--line)}
+/* Feste Hoehe mit eigenem Rollbereich: bei hundert Nachrichten waere der
+   Dialog sonst laenger als der Bildschirm. */
+.fbliste{max-height:300px;overflow-y:auto;padding-right:4px}
+.fbeintrag{position:relative;padding-right:26px}
+.fbdel{position:absolute;top:8px;right:0;width:20px;height:20px;line-height:1;
+       border:0;background:transparent;color:var(--tx3);cursor:pointer;
+       border-radius:5px;font-size:15px;padding:0}
+.fbdel:hover{background:#f4635e1c;color:#f4635e}
 .fbinbox h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
             color:var(--tx3);font-weight:700;margin-bottom:11px}
 .fbeintrag{padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--tx2);
@@ -753,6 +773,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
   <button data-p="about"><span class="ic">📡</span>About</button>
+  <button data-feedback class="navrechts"><span class="ic">💬</span>Feedback</button>
 </nav>
 
 <!-- ================= OVERVIEW ================= -->
@@ -990,6 +1011,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="tabs" id="lbPeriods"></div>
       <div class="tabs" style="margin-left:auto">
         <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
+        <button class="ghost" id="onlyEx" title="Only exchanges, bridges, services and contracts">Services only</button>
         <button class="ghost" id="exchangesBtn" style="display:none" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
       </div>
     </h2>
@@ -1334,7 +1356,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 
     <div class="fbinbox" id="fbInbox" hidden>
       <h4>Inbox</h4>
-      <div id="fbListe"></div>
+      <div id="fbListe" class="fbliste"></div>
     </div>
   </div>
 </div>
@@ -2326,6 +2348,20 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
 }
 
 // ---------- Movers ----------
+/**
+ * Hat die Bewegung auch Plaetze gekostet?
+ *
+ * Leer, solange es fuer den Zeitraum keine Rang-Historie gibt - die
+ * Aufzeichnung beginnt erst, und fuer 90 Tage zurueck gibt es sie noch lange
+ * nicht. Lieber nichts anzeigen als eine erfundene Zahl.
+ */
+function rangMarke(e) {
+  const rd = e.rang_delta;
+  if (rd == null || rd === 0) return "";
+  return ' <span class="rk ' + (rd > 0 ? "up" : "down") + '">' +
+    (rd > 0 ? "▲" : "▼") + Math.abs(rd) + "</span>";
+}
+
 function zeileMover(e) {
   const d = e.delta_etn;
   const klasse = d > 0 ? "up" : d < 0 ? "down" : "dim3";
@@ -2336,7 +2372,7 @@ function zeileMover(e) {
     // Vorher UND nachher. Bisher stand hier nur der heutige Bestand - was das
     // Wallet vor der Bewegung hatte, musste man sich aus Betrag und Prozent
     // selbst zusammenrechnen.
-    "<span>rank " + (e.rank_pos ?? "—") + " · " +
+    "<span>rank " + (e.rank_pos ?? "—") + rangMarke(e) + " · " +
       (d == null ? kurz(e.etn) : kurz(e.etn - d) + " → " + kurz(e.etn)) + " ETN</span></div>" +
     '<div class="val"><b class="num ' + klasse + '">' + betrag + "</b>" +
     '<span class="num">' + (d == null ? "" : pctSafe(e.delta_pct, e.etn - d)) + "</span></div></a>";
@@ -2751,14 +2787,16 @@ async function ladeMovers(p, bust) {
 }
 
 // ---------- Leaderboard ----------
-const LB = { limit: 50, offset: 0, period: "7d", nurEcht: false, gesamt: 0, minEtn: null, maxEtn: null };
+const LB = { limit: 50, offset: 0, period: "7d", nurEcht: false, nurDienste: false,
+             gesamt: 0, minEtn: null, maxEtn: null };
 
 async function ladeLeaderboard() {
   el("thDelta").textContent = "Δ " + (PERIODEN.find((p) => p.k === LB.period)?.t ?? LB.period);
   el("lbBody").innerHTML = '<tr><td colspan="8"><div class="skel"></div></td></tr>';
 
   let url = "/api/leaderboard?limit=" + LB.limit + "&offset=" + LB.offset +
-    "&period=" + LB.period + (LB.nurEcht ? "&nur_wallets=1" : "");
+    "&period=" + LB.period + (LB.nurEcht ? "&nur_wallets=1" : "") +
+    (LB.nurDienste ? "&nur_dienste=1" : "");
   if (LB.minEtn != null) url += "&min_etn=" + LB.minEtn;
   if (LB.maxEtn != null) url += "&max_etn=" + LB.maxEtn;
 
@@ -2970,6 +3008,21 @@ const EV = {
   rank_enter:   { i: "✨", f: "#5b9cff", t: "New in top N" },
   rank_exit:    { i: "👋", f: "#64748b", t: "Left top N" },
 };
+/**
+ * Betrag eines Ereignisses.
+ *
+ * Bei "New in top N" ist die Zahl der BESTAND des Wallets, keine Bewegung: Es
+ * kann seit Jahren unveraendert daliegen und rutscht nur deshalb in die Liste,
+ * weil ein anderes darunter herausgefallen ist. Das fruehere "+" davor
+ * behauptete einen Zufluss, den es nie gegeben hat - bei einem Tracker, der
+ * Wal-Bewegungen meldet, die unangenehmste Sorte Fehler.
+ */
+function evBetrag(e) {
+  if (!e.delta_etn) return "";
+  if (e.type === "rank_enter") return " · holds " + kurz(e.delta_etn) + " ETN";
+  return " · " + kurz(e.delta_etn, true) + " ETN";
+}
+
 /** Die Nebenrollen eines gebuendelten Ereignisses als kleine Marken. */
 function nebenrollen(e) {
   const weitere = [...new Set(e.auch ?? [])];
@@ -2985,7 +3038,7 @@ async function ladeEvents(bust) {
     const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
     return '<a class="ev" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
       '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
-      '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") +
+      '<div class="tx"><b>' + k.t + evBetrag(e) +
       nebenrollen(e) + "</b>" +
       "<div>" + esc(e.anzeige ?? kurzAdr(e.address)) +
       (e.tier_from ? " · " + e.tier_from + " → " + e.tier_to : "") + "</div></div>" +
@@ -3442,7 +3495,7 @@ function renderWalletDetail(d) {
         const k = EV[e.type] ?? { i: "•", f: "#64748b", t: e.type };
         return '<div class="ev">' +
           '<div class="ic" style="background:' + k.f + '1c;color:' + k.f + '">' + k.i + "</div>" +
-          '<div class="tx"><b>' + k.t + (e.delta_etn ? " · " + kurz(e.delta_etn, true) + " ETN" : "") +
+          '<div class="tx"><b>' + k.t + evBetrag(e) +
           nebenrollen(e) + "</b>" +
           (e.tier_from ? "<div>" + e.tier_from + " → " + e.tier_to + "</div>" : "") + "</div>" +
           '<div class="when">' + zeitHer(e.detected_at) + "</div></div>";
@@ -3655,7 +3708,7 @@ el("watchClear").onclick = () => {
 };
 
 el("nav").onclick = (e) => {
-  const b = e.target.closest("button");
+  const b = e.target.closest("button[data-p]");
   if (b) zeigeSeite(b.dataset.p);
 };
 
@@ -3790,12 +3843,24 @@ document.querySelectorAll("[data-n]").forEach((b) => {
     ladeLeaderboard();
   };
 });
-el("hideEx").onclick = (e) => {
+// Die beiden Filter sind Gegenteile - beide gleichzeitig ergaebe eine immer
+// leere Liste.
+el("hideEx").onclick = () => {
   LB.nurEcht = !LB.nurEcht;
-  e.target.classList.toggle("on", LB.nurEcht);
+  if (LB.nurEcht) LB.nurDienste = false;
+  filterKnoepfe();
+};
+el("onlyEx").onclick = () => {
+  LB.nurDienste = !LB.nurDienste;
+  if (LB.nurDienste) LB.nurEcht = false;
+  filterKnoepfe();
+};
+function filterKnoepfe() {
+  el("hideEx").classList.toggle("on", LB.nurEcht);
+  el("onlyEx").classList.toggle("on", LB.nurDienste);
   LB.offset = 0;
   ladeLeaderboard();
-};
+}
 
 // ---------- Seitensprung ----------
 function lbSeiteSpringen() {
@@ -3956,7 +4021,9 @@ async function fbPosteingang() {
       ? d.eintraege
           .map(
             (e) =>
-              '<div class="fbeintrag"><span class="wer">' +
+              '<div class="fbeintrag" data-fb="' + e.id + '">' +
+              '<button class="fbdel" data-del="' + e.id + '" title="Delete">&times;</button>' +
+              '<span class="wer">' +
               new Date(e.ts).toLocaleString(LOC) +
               (e.absender ? " · " + esc(e.absender) : "") +
               (e.seite ? " · " + esc(e.seite) : "") +
@@ -3968,6 +4035,30 @@ async function fbPosteingang() {
     /* kein Zugriff - dann bleibt der Posteingang eben zu */
   }
 }
+
+// Loeschen: Der Knopf ist nur im Posteingang sichtbar, und den sieht nur der
+// Betreiber. Geprueft wird trotzdem serverseitig - ein versteckter Knopf ist
+// keine Sperre, den Aufruf koennte sonst jeder von Hand schicken.
+el("fbListe").onclick = async (ev) => {
+  const b = ev.target.closest("[data-del]");
+  if (!b) return;
+  const zeile = b.closest(".fbeintrag");
+  zeile.style.opacity = ".4";
+  try {
+    const r = await fetch("/api/feedback/" + b.dataset.del, {
+      method: "DELETE",
+      headers: adminKopf(),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    zeile.remove();
+    if (!el("fbListe").children.length) {
+      el("fbListe").innerHTML = '<div class="dim3" style="font-size:12.5px">Nothing yet.</div>';
+    }
+  } catch {
+    zeile.style.opacity = "1";
+    el("fbStatus").textContent = "Could not delete.";
+  }
+};
 
 async function fbSenden() {
   const nachricht = el("fbText").value.trim();
@@ -4029,10 +4120,51 @@ willkommenPruefen();
 
 // Die Seite bleibt bei vielen offen liegen. Ohne diesen Takt bliebe "snapshot
 // 3 min ago" stundenlang stehen, obwohl nichts mehr nachkommt.
+let bekannteSnapshotId = null;
+
+/**
+ * Nachladen, wenn es wirklich etwas Neues gibt.
+ *
+ * Die Seite bleibt bei vielen offen liegen. Bisher wurde nur der Text
+ * "snapshot 3 min ago" fortgeschrieben, waehrend die Zahlen darunter ewig
+ * stehenblieben - nach zwei Stunden schaute man auf zwei Stunden alte Daten.
+ *
+ * Gefragt wird ein winziger Endpunkt, der nur den Zeitstempel liefert; erst
+ * wenn der sich aendert, wird wirklich neu geladen. Wuerde die Seite im Takt
+ * alles neu ziehen, kostete jeder offene Tab zehn Abfragen pro Minute.
+ * Versteckte Tabs fragen gar nicht.
+ */
+async function pruefeNeueDaten() {
+  if (document.hidden) return;
+  try {
+    const s = await hole("/api/stand");
+    if (!s.snapshot_id) return;
+    if (bekannteSnapshotId == null) {
+      bekannteSnapshotId = s.snapshot_id;
+      return;
+    }
+    if (s.snapshot_id === bekannteSnapshotId) return;
+    bekannteSnapshotId = s.snapshot_id;
+
+    // Alle Bereiche als ungeladen markieren, aber nur den sichtbaren jetzt
+    // holen - der Rest laedt beim Hinwechseln.
+    const aktuell = document.querySelector("#nav button.on")?.dataset.p;
+    geladen.clear();
+    if (aktuell && LADER[aktuell]) {
+      geladen.add(aktuell);
+      await LADER[aktuell]();
+    }
+  } catch {
+    /* Netz weg, Endpunkt stumm: beim naechsten Takt noch einmal */
+  }
+}
+
 setInterval(() => {
-  if (!letzterBekannterSnapshot) return;
-  el("snapTime").textContent = "snapshot " + zeitHer(letzterBekannterSnapshot) + " ago";
-  pruefeFrische();
+  if (letzterBekannterSnapshot) {
+    el("snapTime").textContent = "snapshot " + zeitHer(letzterBekannterSnapshot) + " ago";
+    pruefeFrische();
+  }
+  pruefeNeueDaten();
 }, 60000);
 
 zeigeSeite(LADER[start] ? start : "overview");

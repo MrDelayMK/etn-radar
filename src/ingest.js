@@ -5,8 +5,8 @@
 // (prepare/bind/all/run/batch). Laeuft dadurch identisch im Worker (native D1)
 // und in Node (HTTP-Adapter, siehe src/db-http.js).
 
-import { fetchTopAddresses, fetchStats } from "./blockscout.js";
-import { tierFor } from "./tiers.js";
+import { fetchTopAddresses, fetchStats, fetchTxChart } from "./blockscout.js";
+import { tierFor, TIERS } from "./tiers.js";
 import { benachrichtigeSleeperWakes } from "./telegram.js";
 
 const CHUNK = 100; // Statements pro D1-Batch
@@ -30,10 +30,14 @@ const SLEEPER_DAYS = 30;
 const MIN_EREIGNIS_ETN = 100000;
 
 async function batched(db, statements) {
+  let geschrieben = 0;
   for (let i = 0; i < statements.length; i += CHUNK) {
-    await db.batch(statements.slice(i, i + CHUNK));
+    const res = await db.batch(statements.slice(i, i + CHUNK));
+    // Nicht jeder Adapter liefert meta - dann bleibt die Zahl eben 0 und
+    // niemand faellt darueber.
+    for (const r of res ?? []) geschrieben += r?.meta?.rows_written ?? 0;
   }
-  return statements.length;
+  return { anzahl: statements.length, geschrieben };
 }
 
 /** Wie bedeutsam ist eine Bewegung? 0..100, logarithmisch nach ETN-Betrag. */
@@ -62,9 +66,10 @@ export async function runIngest(env, db, opts = {}) {
 
   // --- 1. Daten holen ---------------------------------------------------
   log("Snapshot " + takenAt + ": lade Top " + topN + " ...");
-  const [top, stats] = await Promise.all([
+  const [top, stats, txChart] = await Promise.all([
     fetchTopAddresses(env.EXPLORER_API, topN, opts.onProgress),
     fetchStats(env.EXPLORER_API).catch(() => ({})),
+    fetchTxChart(env.EXPLORER_API),
   ]);
   const rows = top.rows;
   if (rows.length === 0) throw new Error("Explorer lieferte keine Adressen - Abbruch");
@@ -389,14 +394,115 @@ export async function runIngest(env, db, opts = {}) {
       )
   );
 
+  // --- 7b. Kennzahlen fuer die Uebersicht vorberechnen -------------------
+  //
+  // Diese Zahlen liegen hier ohnehin im Speicher. Frueher rechnete
+  // /api/overview sie bei JEDEM Cache-Miss neu aus der Datenbank - dreimal ein
+  // voller Durchlauf durch current_balances, gemessene 7.179 gelesene Zeilen,
+  // um am Ende zwanzig Zahlen anzuzeigen. Genau daran riss am 08.09.2026 das
+  // Tageslimit. Hier abgelegt kostet dasselbe EINE gelesene Zeile.
+  //
+  // Die Bedingungen muessen exakt die der frueheren Abfragen sein, sonst zeigt
+  // die Seite ploetzlich andere Zahlen als vorher:
+  //   pro_tier   ueber die BETRAEGE aus TIERS - nicht ueber
+  //              current_balances.tier, das ist nur ein Cache und waere nach
+  //              einer Schwellenaenderung veraltet. Ohne die Bridge.
+  //   grenze     MIT Bridge: die alte Abfrage schloss sie hier nicht aus.
+  //   schlaefer  >= 1 Mio ETN, seit SLEEPER_DAYS unbewegt, ohne die Bridge.
+  const schnelleTiers = TIERS.filter((t) => !t.census);
+  const proTier = {};
+  for (const t of schnelleTiers) {
+    const i = TIERS.indexOf(t);
+    const max = i > 0 ? TIERS[i - 1].min : Infinity;
+    const drin = real.filter((r) => r.etn >= t.min && r.etn < max);
+    proTier["n_" + t.key] = drin.length;
+    proTier["e_" + t.key] = drin.reduce((sum, r) => sum + r.etn, 0);
+  }
+
+  // 90 Tage, NICHT SLEEPER_DAYS. Zwei verschiedene Begriffe, die man leicht
+  // verwechselt: SLEEPER_DAYS (30) entscheidet, ab wann ein Erwachen ein
+  // Ereignis wert ist; die Uebersichts-Kachel zaehlt dagegen seit jeher, was
+  // 90 Tage still liegt. Hier muss die Kachel-Definition stehen, sonst zeigt
+  // die Seite nach der Umstellung eine andere Zahl als vorher.
+  const schlaeferGrenze = Date.now() - 90 * 86400000;
+  let schlaeferAnzahl = 0;
+  let schlaeferEtn = 0;
+  for (const r of real) {
+    if (r.etn < 1000000) continue;
+    // Nach diesem Lauf steht in updated_at entweder der alte Stand (Balance
+    // unveraendert) oder takenAt - und wer sich gerade bewegt hat, schlaeft
+    // per Definition nicht.
+    const vorher = prev.get(r.hash);
+    const stand =
+      vorher && vorher.balance_wei === r.balance_wei ? vorher.updated_at : takenAt;
+    if (stand && Date.parse(stand) <= schlaeferGrenze) {
+      schlaeferAnzahl++;
+      schlaeferEtn += r.etn;
+    }
+  }
+
+  stmts.push(
+    db
+      .prepare(
+        "INSERT INTO kennzahlen (id, daten, snapshot_id, erstellt_am) VALUES (1,?,?,?)" +
+          " ON CONFLICT(id) DO UPDATE SET daten=excluded.daten," +
+          " snapshot_id=excluded.snapshot_id, erstellt_am=excluded.erstellt_am"
+      )
+      .bind(
+        JSON.stringify({
+          pro_tier: proTier,
+          grenze: {
+            min_etn: rows.reduce((m, r) => (m == null || r.etn < m ? r.etn : m), null),
+            anzahl: rows.length,
+          },
+          schlaefer: { anzahl: schlaeferAnzahl, etn: schlaeferEtn },
+          // Netzwerk-Kacheln: frueher holte sie jeder Cache-Miss selbst beim
+          // Explorer. Der Cache liegt je Rechenzentrum getrennt, die Last waere
+          // also mit der Besucherzahl mitgewachsen. Einmal je Snapshot abgelegt
+          // sind es null zusaetzliche Anfragen, egal wie viele zuschauen.
+          netz: { stats: stats.roh ?? null, tx_chart: txChart ?? null },
+        }),
+        snapId,
+        takenAt
+      )
+  );
+
+  // --- 7c. Rang-Historie, einmal am Tag ----------------------------------
+  //
+  // Fuer "hat die Bewegung auch Plaetze gekostet". Nachtraeglich laesst sich
+  // der Rang von damals NICHT rekonstruieren: er verschiebt sich auch dann,
+  // wenn ein Wallet selbst nichts tut - bewegt sich jemand darueber, rutscht
+  // es ohne eigenes Zutun. Also muss er aufgehoben werden.
+  //
+  // Einmal je Tag sind das ~3.000 Zeilen, rund 3% des taeglichen
+  // Schreibbudgets. Bei jedem Snapshot waeren es 144.000 und damit 144%.
+  const rangHeuteDa = await db
+    .prepare("SELECT 1 FROM daily_ranks WHERE day = ? LIMIT 1")
+    .bind(day)
+    .first();
+  if (!rangHeuteDa) {
+    const insRang = db.prepare(
+      "INSERT INTO daily_ranks (address, day, rank_pos) VALUES (?,?,?)" +
+        " ON CONFLICT(address, day) DO UPDATE SET rank_pos=excluded.rank_pos"
+    );
+    for (const r of rows) {
+      if (r.rank_pos != null) stmts.push(insRang.bind(r.hash, day, r.rank_pos));
+    }
+    log("  Rang-Historie fuer " + day + " wird angelegt");
+  }
+
   // --- 8. Schreiben ------------------------------------------------------
   log("  schreibe " + stmts.length + " Statements ...");
-  await batched(db, stmts);
+  const schreib = await batched(db, stmts);
+  log("  " + schreib.geschrieben + " Zeilen geschrieben");
 
   const ms = Date.now() - t0;
   await db
-    .prepare("UPDATE snapshots SET status='ok', changed_count=?, duration_ms=? WHERE id=?")
-    .bind(changed, ms, snapId)
+    .prepare(
+      "UPDATE snapshots SET status='ok', changed_count=?, duration_ms=?, rows_written=?" +
+        " WHERE id=?"
+    )
+    .bind(changed, ms, schreib.geschrieben, snapId)
     .run();
 
   // --- 9. Telegram-Weckalarm ---------------------------------------------

@@ -8,7 +8,11 @@ name: ETN Snapshot
 # aber unkritisch.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # 7 und 37 statt 0 und 30: Zur vollen und halben Stunde starten die
+    # Cronjobs der halben Welt, und der Explorer von Electroneum hat dann
+    # ohnehin am meisten zu tun. Ein paar Minuten versetzt trifft die Spitze
+    # nicht. Am Abstand von 30 Minuten aendert das nichts.
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       top_n:
