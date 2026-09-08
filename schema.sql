@@ -195,6 +195,27 @@ CREATE TABLE IF NOT EXISTS exchange_detect_runs (
 
 -- Grosse Migrations-Tage (Bridge-Abfluss-Ausreisser) und wer das Geld erhalten
 -- hat, siehe src/bridge-events.js. top_recipients ist JSON: [{address, etn}].
+-- Rueckmeldungen von der Seite.
+--
+-- Absichtlich in D1 statt in einem eigenen KV-Speicher: das haette eine
+-- weitere Bindung gebraucht, die man beim Aufsetzen vergessen kann. Das
+-- Aufkommen ist ohnehin winzig - eine Zeile je Nachricht faellt gegen die
+-- 100.000 Schreibzeilen am Tag nicht ins Gewicht.
+--
+-- ip_hash ist KEINE Adresse, sondern die ersten 16 Zeichen eines SHA-256 aus
+-- IP und Tag. Genug, um "fuenf pro Stunde" durchzusetzen, und wertlos, um
+-- jemanden zu identifizieren; nach einem Tag passt derselbe Absender ohnehin
+-- auf einen anderen Hash.
+CREATE TABLE IF NOT EXISTS feedback (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts        TEXT NOT NULL,
+  nachricht TEXT NOT NULL,
+  absender  TEXT,
+  seite     TEXT,
+  ip_hash   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
+
 -- Kurshistorie aus der Zeit VOR diesem Dashboard.
 --
 -- Der Kursverlauf wurde zuerst live bei jedem Aufruf von aussen geholt. Das

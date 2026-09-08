@@ -513,6 +513,25 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .stale .ic{font-size:22px;line-height:1;flex:0 0 auto}
 .stale b{color:var(--tx);font-weight:640}
 
+/* ---------- Rueckmeldung ---------- */
+.fbfeld{width:100%;background:#0a0f1b;border:1px solid var(--line2);border-radius:11px;
+        padding:11px 13px;color:var(--tx);font:14px var(--sans);outline:none;
+        resize:vertical;min-height:110px;transition:.15s}
+.fbfeld:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+.fbzeile{display:flex;gap:10px;flex-wrap:wrap;margin-top:11px}
+.fbzeile input{flex:1;min-width:160px;min-height:0;padding:9px 12px;font-size:13.5px}
+.fbhinweis{font-size:12px;color:var(--tx3);margin-top:9px;line-height:1.55}
+.fbstatus{font-size:13px;margin-top:11px;font-weight:560}
+.fbhp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.fbinbox{margin-top:18px;padding-top:15px;border-top:1px solid var(--line)}
+.fbinbox h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+            color:var(--tx3);font-weight:700;margin-bottom:11px}
+.fbeintrag{padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--tx2);
+           line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.fbeintrag:first-of-type{border-top:0}
+.fbeintrag .wer{display:block;font-size:11px;color:var(--tx3);margin-bottom:3px;
+                font-family:var(--mono);white-space:normal}
+
 /* ---------- Willkommen (einmalig) ---------- */
 .welcome{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:22px;
          background:linear-gradient(150deg,var(--card2) 0%,var(--card) 68%);
@@ -1268,6 +1287,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <a href="#activity">Activity</a>
       <a href="#investigate">Investigate</a>
       <a href="#about">About</a>
+      <a href="#" data-feedback>Feedback</a>
     </div>
     <div>
       <h4>Community</h4>
@@ -1286,10 +1306,37 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <div class="footbar">
     <span>&copy; <span id="copyYear"></span> ETN Radar</span>
     <span>Data: Blockscout &middot; snapshot every 30&nbsp;min</span>
-    <span class="sp">Not affiliated with Electroneum Ltd. &middot; not financial advice</span>
+    <span class="sp">Not affiliated with Electroneum Ltd.</span>
   </div>
 </footer>
 
+</div>
+
+<!-- ================= FEEDBACK ================= -->
+<div class="modalbg" id="fbModal">
+  <div class="modal">
+    <div class="mhead">
+      <b>💬 Feedback</b>
+      <button class="x" id="fbClose" aria-label="Close">&times;</button>
+    </div>
+
+    <textarea class="fbfeld" id="fbText" maxlength="1200"
+      placeholder="Found something wrong? Missing a wallet label? Got an idea? Tell me here."></textarea>
+    <div class="fbzeile">
+      <input type="text" class="fbfeld" id="fbName" maxlength="60"
+        placeholder="Your name or @handle (optional)">
+      <button id="fbSend">Send</button>
+    </div>
+    <input type="text" class="fbhp" id="fbHp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="fbhinweis">Goes straight to MrDelayMK. No account, no e-mail address needed —
+      leave a handle if you want an answer.</div>
+    <div class="fbstatus" id="fbStatus"></div>
+
+    <div class="fbinbox" id="fbInbox" hidden>
+      <h4>Inbox</h4>
+      <div id="fbListe"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ================= SHARE DIALOG ================= -->
@@ -3879,6 +3926,93 @@ function willkommenPruefen() {
   if (gesehen && !new URLSearchParams(location.search).has("intro")) return;
   el("welcome").hidden = false;
 }
+
+/* ---------- Rueckmeldung ---------------------------------------------------
+ *
+ * Der Honigtopf (#fbHp) liegt ausserhalb des Bildschirms und wird von keinem
+ * Menschen ausgefuellt. Ist er gefuellt, meldet der Server trotzdem Erfolg -
+ * eine Fehlermeldung wuerde nur verraten, dass die Falle bemerkt wurde.
+ *
+ * Fuer den Betreiber zeigt derselbe Dialog unten den Posteingang. Zwei
+ * getrennte Oberflaechen dafuer waeren doppelte Arbeit fuer denselben Inhalt.
+ */
+function fbOeffnen() {
+  el("fbModal").classList.add("on");
+  el("fbStatus").textContent = "";
+  el("fbText").focus();
+  if (ADMIN.token) fbPosteingang();
+}
+
+function fbSchliessen() {
+  el("fbModal").classList.remove("on");
+}
+
+async function fbPosteingang() {
+  try {
+    const d = await hole("/api/feedback");
+    const box = el("fbInbox");
+    box.hidden = false;
+    el("fbListe").innerHTML = d.eintraege?.length
+      ? d.eintraege
+          .map(
+            (e) =>
+              '<div class="fbeintrag"><span class="wer">' +
+              new Date(e.ts).toLocaleString(LOC) +
+              (e.absender ? " · " + esc(e.absender) : "") +
+              (e.seite ? " · " + esc(e.seite) : "") +
+              "</span>" + esc(e.nachricht) + "</div>"
+          )
+          .join("")
+      : '<div class="dim3" style="font-size:12.5px">Nothing yet.</div>';
+  } catch {
+    /* kein Zugriff - dann bleibt der Posteingang eben zu */
+  }
+}
+
+async function fbSenden() {
+  const nachricht = el("fbText").value.trim();
+  const status = el("fbStatus");
+  if (!nachricht) {
+    status.textContent = "Please write something first.";
+    status.style.color = "var(--warn)";
+    return;
+  }
+  el("fbSend").disabled = true;
+  status.textContent = "Sending…";
+  status.style.color = "var(--tx3)";
+  try {
+    const res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nachricht,
+        absender: el("fbName").value.trim(),
+        seite: document.querySelector("#nav button.on")?.dataset.p ?? "",
+        hp: el("fbHp").value,
+      }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error ?? "Could not send.");
+    el("fbText").value = "";
+    status.textContent = "Thanks — that landed. 🙏";
+    status.style.color = "var(--up)";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--down)";
+  } finally {
+    el("fbSend").disabled = false;
+  }
+}
+
+el("fbSend").onclick = fbSenden;
+el("fbClose").onclick = fbSchliessen;
+el("fbModal").onclick = (e) => { if (e.target.id === "fbModal") fbSchliessen(); };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && el("fbModal").classList.contains("on")) fbSchliessen();
+});
+document.querySelectorAll("[data-feedback]").forEach((a) => {
+  a.onclick = (e) => { e.preventDefault(); fbOeffnen(); };
+});
 
 el("welcomeClose").onclick = () => {
   el("welcome").hidden = true;

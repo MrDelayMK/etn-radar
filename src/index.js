@@ -625,6 +625,75 @@ async function watchlist(db, env, u) {
   };
 }
 
+/* ---------- Rueckmeldungen ----------------------------------------------
+ *
+ * Drei Bremsen gegen Missbrauch, alle ohne Konto und ohne Captcha:
+ *
+ *   Honigtopf   Ein Feld, das niemand sieht und darum niemand ausfuellt.
+ *               Ist es gefuellt, tun wir so, als haette es geklappt - eine
+ *               Fehlermeldung wuerde dem Absender nur verraten, dass wir es
+ *               gemerkt haben.
+ *   Rate        Fuenf Nachrichten je Stunde und Absender.
+ *   Laenge      Zugeschnitten, statt beliebig viel zu speichern.
+ */
+const FEEDBACK_MAX_LAENGE = 1200;
+const FEEDBACK_MAX_ABSENDER = 60;
+const FEEDBACK_PRO_STUNDE = 5;
+
+/** Kurzer Hash aus IP und Tag - reicht zum Bremsen, taugt nicht zum Erkennen. */
+async function absenderHash(request) {
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unbekannt";
+  const roh = new TextEncoder().encode(ip + "|" + new Date().toISOString().slice(0, 10));
+  const digest = await crypto.subtle.digest("SHA-256", roh);
+  return [...new Uint8Array(digest)]
+    .slice(0, 8)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function feedbackSenden(request, db) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Ungueltige Anfrage." }, 400, 0);
+  }
+
+  if (body.hp) return json({ ok: true }, 200, 0); // Honigtopf
+
+  const nachricht = String(body.nachricht ?? "").trim().slice(0, FEEDBACK_MAX_LAENGE);
+  const absender = String(body.absender ?? "").trim().slice(0, FEEDBACK_MAX_ABSENDER) || null;
+  const seite = String(body.seite ?? "").trim().slice(0, 40) || null;
+  if (!nachricht) return json({ error: "Die Nachricht ist leer." }, 400, 0);
+
+  const hash = await absenderHash(request);
+  const seitEinerStunde = new Date(Date.now() - 3600000).toISOString();
+  const bisher = await db
+    .prepare("SELECT count(*) n FROM feedback WHERE ip_hash = ? AND ts >= ?")
+    .bind(hash, seitEinerStunde)
+    .first();
+  if ((bisher?.n ?? 0) >= FEEDBACK_PRO_STUNDE) {
+    return json({ error: "Zu viele Nachrichten in kurzer Zeit. Bitte spaeter noch einmal." }, 429, 0);
+  }
+
+  await db
+    .prepare("INSERT INTO feedback (ts, nachricht, absender, seite, ip_hash) VALUES (?,?,?,?,?)")
+    .bind(new Date().toISOString(), nachricht, absender, seite, hash)
+    .run();
+
+  return json({ ok: true }, 200, 0);
+}
+
+/** Posteingang - nur fuer den Betreiber. */
+async function feedbackLesen(db) {
+  const rows = (
+    await db
+      .prepare("SELECT id, ts, nachricht, absender, seite FROM feedback ORDER BY id DESC LIMIT 100")
+      .all()
+  ).results;
+  return { eintraege: rows };
+}
+
 /* ---------- Kursverlauf ------------------------------------------------
  *
  * Kommt ausschliesslich aus der eigenen Datenbank. Drei Anlaeufe mit fremden
@@ -1362,6 +1431,14 @@ export default {
     if (pfad === "/api/telegram/webhook") {
       if (request.method !== "POST") return new Response("POST erforderlich", { status: 405 });
       return handleTelegramWebhook(request, env, env.DB);
+    }
+
+    if (pfad === "/api/feedback") {
+      if (request.method === "POST") return feedbackSenden(request, env.DB);
+      if (!adminOk(request, env)) {
+        return json({ error: "Der Posteingang ist dem Betreiber vorbehalten." }, 403, 0);
+      }
+      return json(await feedbackLesen(env.DB), 200, 0);
     }
 
     const jobMatch = pfad.match(/^\/api\/(census|clusters|exchanges|bridge)\/(status|trigger)$/);
