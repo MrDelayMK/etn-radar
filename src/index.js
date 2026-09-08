@@ -877,6 +877,148 @@ async function feedbackSenden(request, db) {
   return json({ ok: true }, 200, 0);
 }
 
+/* ---------- Besuchszaehlung --------------------------------------------
+ *
+ * Zaehlt, wie viele verschiedene Menschen die Seite benutzen, wie lange sie
+ * bleiben und wie viel sie klicken. Bewusst selbst gebaut statt mit einem
+ * fremden Dienst: kein Konto, keine laufenden Kosten, keine Daten bei Dritten.
+ *
+ * EINE Zeile je BESUCH, nicht je Klick. Der Browser sammelt waehrend des
+ * Besuchs und meldet beim Verlassen einmal die Zusammenfassung. Bei tausend
+ * Besuchern taeglich sind das tausend geschriebene Zeilen; je Klick waeren es
+ * Zehntausende, und das Gratis-Schreibbudget sind 100.000 am Tag.
+ *
+ * WER GEZAEHLT WIRD: nur wer sich wirklich bewegt hat - Maus, Tastatur,
+ * Scrollen, Beruehrung. Crawler fuehren entweder kein JavaScript aus oder
+ * bewegen nichts, und sie fallen damit heraus, ohne dass irgendjemand eine
+ * Bot-Liste pflegen muesste. Auch die eigenen Pruefabrufe zaehlen nicht mit:
+ * die bewegen nie eine Maus.
+ *
+ * WER NICHT ERKENNBAR WIRD: "besucher" ist ein kurzer Hash aus IP UND TAG. Er
+ * wechselt jede Nacht, laesst sich nicht zurueckrechnen und folgt niemandem
+ * ueber Tage. Kein Cookie, kein localStorage, keine Kennung im Geraet - es
+ * gibt also nichts, wofuer eine Einwilligung einzuholen waere. Er reicht
+ * genau fuer "wie viele verschiedene Leute waren heute da" und fuer nichts
+ * darueber hinaus. Dasselbe Verfahren bremst schon das Feedback-Formular.
+ */
+const BESUCH_MAX_DAUER = 4 * 3600; // laenger ist ein vergessener Tab, kein Besuch
+const BESUCH_MAX_KLICKS = 2000;
+const BESUCH_PRO_STUNDE = 30; // Bremse gegen erfundene Zahlen
+
+async function besuchMelden(request, db) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: true }, 200, 0); // nie mit Fehlern um sich werfen
+  }
+
+  const zahl = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+  const dauer = zahl(body.dauer_s, BESUCH_MAX_DAUER);
+  const klicks = zahl(body.klicks, BESUCH_MAX_KLICKS);
+  // Unter drei Sekunden ohne einen einzigen Klick ist kein Besuch, sondern
+  // ein Blick und ein Zurueck.
+  if (dauer < 3 && klicks === 0) return json({ ok: true }, 200, 0);
+
+  const sauber = (v, n) =>
+    String(v ?? "").trim().slice(0, n).replace(/[^a-zA-Z0-9 ,.:\/-]/g, "") || null;
+
+  const hash = await absenderHash(request);
+  const jetzt = new Date();
+  const seitEinerStunde = new Date(jetzt.getTime() - 3600000).toISOString();
+  const bisher = await db
+    .prepare("SELECT count(*) n FROM besuche WHERE besucher = ? AND ts >= ?")
+    .bind(hash, seitEinerStunde)
+    .first();
+  if ((bisher?.n ?? 0) >= BESUCH_PRO_STUNDE) return json({ ok: true }, 200, 0);
+
+  // Nur die Domain, nie der volle Verweis: Der Pfad einer fremden Seite kann
+  // verraten, wonach jemand gesucht hat.
+  let herkunft = null;
+  try {
+    const r = String(body.herkunft ?? "");
+    if (r) herkunft = new URL(r).hostname.replace(/^www\./, "").slice(0, 60);
+  } catch {
+    herkunft = null;
+  }
+
+  await db
+    .prepare(
+      "INSERT INTO besuche (ts, tag, besucher, dauer_s, klicks, bereiche, einstieg," +
+        " herkunft, geraet) VALUES (?,?,?,?,?,?,?,?,?)"
+    )
+    .bind(
+      jetzt.toISOString(),
+      jetzt.toISOString().slice(0, 10),
+      hash,
+      dauer,
+      klicks,
+      sauber(body.bereiche, 120),
+      sauber(body.einstieg, 20),
+      herkunft,
+      body.mobil ? "mobil" : "desktop"
+    )
+    .run();
+
+  return json({ ok: true }, 200, 0);
+}
+
+/** Auswertung - nur fuer den Betreiber. */
+async function besucheLesen(db, u) {
+  const tage = zahlParam(u, "tage", 14, 1, 90);
+  const abTag = tagVor(tage);
+
+  const [proTag, gesamt, bereiche, herkunft] = await Promise.all([
+    db
+      .prepare(
+        "SELECT tag, count(DISTINCT besucher) leute, count(*) besuche," +
+          " sum(klicks) klicks, avg(dauer_s) dauer FROM besuche" +
+          " WHERE tag >= ? GROUP BY tag ORDER BY tag DESC"
+      )
+      .bind(abTag)
+      .all(),
+    db
+      .prepare(
+        "SELECT count(DISTINCT besucher) leute, count(*) besuche, sum(klicks) klicks," +
+          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil" +
+          " FROM besuche WHERE tag >= ?"
+      )
+      .bind(abTag)
+      .first(),
+    db
+      .prepare("SELECT bereiche FROM besuche WHERE tag >= ? AND bereiche IS NOT NULL LIMIT 2000")
+      .bind(abTag)
+      .all(),
+    db
+      .prepare(
+        "SELECT herkunft, count(*) n FROM besuche WHERE tag >= ? AND herkunft IS NOT NULL" +
+          " GROUP BY herkunft ORDER BY n DESC LIMIT 12"
+      )
+      .bind(abTag)
+      .all(),
+  ]);
+
+  // Reiter zaehlen: steht als kommagetrennte Liste je Besuch, hier
+  // zusammengezaehlt - dafuer lohnt keine eigene Tabelle.
+  const proBereich = {};
+  for (const z of bereiche.results ?? []) {
+    for (const b of String(z.bereiche).split(",")) {
+      const k = b.trim();
+      if (k) proBereich[k] = (proBereich[k] ?? 0) + 1;
+    }
+  }
+
+  return {
+    zeitraum_tage: tage,
+    gesamt: gesamt ?? null,
+    pro_tag: proTag.results ?? [],
+    bereiche: Object.entries(proBereich)
+      .map(([name, n]) => ({ name, n }))
+      .sort((a, b) => b.n - a.n),
+    herkunft: herkunft.results ?? [],
+  };
+}
+
 /** Posteingang - nur fuer den Betreiber. */
 async function feedbackLesen(db) {
   const rows = (
@@ -1007,7 +1149,46 @@ async function preisverlauf(db, env, u) {
   const punkte = [...tageReihe];
   if (jetzt && (!punkte.length || jetzt.zeit > punkte[punkte.length - 1].zeit)) punkte.push(jetzt);
 
-  return { zeitraum: p, quelle: "eigene", feinkoernig: false, punkte: ausduennen(punkte) };
+  return {
+    zeitraum: p,
+    quelle: "eigene",
+    feinkoernig: false,
+    punkte: ausduennen(punkte),
+    marken: await kursMarken(db, kursJetzt ?? jetzt?.preis ?? null),
+  };
+}
+
+/**
+ * Allzeithoch, Allzeittief und das 12-Monats-Hoch, jeweils mit dem Abstand
+ * zum heutigen Kurs.
+ *
+ * Der Abstand wird HIER gerechnet und nicht gespeichert: Er aendert sich mit
+ * jedem Kurs, die Marke selbst nur, wenn sie ueberboten wird.
+ *
+ * Ein Allzeithoch von 2018 kann diese Seite nicht selbst gemessen haben - es
+ * kam einmalig von CoinGecko, weil keine kostenlose Quelle ihre Tagesreihe
+ * weiter als 365 Tage zurueck herausgibt. Seither schreibt der Snapshot-Lauf
+ * die Marken selbst fort.
+ */
+async function kursMarken(db, jetztPreis) {
+  let rows;
+  try {
+    rows = (await db.prepare("SELECT schluessel, preis, tag, quelle FROM kurs_marken").all())
+      .results;
+  } catch {
+    return null; // Tabelle noch nicht da: dann eben ohne
+  }
+  if (!rows?.length) return null;
+  const abstand = (p) =>
+    jetztPreis && p ? ((jetztPreis - p) / p) * 100 : null;
+  return rows.map((r) => ({
+    schluessel: r.schluessel,
+    preis: r.preis,
+    tag: r.tag,
+    quelle: r.quelle,
+    // Negativ = wir liegen darunter, positiv = darueber.
+    abstand_pct: abstand(r.preis),
+  }));
 }
 
 async function events(db, u) {
@@ -1725,6 +1906,19 @@ export default {
     if (pfad === "/api/telegram/webhook") {
       if (request.method !== "POST") return new Response("POST erforderlich", { status: 405 });
       return handleTelegramWebhook(request, env, env.DB);
+    }
+
+    // Besuch melden: offen (jeder Besucher meldet seinen eigenen), Auswertung
+    // nur fuer den Betreiber.
+    if (pfad === "/api/besuch") {
+      if (request.method !== "POST") return new Response("POST erforderlich", { status: 405 });
+      return besuchMelden(request, env.DB);
+    }
+    if (pfad === "/api/besuche") {
+      if (!adminOk(request, env)) {
+        return json({ error: "Die Auswertung ist dem Betreiber vorbehalten." }, 403, 0);
+      }
+      return json(await besucheLesen(env.DB, u), 200, 0);
     }
 
     if (pfad === "/api/feedback") {

@@ -539,6 +539,27 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 /* Feste Hoehe mit eigenem Rollbereich: bei hundert Nachrichten waere der
    Dialog sonst laenger als der Bildschirm. */
 .fbliste{max-height:300px;overflow-y:auto;padding-right:4px}
+
+/* Besucherzahlen im selben Dialog - sie gehoeren derselben Person wie der
+   Posteingang und sollen nicht einen eigenen Knopf brauchen. */
+.statcard .stathead{display:flex;justify-content:space-between;align-items:baseline;
+                    gap:10px;margin-bottom:12px;font-size:13.5px;color:var(--tx2)}
+.statcard .stathead .dim3{font-size:11.5px}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;
+        margin-bottom:12px}
+.stkachel{background:var(--card2);border:1px solid var(--line);border-radius:9px;
+          padding:8px 10px}
+.stkachel .k{display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+             color:var(--tx3);font-weight:700;margin-bottom:3px}
+.stkachel .w{font-family:var(--mono);font-size:16px;color:var(--tx);font-weight:640}
+.sttage{max-height:172px;overflow-y:auto;font-size:11.5px}
+.sttag{display:flex;justify-content:space-between;gap:10px;padding:4px 0;
+       border-top:1px solid var(--line);font-family:var(--mono);color:var(--tx2)}
+.sttag:first-child{border-top:0}
+.sttag .d{color:var(--tx3)}
+.stliste{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.stmarke{background:var(--card2);border:1px solid var(--line);border-radius:6px;
+         padding:2px 7px;font-size:11px;color:var(--tx3);font-family:var(--mono)}
 .fbeintrag{position:relative;padding-right:26px}
 .fbdel{position:absolute;top:8px;right:0;width:20px;height:20px;line-height:1;
        border:0;background:transparent;color:var(--tx3);cursor:pointer;
@@ -672,6 +693,23 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
            border-top:1px solid var(--line);font-size:12px;color:var(--tx3)}
 .pricefoot b{color:var(--tx2);font-weight:620;margin-left:3px}
 .pricecard .tabs{margin:2px 0 12px}
+
+/* Die grossen Marken: Allzeithoch, der Zyklus von 2021, Allzeittief.
+   Der Abstand in Prozent ist die eigentliche Aussage - der Kurs allein sagt
+   wenig, wenn man nicht weiss, wo er einmal stand. */
+.marken{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:9px;
+        margin-top:14px}
+.marke{background:var(--card2);border:1px solid var(--line);border-radius:11px;
+       padding:10px 13px}
+.marke .k{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);
+          font-weight:700;display:block;margin-bottom:5px}
+.marke .w{font-family:var(--mono);font-size:15px;color:var(--tx);font-weight:640;
+          display:block;line-height:1.25}
+.marke .u{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+          margin-top:4px;font-size:11px;color:var(--tx3)}
+.marke .u .pct{font-family:var(--mono);font-weight:700}
+.marke .pct.up{color:var(--up)}
+.marke .pct.down{color:var(--down)}
 .pricefoot .quelle{margin-left:auto;color:var(--tx3)}
 
 
@@ -855,6 +893,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <svg class="chart" id="prChart"></svg>
         <div class="tip" id="prTip"></div>
       </div>
+      <div class="marken" id="prMarken"></div>
       <div class="pricefoot">
         <span>High <b class="num" id="prHigh">&mdash;</b></span>
         <span>Low <b class="num" id="prLow">&mdash;</b></span>
@@ -873,6 +912,18 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <div class="v num" id="kConc">&mdash;</div><div class="s" id="kConcS">&mdash;</div></div>
       <div class="card kpi"><div class="k"><span class="ic">👛</span>Wallets tracked</div>
         <div class="v num" id="kAddr">&mdash;</div><div class="s" id="kAddrS">&mdash;</div></div>
+    </div>
+  </section>
+  <section>
+    <!-- Besucherzahlen. Bleibt fuer alle anderen unsichtbar: Der Server gibt
+         die Auswertung nur mit Admin-Kennung heraus, und ohne Antwort wird
+         dieser Block nie eingeblendet. -->
+    <div class="card statcard" id="visStats" hidden>
+      <div class="stathead">
+        <b>👥 Visitors</b>
+        <span class="dim3" id="visZeit">last 14 days</span>
+      </div>
+      <div id="visBody"></div>
     </div>
   </section>
   <section>
@@ -2036,6 +2087,7 @@ async function ladeKurs(p) {
   }
   KURS.punkte = d.punkte ?? [];
   KURS.feinkoernig = !!d.feinkoernig;
+  zeichneMarken(d.marken);
 
   const v = KURS.punkte;
   const c = el("prChg");
@@ -2096,6 +2148,62 @@ function punktText(zeit) {
   return KURS.feinkoernig
     ? d.toLocaleString(LOC, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : d.toLocaleDateString(LOC, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/**
+ * Allzeithoch, das Hoch von 2021 und das Allzeittief - jeweils mit dem
+ * Abstand zum heutigen Kurs.
+ *
+ * Die Prozentzahl ist der Punkt der ganzen Sache: "$0.2079" sagt fuer sich
+ * genommen wenig, "−99,5 % davon entfernt" sagt alles.
+ */
+const MARKEN_TEXT = {
+  ath: "All-time high",
+  hoch_2021: "2021 peak",
+  hoch_12m: "12-month high",
+  atl: "All-time low",
+  tief_12m: "12-month low",
+};
+// Reihenfolge von oben nach unten, nicht die der Datenbank.
+const MARKEN_FOLGE = ["ath", "hoch_2021", "hoch_12m", "atl"];
+
+function zeichneMarken(marken) {
+  const host = el("prMarken");
+  if (!host) return;
+  if (!marken?.length) {
+    host.innerHTML = "";
+    return;
+  }
+  const nach = Object.fromEntries(marken.map((m) => [m.schluessel, m]));
+  host.innerHTML = MARKEN_FOLGE.filter((k) => nach[k])
+    .map((k) => {
+      const m = nach[k];
+      const pct = m.abstand_pct;
+      // Minus heisst: Wir liegen darunter. Bei einem Tief ist das Plus davor
+      // die gute Nachricht, bei einem Hoch das Minus die schlechte - die
+      // Farbe folgt dem Vorzeichen, nicht der Bedeutung.
+      const klasse = pct == null ? "" : pct >= 0 ? "up" : "down";
+      const txt =
+        pct == null ? "—" : (pct >= 0 ? "+" : "") + nf(pct, pct > -100 && pct < 1000 ? 1 : 0) + "%";
+      return '<div class="marke"><span class="k">' + (MARKEN_TEXT[k] ?? k) + "</span>" +
+        '<span class="w">$' + preisText(m.preis) + "</span>" +
+        '<span class="u"><span>' + (m.tag ? datumKurz(m.tag) : "") + "</span>" +
+        '<span class="pct ' + klasse + '">' + txt + "</span></span></div>";
+    })
+    .join("");
+}
+
+/** Kleine Kurse brauchen mehr Nachkommastellen als grosse. */
+function preisText(v) {
+  if (v == null) return "—";
+  if (v >= 1) return v.toFixed(4);
+  if (v >= 0.01) return v.toFixed(5);
+  return v.toFixed(6);
+}
+
+function datumKurz(tag) {
+  const d = new Date(tag + "T00:00:00Z");
+  return isNaN(d) ? tag : d.toLocaleDateString(LOC, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function zeichnePreisChart(punkte) {
@@ -3665,7 +3773,8 @@ let uebersichtLaeuft = null;
 const uebersicht = () => (uebersichtLaeuft ??= ladeOverview());
 
 const LADER = {
-  overview: () => Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), ladeWatchlist()]),
+  overview: () =>
+    Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), ladeWatchlist(), fbBesucher()]),
   migration: () =>
     Promise.all([uebersicht(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
   tiers: () => uebersicht(),
@@ -3680,6 +3789,7 @@ const LADER = {
 };
 
 function zeigeSeite(name) {
+  if (typeof ZAEHLER !== "undefined" && name) ZAEHLER.bereiche.add(name);
   // Ausgeblendete Bereiche (labs) duerfen auch nicht ueber die Adresszeile
   // erreichbar sein - sonst kommt jeder ueber "#clusters" auf die noch
   // ungeprueften Cluster-Vermutungen, samt Betreiber-Knopf.
@@ -4016,6 +4126,63 @@ function fbSchliessen() {
   el("fbModal").classList.remove("on");
 }
 
+/**
+ * Besucherzahlen - nur fuer den Betreiber, im selben Dialog wie der
+ * Posteingang.
+ *
+ * "Leute" sind verschiedene Tageshashes, nicht Seitenaufrufe: Wer dreimal am
+ * Tag vorbeischaut, zaehlt einmal. Die Dauer ist AKTIVE Zeit - ein Tab, der
+ * im Hintergrund liegt, laeuft nicht mit.
+ */
+async function fbBesucher() {
+  if (!ADMIN.token) return;
+  try {
+    const d = await hole("/api/besuche?tage=14");
+    const g = d.gesamt ?? {};
+    const box = el("visStats");
+    if (!box) return;
+    box.hidden = false;
+    el("visZeit").textContent = "last " + (d.zeitraum_tage ?? 14) + " days";
+
+    const dauer = (s) => {
+      const n = Math.round(Number(s) || 0);
+      return n >= 60 ? Math.floor(n / 60) + "m " + (n % 60) + "s" : n + "s";
+    };
+    const kachel = (k, w) =>
+      '<div class="stkachel"><span class="k">' + k + '</span><span class="w">' + w + "</span></div>";
+
+    const tage = (d.pro_tag ?? [])
+      .map((t) =>
+        '<div class="sttag"><span class="d">' + t.tag + "</span>" +
+        "<span>" + nf(t.leute) + " people · " + nf(t.besuche) + " visits · " +
+        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) + "</span></div>"
+      )
+      .join("");
+
+    const bereiche = (d.bereiche ?? [])
+      .slice(0, 8)
+      .map((b) => '<span class="stmarke">' + esc(b.name) + " " + nf(b.n) + "</span>")
+      .join("");
+    const herkunft = (d.herkunft ?? [])
+      .map((h) => '<span class="stmarke">' + esc(h.herkunft) + " " + nf(h.n) + "</span>")
+      .join("");
+
+    el("visBody").innerHTML =
+      '<div class="stgrid">' +
+      kachel("People", nf(g.leute ?? 0)) +
+      kachel("Visits", nf(g.besuche ?? 0)) +
+      kachel("Clicks", nf(g.klicks ?? 0)) +
+      kachel("Avg. time", dauer(g.dauer)) +
+      kachel("Mobile", nf(g.mobil ?? 0)) +
+      "</div>" +
+      (tage ? '<div class="sttage">' + tage + "</div>" : '<div class="dim3" style="font-size:12px">No visits recorded yet.</div>') +
+      (bereiche ? '<div class="stliste">' + bereiche + "</div>" : "") +
+      (herkunft ? '<div class="stliste">' + herkunft + "</div>" : "");
+  } catch {
+    /* kein Zugriff - dann bleiben die Zahlen eben zu */
+  }
+}
+
 async function fbPosteingang() {
   try {
     const d = await hole("/api/feedback");
@@ -4121,6 +4288,82 @@ el("welcomeClose").onclick = () => {
 el("copyYear").textContent = new Date().getFullYear();
 
 willkommenPruefen();
+
+/* ---------- Besuchszaehlung ---------------------------------------------
+ *
+ * Sammelt waehrend des Besuchs und meldet beim Verlassen EINMAL eine
+ * Zusammenfassung: wie lange, wie viele Klicks, welche Reiter. Nicht jeder
+ * Klick einzeln - das waeren Zehntausende Schreibvorgaenge am Tag statt
+ * einiger hundert.
+ *
+ * Gezaehlt wird nur, wer sich wirklich bewegt hat. Ein Crawler laedt die
+ * Seite und bewegt nichts; er faellt damit von selbst heraus, ohne dass
+ * jemand eine Bot-Liste pflegen muesste. Dasselbe gilt fuer automatische
+ * Pruefabrufe.
+ *
+ * Gemessen wird AKTIVE Zeit: Ein Tab, der stundenlang im Hintergrund liegt,
+ * zaehlt nicht weiter. Sonst haette ein vergessenes Fenster die
+ * Durchschnittsdauer jeder Auswertung ruiniert.
+ *
+ * Es wird nichts im Geraet gespeichert - kein Cookie, keine Kennung. Wer
+ * jemand ist, interessiert hier nicht; nur wie viele es sind.
+ */
+const ZAEHLER = {
+  start: Date.now(),
+  aktivSeit: document.hidden ? null : Date.now(),
+  aktiveMs: 0,
+  klicks: 0,
+  bereiche: new Set(),
+  bewegt: false,
+  gesendet: false,
+};
+
+["mousedown", "keydown", "touchstart", "scroll", "wheel"].forEach((art) =>
+  addEventListener(art, () => { ZAEHLER.bewegt = true; }, { passive: true, once: true })
+);
+addEventListener("click", () => { ZAEHLER.klicks++; ZAEHLER.bewegt = true; }, { passive: true });
+
+// Aktive Zeit mitzaehlen: laeuft nur, solange der Tab sichtbar ist.
+function zaehlerPausieren() {
+  if (ZAEHLER.aktivSeit != null) {
+    ZAEHLER.aktiveMs += Date.now() - ZAEHLER.aktivSeit;
+    ZAEHLER.aktivSeit = null;
+  }
+}
+addEventListener("visibilitychange", () => {
+  if (document.hidden) zaehlerPausieren();
+  else if (ZAEHLER.aktivSeit == null) ZAEHLER.aktivSeit = Date.now();
+});
+
+function besuchSenden() {
+  if (ZAEHLER.gesendet || !ZAEHLER.bewegt) return;
+  ZAEHLER.gesendet = true;
+  zaehlerPausieren();
+  const daten = {
+    dauer_s: Math.round(ZAEHLER.aktiveMs / 1000),
+    klicks: ZAEHLER.klicks,
+    bereiche: [...ZAEHLER.bereiche].join(","),
+    einstieg: start || "overview",
+    herkunft: document.referrer || "",
+    mobil: matchMedia("(max-width: 760px)").matches,
+  };
+  try {
+    // sendBeacon ueberlebt das Schliessen des Tabs - ein normales fetch wird
+    // an dieser Stelle haeufig abgebrochen.
+    const nutzlast = new Blob([JSON.stringify(daten)], { type: "application/json" });
+    if (!navigator.sendBeacon || !navigator.sendBeacon("/api/besuch", nutzlast)) {
+      fetch("/api/besuch", { method: "POST", body: JSON.stringify(daten), keepalive: true });
+    }
+  } catch {
+    /* Zaehlen ist Beiwerk - es darf nie stoeren */
+  }
+}
+
+// pagehide ist der zuverlaessige Zeitpunkt; visibilitychange faengt zusaetzlich
+// den Fall ab, dass ein Handy-Browser den Tab wegraeumt, ohne pagehide zu
+// schicken.
+addEventListener("pagehide", besuchSenden);
+addEventListener("visibilitychange", () => { if (document.hidden) besuchSenden(); });
 
 // Die Seite bleibt bei vielen offen liegen. Ohne diesen Takt bliebe "snapshot
 // 3 min ago" stundenlang stehen, obwohl nichts mehr nachkommt.

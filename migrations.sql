@@ -80,3 +80,24 @@ CREATE INDEX IF NOT EXISTS idx_live_abrufe_zeit ON live_abrufe(geholt_am);
 ALTER TABLE snapshots ADD COLUMN rows_written INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_addresses_markiert ON addresses(hash) WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1;
+CREATE TABLE IF NOT EXISTS kurs_marken (
+  schluessel   TEXT PRIMARY KEY,          -- ath | atl | hoch_12m
+  preis        REAL NOT NULL,
+  tag          TEXT,                      -- YYYY-MM-DD
+  quelle       TEXT,
+  gesetzt_am   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS besuche (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts           TEXT NOT NULL,             -- Ende des Besuchs
+  tag          TEXT NOT NULL,             -- YYYY-MM-DD
+  besucher     TEXT NOT NULL,             -- Kurz-Hash aus IP + Tag
+  dauer_s      INTEGER NOT NULL,          -- aktive Zeit auf der Seite
+  klicks       INTEGER NOT NULL DEFAULT 0,
+  bereiche     TEXT,                      -- besuchte Reiter, kommagetrennt
+  einstieg     TEXT,                      -- Reiter, mit dem begonnen wurde
+  herkunft     TEXT,                      -- Referrer-Domain, ohne Pfad
+  geraet       TEXT                       -- mobil | desktop
+);
+CREATE INDEX IF NOT EXISTS idx_besuche_tag ON besuche(tag);
+CREATE INDEX IF NOT EXISTS idx_besuche_besucher ON besuche(tag, besucher);

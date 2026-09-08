@@ -491,6 +491,71 @@ export async function runIngest(env, db, opts = {}) {
     log("  Rang-Historie fuer " + day + " wird angelegt");
   }
 
+  // --- 7d. Kursmarken fortschreiben --------------------------------------
+  //
+  // Allzeithoch und -tief kamen einmalig von CoinGecko, weil keine kostenlose
+  // Quelle ihre Tagesreihe weiter als 365 Tage zurueck herausgibt (geprueft
+  // am 08.09.2026: CoinPaprika 402, CryptoCompare 401, CoinGecko 401 ab dem
+  // 366. Tag). Ab hier pflegen wir sie selbst - damit braucht der Betrieb
+  // wieder keine fremde Kursquelle, genau wie beim Kursverlauf.
+  //
+  // Das ist nicht bloss Vorsorge: Das Allzeittief stammt vom August 2026, ist
+  // also frisch. Faellt der Kurs erneut darunter, muss die Marke mitgehen,
+  // sonst zeigt die Seite ein Tief an, das laengst unterboten wurde.
+  if (price != null && Number.isFinite(price)) {
+    const marken = (
+      await db.prepare("SELECT schluessel, preis FROM kurs_marken").all()
+    ).results;
+    const stand = Object.fromEntries(marken.map((m) => [m.schluessel, m.preis]));
+    const setzeMarke = db.prepare(
+      "INSERT INTO kurs_marken (schluessel, preis, tag, quelle, gesetzt_am) VALUES (?,?,?,?,?)" +
+        " ON CONFLICT(schluessel) DO UPDATE SET preis=excluded.preis, tag=excluded.tag," +
+        " quelle=excluded.quelle, gesetzt_am=excluded.gesetzt_am"
+    );
+    if (stand.ath == null || price > stand.ath) {
+      stmts.push(setzeMarke.bind("ath", price, day, "eigener Snapshot", takenAt));
+      log("  neues Allzeithoch: " + price);
+    }
+    if (stand.atl == null || price < stand.atl) {
+      stmts.push(setzeMarke.bind("atl", price, day, "eigener Snapshot", takenAt));
+      log("  neues Allzeittief: " + price);
+    }
+  }
+
+  // 12-Monats-Hoch und -Tief, einmal am Tag zusammen mit der Rang-Historie.
+  //
+  // Steht hier statt in der Abfrage, weil es sonst bei jedem Seitenaufruf
+  // ueber ein Jahr Kurse laufen muesste - 365 gelesene Zeilen fuer zwei
+  // Zahlen, die sich taeglich einmal aendern.
+  //
+  // Beide Quellen zusammen: die nachgeladene Vergangenheit und die eigenen
+  // Snapshots, die seither dazugekommen sind.
+  if (!rangHeuteDa) {
+    const abTag = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+    const spanne = await db
+      .prepare(
+        "SELECT max(preis) hoch, min(preis) tief FROM (" +
+          "  SELECT day, preis FROM price_history WHERE day >= ?1" +
+          "  UNION ALL" +
+          "  SELECT substr(taken_at,1,10) AS day, etn_price AS preis FROM snapshots" +
+          "   WHERE etn_price IS NOT NULL AND substr(taken_at,1,10) >= ?1" +
+          ")"
+      )
+      .bind(abTag)
+      .first();
+    if (spanne?.hoch != null) {
+      const setzeMarke = db.prepare(
+        "INSERT INTO kurs_marken (schluessel, preis, tag, quelle, gesetzt_am) VALUES (?,?,?,?,?)" +
+          " ON CONFLICT(schluessel) DO UPDATE SET preis=excluded.preis, tag=excluded.tag," +
+          " quelle=excluded.quelle, gesetzt_am=excluded.gesetzt_am"
+      );
+      stmts.push(setzeMarke.bind("hoch_12m", spanne.hoch, day, "eigene Reihe", takenAt));
+      if (spanne.tief != null) {
+        stmts.push(setzeMarke.bind("tief_12m", spanne.tief, day, "eigene Reihe", takenAt));
+      }
+    }
+  }
+
   // --- 8. Schreiben ------------------------------------------------------
   log("  schreibe " + stmts.length + " Statements ...");
   const schreib = await batched(db, stmts);

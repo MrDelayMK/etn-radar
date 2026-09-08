@@ -429,3 +429,61 @@ CREATE INDEX IF NOT EXISTS idx_live_abrufe_zeit ON live_abrufe(geholt_am);
 -- Handvoll Treffer zu finden - gemessen 6.012 gelesene Zeilen statt 71.
 CREATE INDEX IF NOT EXISTS idx_addresses_markiert ON addresses(hash)
   WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1;
+
+-- ---------------------------------------------------------------
+-- Kursmarken: Allzeithoch, Allzeittief, 12-Monats-Hoch.
+--
+-- ATH und ATL kommen EINMALIG von CoinGecko (05.01.2018 bzw. 14.08.2026).
+-- Weiter zurueck als 365 Tage gibt keine kostenlose Kursquelle ihre
+-- Tagesreihe heraus - geprueft am 08.09.2026: CoinPaprika 402, CryptoCompare
+-- 401, CoinGecko 401 ab dem 366. Tag. Die fertigen ATH/ATL-Felder liefert
+-- CoinGecko aber ohne Einschraenkung.
+--
+-- Danach pflegt der Snapshot-Lauf sie selbst weiter: Faellt der Kurs unter
+-- das gespeicherte Tief oder steigt er ueber das Hoch, wird die Marke
+-- fortgeschrieben. Damit braucht der Betrieb wieder keine fremde Quelle -
+-- und das ist keine Theorie: Das Allzeittief stammt vom August 2026, ist
+-- also frisch und kann jederzeit erneut unterboten werden.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS kurs_marken (
+  schluessel   TEXT PRIMARY KEY,          -- ath | atl | hoch_12m
+  preis        REAL NOT NULL,
+  tag          TEXT,                      -- YYYY-MM-DD
+  quelle       TEXT,
+  gesetzt_am   TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------
+-- Besuche. Eine Zeile je Besuch, nicht je Klick.
+--
+-- Der Browser sammelt waehrend des Besuchs und schickt EINMAL beim Verlassen
+-- eine Zusammenfassung. Bei tausend Besuchern am Tag sind das tausend
+-- geschriebene Zeilen - je Klick waeren es Zehntausende, und das Gratis-
+-- Schreibbudget sind 100.000 taeglich.
+--
+-- Wer gezaehlt wird: nur wer sich wirklich bewegt hat (Maus, Tastatur,
+-- Scrollen, Tippen). Das schliesst Crawler und Aufwaerm-Anfragen aus, ohne
+-- eine einzige Bot-Liste pflegen zu muessen - und auch die eigenen
+-- Pruefabrufe, die nie eine Maus bewegen.
+--
+-- Wer NICHT erkennbar wird: besucher ist ein Kurz-Hash aus IP und TAG. Er
+-- wechselt jede Nacht, laesst sich nicht zurueckrechnen und folgt niemandem
+-- ueber Tage hinweg. Kein Cookie, kein localStorage, keine Kennung im Geraet.
+-- Er reicht genau fuer "wie viele verschiedene Leute waren heute da" und fuer
+-- nichts darueber hinaus. Genau dasselbe Verfahren bremst schon das
+-- Feedback-Formular.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS besuche (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts           TEXT NOT NULL,             -- Ende des Besuchs
+  tag          TEXT NOT NULL,             -- YYYY-MM-DD
+  besucher     TEXT NOT NULL,             -- Kurz-Hash aus IP + Tag
+  dauer_s      INTEGER NOT NULL,          -- aktive Zeit auf der Seite
+  klicks       INTEGER NOT NULL DEFAULT 0,
+  bereiche     TEXT,                      -- besuchte Reiter, kommagetrennt
+  einstieg     TEXT,                      -- Reiter, mit dem begonnen wurde
+  herkunft     TEXT,                      -- Referrer-Domain, ohne Pfad
+  geraet       TEXT                       -- mobil | desktop
+);
+CREATE INDEX IF NOT EXISTS idx_besuche_tag ON besuche(tag);
+CREATE INDEX IF NOT EXISTS idx_besuche_besucher ON besuche(tag, besucher);
