@@ -695,21 +695,34 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .pricecard .tabs{margin:2px 0 12px}
 
 /* Die grossen Marken: Allzeithoch, der Zyklus von 2021, Allzeittief.
-   Der Abstand in Prozent ist die eigentliche Aussage - der Kurs allein sagt
-   wenig, wenn man nicht weiss, wo er einmal stand. */
-.marken{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:9px;
-        margin-top:14px}
-.marke{background:var(--card2);border:1px solid var(--line);border-radius:11px;
-       padding:10px 13px}
-.marke .k{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);
-          font-weight:700;display:block;margin-bottom:5px}
-.marke .w{font-family:var(--mono);font-size:15px;color:var(--tx);font-weight:640;
-          display:block;line-height:1.25}
-.marke .u{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
-          margin-top:4px;font-size:11px;color:var(--tx3)}
-.marke .u .pct{font-family:var(--mono);font-weight:700}
-.marke .pct.up{color:var(--up)}
-.marke .pct.down{color:var(--down)}
+   Der Abstand in Prozent ist die eigentliche Aussage - "$0.2079" sagt fuer
+   sich genommen wenig, "-99,5% davon entfernt" sagt alles. Also traegt die
+   Prozentzahl das optische Gewicht und nicht der Kurs. */
+.marken{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;
+        margin-top:18px}
+.marke{position:relative;background:var(--card2);border:1px solid var(--line2);
+       border-radius:13px;padding:13px 16px 14px;overflow:hidden}
+/* Farbiger Streifen an der Kante - hebt die Kachel heraus, ohne dass die
+   ganze Flaeche schreit. */
+.marke::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+.marke.up::before{background:var(--up)}
+.marke.down::before{background:var(--down)}
+.marke.up{background:linear-gradient(120deg,#22d3a70e 0%,var(--card2) 62%)}
+.marke.down{background:linear-gradient(120deg,#f4635e0e 0%,var(--card2) 62%)}
+.marke .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);
+          font-weight:700;display:block;margin-bottom:8px}
+.marke .pct{display:block;font-family:var(--mono);font-size:25px;font-weight:700;
+            line-height:1.05;letter-spacing:-.02em}
+.marke.up .pct{color:var(--up)}
+.marke.down .pct{color:var(--down)}
+.marke .u{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+          margin-top:7px;font-size:11.5px;color:var(--tx3)}
+.marke .w{font-family:var(--mono);color:var(--tx2);font-weight:640}
+@media (max-width:520px){
+  .marken{grid-template-columns:1fr 1fr;gap:9px}
+  .marke{padding:11px 13px 12px}
+  .marke .pct{font-size:21px}
+}
 .pricefoot .quelle{margin-left:auto;color:var(--tx3)}
 
 
@@ -2185,10 +2198,11 @@ function zeichneMarken(marken) {
       const klasse = pct == null ? "" : pct >= 0 ? "up" : "down";
       const txt =
         pct == null ? "—" : (pct >= 0 ? "+" : "") + nf(pct, pct > -100 && pct < 1000 ? 1 : 0) + "%";
-      return '<div class="marke"><span class="k">' + (MARKEN_TEXT[k] ?? k) + "</span>" +
-        '<span class="w">$' + preisText(m.preis) + "</span>" +
-        '<span class="u"><span>' + (m.tag ? datumKurz(m.tag) : "") + "</span>" +
-        '<span class="pct ' + klasse + '">' + txt + "</span></span></div>";
+      return '<div class="marke ' + klasse + '"><span class="k">' +
+        (MARKEN_TEXT[k] ?? k) + "</span>" +
+        '<span class="pct">' + txt + "</span>" +
+        '<span class="u"><span class="w">$' + preisText(m.preis) + "</span>" +
+        "<span>" + (m.tag ? datumKurz(m.tag) : "") + "</span></span></div>";
     })
     .join("");
 }
