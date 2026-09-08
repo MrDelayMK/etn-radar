@@ -1,5 +1,8 @@
 # ETN Radar
 
+> **Für den schnellen Einstieg:** [UEBERGABE.md](UEBERGABE.md) — was sich wann
+> aktualisiert, was die Seite aushält, was noch offen ist.
+
 Top-Holder- und Migrations-Tracker für die **Electroneum Smart Chain**.
 
 Beantwortet die Frage, die sich mit der Legacy-Deadline (31.01.2027) stellt:
