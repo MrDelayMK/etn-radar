@@ -9,7 +9,12 @@ import { TIERS, tierProgress, tierFor, tierMax, FAST_TIER_MIN } from "./tiers.js
 import { clusterGruppen } from "./clusters.js";
 import { handleTelegramWebhook } from "./telegram.js";
 
-const CACHE_SEKUNDEN = 120; // Daten aendern sich nur alle 30 Minuten
+// Die Daten aendern sich nur alle 30 Minuten - zwei Minuten waren also
+// fuenfzehnmal haeufiger nachgefragt als noetig. Bei Andrang ist das der
+// Unterschied zwischen "haelt" und "Leselimit gerissen": jede Antwort, die
+// aus dem Zwischenspeicher kommt, beruehrt die Datenbank gar nicht.
+// Wie alt die Zahlen sind, sagt die Kopfzeile ohnehin ("snapshot X ago").
+const CACHE_SEKUNDEN = 600;
 
 const json = (data, status = 200, cache = CACHE_SEKUNDEN) =>
   new Response(JSON.stringify(data), {
@@ -262,6 +267,53 @@ async function overview(db, env) {
   };
 }
 
+/**
+ * Rangliste ohne Filter - der Weg, den fast jeder Aufruf nimmt.
+ *
+ * Liest nur die angezeigte Seite plus deren Vergangenheit, statt die ganze
+ * Liste durchzurechnen. Was dabei entfaellt, ist die Rangaenderung: sie
+ * verlangt den Bestand ALLER Wallets von damals. Die Δ-Spalte in ETN und
+ * Prozent bleibt, sie braucht nur die Vergangenheit der gezeigten Zeilen.
+ */
+async function leaderboardSchnell(db, env, u, { limit, offset, tage }) {
+  const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
+  const [res, gesamt] = await Promise.all([
+    db
+      .prepare(
+        "SELECT " + WALLET_FELDER +
+          ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
+          "   ORDER BY d.day DESC LIMIT 1) AS etn_vorher" +
+          ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address" +
+          "   ORDER BY d.day ASC LIMIT 1) AS etn_erster" +
+          ", (SELECT d.day FROM daily_balances d WHERE d.address = c.address" +
+          "   ORDER BY d.day ASC LIMIT 1) AS tag_erster" +
+          " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
+          " WHERE c.in_top_n = 1 AND c.address != ?" +
+          " ORDER BY c.etn DESC LIMIT ? OFFSET ?"
+      )
+      .bind(tagVor(tage), bridge, limit, offset)
+      .all(),
+    db
+      .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
+      .bind(bridge)
+      .first(),
+  ]);
+
+  const jetzt = Date.now();
+  return {
+    zeitraum: u.searchParams.get("period") ?? STD_ZEITRAUM,
+    gesamt: gesamt?.n ?? 0,
+    offset,
+    limit,
+    eintraege: res.results.map((r, i) => ({
+      ...schmuecken(r, jetzt),
+      platz: offset + i + 1,
+      rang_delta: null, // siehe oben: braeuchte den Bestand aller Wallets von damals
+      ...delta(r, tage, jetzt),
+    })),
+  };
+}
+
 async function leaderboard(db, env, u) {
   const limit = zahlParam(u, "limit", 50, 10, 250);
   const offset = zahlParam(u, "offset", 0, 0);
@@ -289,6 +341,21 @@ async function leaderboard(db, env, u) {
   if (tier) filterArgs.push(tier);
   if (minEtn != null) filterArgs.push(minEtn);
   if (maxEtn != null) filterArgs.push(maxEtn);
+
+  // ---- Schneller Weg: ohne Filter braucht es keine Rangberechnung -------
+  //
+  // Gemessen an der echten Datenbank: die Abfrage unten liest 15.014 Zeilen,
+  // weil sie fuer ALLE 3.000 Wallets den Bestand von damals nachschlaegt - nur
+  // um daraus die Rangaenderung zu bilden. Das Gratis-Limit von D1 sind fuenf
+  // Millionen gelesene Zeilen am Tag; damit waeren rund 330 Aufrufe moeglich.
+  //
+  // Ohne Filter ist der Rang aber schlicht die Position in der nach Bestand
+  // sortierten Liste - und dafuer gibt es einen Index. Dieselbe Seite kostet
+  // so 50 statt 15.014 Zeilen. Genau dieser Weg wird beim Aufruf der Seite
+  // genommen; die teure Fassung bleibt fuer die Filter, die selten und dann
+  // bewusst benutzt werden.
+  const ohneFilter = !tier && minEtn == null && maxEtn == null && !nurEcht;
+  if (ohneFilter) return leaderboardSchnell(db, env, u, { limit, offset, tage });
 
   // Rangberechnung ueber die GEFILTERTE Menge: wer Boersen ausblendet, will
   // auch, dass das erste echte Wallet auf Platz 1 steht - nicht auf Platz 3

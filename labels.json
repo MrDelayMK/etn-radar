@@ -31,6 +31,14 @@
       "notes": "Boersen-Wallet. Quelle: ETN-Community, 2026-09."
     },
     {
+      "address": "0x203529b532d96Aa792Edd7F6db6b7c1376Da8131",
+      "label": "HTX",
+      "label_type": "exchange",
+      "is_excluded": 1,
+      "confidence": "confirmed",
+      "notes": "Zweites HTX-Wallet. Quelle: ETN-Community, 2026-09. Die automatische Erkennung hatte es unabhaengig davon mit 0.984 als Dienst markiert (138 Gegenparteien, 8.019 Transaktionen, beidseitiger Verkehr, rund um die Uhr aktiv)."
+    },
+    {
       "address": "0x92F0bac0f513CcAFC2b4101365E2d1afCf9874e4",
       "label": "KuCoin",
       "label_type": "exchange",
