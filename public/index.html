@@ -4616,26 +4616,11 @@ function willkommenPruefen() {
   }
   if (gesehen && !new URLSearchParams(location.search).has("intro")) return;
   el("welcome").hidden = false;
-
-  // Als gesehen gilt es nicht erst beim Klick auf das X. Wer die Begruessung
-  // liest und dann einfach weiterscrollt oder einen Reiter oeffnet, hat sie
-  // gesehen - bekam sie aber beim naechsten Besuch trotzdem wieder, weil nur
-  // das Schliessen den Vermerk setzte. Auf dem Handy, wo drei Viertel der
-  // Besuche herkommen, drueckt das X praktisch niemand.
-  //
-  // Zehn Sekunden sichtbar reichen als Beleg. Wer nach zwei Sekunden wieder
-  // weg ist, hat nichts gelesen und soll sie beim naechsten Mal wiedersehen.
-  const merken = () => {
-    clearTimeout(willkommenUhr);
-    document.removeEventListener("click", merken, true);
-    try {
-      localStorage.setItem(WILLKOMMEN_KEY, "1");
-    } catch {
-      /* privater Modus - dann eben jedes Mal */
-    }
-  };
-  const willkommenUhr = setTimeout(merken, 10000);
-  document.addEventListener("click", merken, true);
+  // Der Vermerk wird bewusst NUR beim Klick auf das X gesetzt, nicht schon
+  // nach ein paar Sekunden oder beim ersten Klick irgendwo. Wer die
+  // Begruessung nicht selbst weggedrueckt hat, soll sie wiedersehen - sie
+  // erklaert, wofuer die Seite ueberhaupt da ist, und das einmal zu oft zu
+  // zeigen ist der kleinere Fehler.
 }
 
 /* ---------- Rueckmeldung ---------------------------------------------------
@@ -4682,12 +4667,18 @@ async function fbBesucher() {
     };
     const kachel = (k, w) =>
       '<div class="stkachel"><span class="k">' + k + '</span><span class="w">' + w + "</span></div>";
+    // Solange keine einzige Meldung eine Vorgeschichte mitbringt, ist der
+    // Anteil nicht null, sondern unbekannt - und ein angezeigtes "0 %" waere
+    // eine Behauptung, die niemand geprueft hat.
+    const anteil = (teil, ganz) =>
+      !ganz || teil == null ? "—" : nf((teil / ganz) * 100, 0) + "%";
 
     const tage = (d.pro_tag ?? [])
       .map((t) =>
         '<div class="sttag"><span class="d">' + t.tag + "</span>" +
         "<span>" + nf(t.leute) + " people · " + nf(t.besuche) + " visits · " +
-        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) + "</span></div>"
+        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) +
+        (t.wieder ? " · " + nf(t.wieder) + " returning" : "") + "</span></div>"
       )
       .join("");
 
@@ -4706,6 +4697,10 @@ async function fbBesucher() {
       kachel("Clicks", nf(g.klicks ?? 0)) +
       kachel("Avg. time", dauer(g.dauer)) +
       kachel("Mobile", nf(g.mobil ?? 0)) +
+      // Wiederkehr als Anteil, nicht als nackte Zahl: "31" sagt nichts, "57 %"
+      // beantwortet die Frage, ob die Seite benutzt oder nur angeklickt wird.
+      kachel("Returning", anteil(g.wieder, g.besuche)) +
+      kachel("Regulars", anteil(g.alt, g.besuche)) +
       "</div>" +
       (tage ? '<div class="sttage">' + tage + "</div>" : '<div class="dim3" style="font-size:12px">No visits recorded yet.</div>') +
       (bereiche ? '<div class="stliste">' + bereiche + "</div>" : "") +
@@ -4867,6 +4862,36 @@ addEventListener("visibilitychange", () => {
   else if (ZAEHLER.aktivSeit == null) ZAEHLER.aktivSeit = Date.now();
 });
 
+/**
+ * Der Tag des ersten Besuchs dieses Geraets, als "JJJJ-MM-TT".
+ *
+ * Das ist KEINE Kennung. An einem Tag tragen hunderte Geraete denselben Wert;
+ * zwei Besuche lassen sich darueber nicht miteinander verbinden, und wer
+ * jemand ist, steht darin ohnehin nicht. Er beantwortet genau eine Frage -
+ * "war dieses Geraet schon an einem frueheren Tag hier" - und keine weitere.
+ *
+ * Bewusst NICHT der Willkommen-Vermerk, obwohl der schon im Geraet liegt: der
+ * wird nur gesetzt, wenn jemand die Begruessung mit dem X wegdrueckt, und das
+ * tut auf dem Handy fast niemand. Als Beleg fuer "schon mal da gewesen" waere
+ * er damit systematisch zu niedrig - eine Zahl, die nach Messung aussieht und
+ * keine ist.
+ *
+ * Wer seine Seitendaten loescht oder ein anderes Geraet nimmt, gilt wieder als
+ * neu. Die Zahl untertreibt also eher, als dass sie uebertreibt.
+ */
+const ERST_KEY = "etnr_erst";
+function erstbesuchTag() {
+  const heute = new Date().toISOString().slice(0, 10);
+  try {
+    const da = localStorage.getItem(ERST_KEY);
+    if (da) return da;
+    localStorage.setItem(ERST_KEY, heute);
+  } catch {
+    return null; // privater Modus - dann zaehlt der Besuch eben ohne Vorgeschichte
+  }
+  return heute;
+}
+
 function besuchSenden() {
   if (ZAEHLER.gesendet || !ZAEHLER.bewegt) return;
   // Der Betreiber ist kein Besucher. Wer sich mit dem Admin-Wort angemeldet
@@ -4879,6 +4904,7 @@ function besuchSenden() {
   const daten = {
     dauer_s: Math.round(ZAEHLER.aktiveMs / 1000),
     klicks: ZAEHLER.klicks,
+    erst: erstbesuchTag(),
     bereiche: [...ZAEHLER.bereiche].join(","),
     einstieg: start || "overview",
     herkunft: document.referrer || "",

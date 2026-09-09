@@ -133,3 +133,15 @@ CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn DESC
 -- Fuer "welche Wallets gibt es erst nach dem Stichtag". Ohne Index waere das
 -- ein Durchlauf durch alle erfassten Adressen.
 CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);
+
+-- Erster Besuch dieses Geraets, TAGGENAU und ohne Uhrzeit.
+--
+-- Das ist bewusst KEIN Erkennungsmerkmal: an einem Tag tragen hunderte Geraete
+-- denselben Wert, Besuche lassen sich darueber nicht miteinander verbinden.
+-- Er beantwortet genau eine Frage - "war dieses Geraet schon an einem
+-- frueheren Tag hier" - und keine weitere.
+--
+-- Der Wert steht im Browser des Besuchers (etnr_erst) und wird beim Melden
+-- mitgeschickt. Wer seine Seitendaten loescht oder ein anderes Geraet nimmt,
+-- gilt wieder als neu; die Zahl untertreibt also eher, als dass sie uebertreibt.
+ALTER TABLE besuche ADD COLUMN erstbesuch TEXT;

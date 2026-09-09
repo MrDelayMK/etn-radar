@@ -904,6 +904,10 @@ async function feedbackSenden(request, db) {
 const BESUCH_MAX_DAUER = 4 * 3600; // laenger ist ein vergessener Tab, kein Besuch
 const BESUCH_MAX_KLICKS = 2000;
 const BESUCH_PRO_STUNDE = 30; // Bremse gegen erfundene Zahlen
+// Frueher kann kein Erstbesuch liegen - die Zaehlung gibt es seit dem
+// 08.09.2026. Ein Datum davor ist entweder eine falsch gestellte Uhr oder
+// jemand, der am Wert gedreht hat.
+const BESUCH_START = "2026-09-08";
 
 async function besuchMelden(request, db) {
   let body;
@@ -932,6 +936,17 @@ async function besuchMelden(request, db) {
     .first();
   if ((bisher?.n ?? 0) >= BESUCH_PRO_STUNDE) return json({ ok: true }, 200, 0);
 
+  // Erstbesuch dieses Geraets, taggenau. Geprueft statt uebernommen: der Wert
+  // kommt aus dem Browser und koennte alles sein. Alles ausserhalb des
+  // plausiblen Fensters - Zukunft, oder aelter als die Seite selbst - wird
+  // verworfen statt gebogen, sonst stuenden erfundene Daten in der Statistik.
+  let erst = null;
+  {
+    const roh = String(body.erst ?? "");
+    const heute = new Date().toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(roh) && roh >= BESUCH_START && roh <= heute) erst = roh;
+  }
+
   // Nur die Domain, nie der volle Verweis: Der Pfad einer fremden Seite kann
   // verraten, wonach jemand gesucht hat.
   let herkunft = null;
@@ -945,7 +960,7 @@ async function besuchMelden(request, db) {
   await db
     .prepare(
       "INSERT INTO besuche (ts, tag, besucher, dauer_s, klicks, bereiche, einstieg," +
-        " herkunft, geraet) VALUES (?,?,?,?,?,?,?,?,?)"
+        " herkunft, geraet, erstbesuch) VALUES (?,?,?,?,?,?,?,?,?,?)"
     )
     .bind(
       jetzt.toISOString(),
@@ -956,7 +971,8 @@ async function besuchMelden(request, db) {
       sauber(body.bereiche, 120),
       sauber(body.einstieg, 20),
       herkunft,
-      body.mobil ? "mobil" : "desktop"
+      body.mobil ? "mobil" : "desktop",
+      erst
     )
     .run();
 
@@ -972,7 +988,9 @@ async function besucheLesen(db, u) {
     db
       .prepare(
         "SELECT tag, count(DISTINCT besucher) leute, count(*) besuche," +
-          " sum(klicks) klicks, avg(dauer_s) dauer FROM besuche" +
+          " sum(klicks) klicks, avg(dauer_s) dauer," +
+          " count(DISTINCT CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag" +
+          "   THEN besucher END) wieder FROM besuche" +
           " WHERE tag >= ? GROUP BY tag ORDER BY tag DESC"
       )
       .bind(abTag)
@@ -980,7 +998,18 @@ async function besucheLesen(db, u) {
     db
       .prepare(
         "SELECT count(DISTINCT besucher) leute, count(*) besuche, sum(klicks) klicks," +
-          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil" +
+          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil," +
+          // Wiederkehr: das Geraet war an einem FRUEHEREN Tag schon da. Mehrere
+          // Besuche am selben Tag zaehlen nicht als Wiederkehr - sonst waere
+          // jedes Neuladen einer.
+          " sum(CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag THEN 1 ELSE 0 END) wieder," +
+          " sum(CASE WHEN erstbesuch IS NOT NULL AND erstbesuch = tag THEN 1 ELSE 0 END) neu," +
+          // Aelter als eine Woche: das unterscheidet den, der zweimal
+          // vorbeischaut, von dem, der die Seite benutzt.
+          " sum(CASE WHEN erstbesuch IS NOT NULL" +
+          "   AND julianday(tag) - julianday(erstbesuch) >= 7 THEN 1 ELSE 0 END) alt," +
+          " count(DISTINCT CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag" +
+          "   THEN besucher END) wieder_leute" +
           " FROM besuche WHERE tag >= ?"
       )
       .bind(abTag)
