@@ -600,7 +600,13 @@ export async function runIngest(env, db, opts = {}) {
       );
       const faellig = STICHTAG_MARKER.filter(([schluessel, versatz]) => {
         if (vorhanden.has(schluessel)) return false;
-        const soll = new Date(basis + versatz * 86400000).toISOString().slice(0, 10);
+        // +1 Tag: gemessen wird, wenn der gemeinte Tag VORBEI ist, nicht wenn
+        // er anbricht. Der Stichtag 31.01. laeuft bis Mitternacht - wer schon
+        // am Morgen des 31. misst, haelt einen Zustand fest, der noch einen
+        // ganzen Tag Migration vor sich hat. Der Marker T0 entsteht damit im
+        // ersten Lauf des 01.02., und "tag" haelt fest, wann wirklich gemessen
+        // wurde.
+        const soll = new Date(basis + (versatz + 1) * 86400000).toISOString().slice(0, 10);
         return day >= soll;
       });
 

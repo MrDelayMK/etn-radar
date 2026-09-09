@@ -183,6 +183,7 @@ svg.chart{width:100%;display:block}
   border-top:1px solid var(--line)
 }
 .btab tbody td{border-top:1px solid var(--line);font-family:var(--mono);color:var(--tx)}
+.btab td .unten{display:block;font-size:10.5px;color:var(--tx3);margin-top:2px}
 .btab tbody tr:hover td{background:#ffffff06}
 .btab .offen{color:var(--tx3)}
 
@@ -1103,7 +1104,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="bbig num" id="bzBig">&mdash;</div>
       <div class="bsub" id="bzSub">&mdash;</div>
       <div class="bfacts">
-        <div><div class="k">Share of all ETN</div><div class="v num" id="bzAnteil">&mdash;</div></div>
         <div><div class="k">Value at that price</div><div class="v num" id="bzWert">&mdash;</div></div>
         <div><div class="k">Migrated in last 30 d</div><div class="v num" id="bzSpurt">&mdash;</div></div>
         <div><div class="k">30 d before that</div><div class="v num" id="bzSpurtVor">&mdash;</div></div>
@@ -2676,9 +2676,16 @@ function zeichneNetzChart(tage) {
  */
 
 // Zeile der Vergleichstabelle: Beschriftung, Feld im Datensatz, Formatierung.
+// Die Formatierung bekommt den ganzen Datenpunkt mit, nicht nur den Wert -
+// die Umlaufmenge sagt fuer sich genommen wenig, ihr ANTEIL an der Gesamtmenge
+// dagegen alles: er ist der Anteil, der es herueber geschafft hat.
+//
+// "Still in the bridge" steht hier bewusst nicht mehr: es ist die grosse Zahl
+// im Kopf darueber, und zweimal dieselbe Zahl auf einem Bildschirm heisst,
+// dass eine davon ueberfluessig ist.
 const BILANZ_ZEILEN = [
-  ["Still in the bridge", "bridge_etn", (v) => kurz(v) + " ETN"],
-  ["Circulating supply", "zirkulierend", (v) => kurz(v) + " ETN"],
+  ["Migrated supply", "zirkulierend", (v, q) =>
+    kurz(v) + " ETN" + teil(q.total_supply ? v / q.total_supply : null)],
   ["ETN price", "preis", (v) => "$" + (v < 0.01 ? v.toFixed(6) : v.toFixed(4))],
   ["Market cap", "marktkapitalisierung", (v) => "$" + kurz(v)],
   ["Wallets ≥ 1M ETN", "holder_1m", (v) => nf(v)],
@@ -2687,6 +2694,10 @@ const BILANZ_ZEILEN = [
   ["Top 100 hold", "top100_anteil", (v) => nf(v * 100, 1) + "%"],
   ["Addresses on chain", "adressen_gesamt", (v) => nf(v)],
 ];
+
+/** Zweite Zeile in einer Zelle, kleiner und blasser. */
+const teil = (anteil) =>
+  anteil == null ? "" : '<span class="unten">' + nf(anteil * 100, 1) + "% of all ETN</span>";
 
 // Spalten der Vergleichstabelle. "heute" steht bewusst am Ende: solange der
 // Stichtag noch aussteht, ist es die einzige gefuellte Spalte, und dort faellt
@@ -2718,19 +2729,21 @@ async function ladeBilanz() {
   if (d.vorbei) {
     el("bzTag").textContent = "Final";
     el("bzBig").innerHTML = kurz(vl.etn) +
-      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN never made it across</span>';
+      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN lost for good</span>';
     el("bzSub").innerHTML =
-      "The migration window closed on " + stichText + ". What was still sitting in the bridge " +
-      "at that moment belonged to holders who never moved it — and it stays there.";
+      "The migration window closed on " + stichText + ". This much never crossed the bridge — " +
+      "<b>" + nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been, " +
+      "held by people who did not make the move in time. It stays where it is.";
   } else {
     el("bzTag").textContent = "Still open · " + d.tage_bis + " days";
     el("bzBig").innerHTML = kurz(vl.etn) +
       ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would be left behind</span>';
     el("bzSub").innerHTML =
-      "That is what is sitting in the bridge right now. The window closes on <b>" + stichText +
-      "</b>; everything still in there at that point is what this page will settle up.";
+      "That is what is sitting in the bridge right now — <b>" +
+      nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been. " +
+      "The window closes on <b>" + stichText + "</b>; whatever is still in there at that " +
+      "moment is what this page will settle up.";
   }
-  el("bzAnteil").textContent = vl.anteil_supply != null ? nf(vl.anteil_supply * 100, 1) + "%" : "—";
   el("bzWert").textContent = vl.wert_usd != null ? "$" + kurz(vl.wert_usd) : "—";
 
   const e30 = d.endspurt ?? {};
@@ -2764,7 +2777,7 @@ async function ladeBilanz() {
       if (v == null || !isFinite(v)) {
         return '<td class="' + kl + ' offen">—</td>';
       }
-      return '<td class="' + kl + '">' + form(v) + "</td>";
+      return '<td class="' + kl + '">' + form(v, q) + "</td>";
     }).join("") +
     "</tr>"
   ).join("");
