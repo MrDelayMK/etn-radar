@@ -1649,10 +1649,23 @@ async function bilanz(db, env) {
       : null;
 
   // Die groessten Einzelbetraege, die je die Bridge verlassen haben.
-  const [transfers, stand] = await Promise.all([
+  //
+  // Gelesen aus bridge_events, NICHT aus der Rohtabelle bridge_transfers: die
+  // Ereignisse liegen fertig ausgewertet vor und enthalten je Tag die
+  // Empfaenger mit Betrag, waehrend der Rohbestand erst existiert, wenn der
+  // Durchgang durch die Bridge-Historie gelaufen ist. Genau daran hing diese
+  // Liste zuerst - und war deshalb leer, obwohl dieselben Betraege eine
+  // Bildschirmhoehe weiter oben standen.
+  //
+  // Warum die Sortierung nach Tagessumme reicht, um die groessten
+  // EINZELbetraege zu finden: ein einzelner Transfer kann nie groesser sein
+  // als die Summe seines Tages. Die zehn groessten Einzelbetraege stecken
+  // damit zwangslaeufig in den Tagen mit den groessten Summen.
+  const [ereignisse, stand] = await Promise.all([
     db
       .prepare(
-        "SELECT day, to_address, etn FROM bridge_transfers ORDER BY etn DESC LIMIT 10"
+        "SELECT day, top_recipients FROM bridge_events WHERE top_recipients IS NOT NULL" +
+          " ORDER BY outflow_etn DESC LIMIT 60"
       )
       .all(),
     db
@@ -1661,8 +1674,23 @@ async function bilanz(db, env) {
       .catch(() => null),
   ]);
 
+  const transfers = [];
+  for (const e of ereignisse.results ?? []) {
+    let liste;
+    try {
+      liste = JSON.parse(e.top_recipients);
+    } catch {
+      continue; // eine kaputte Zeile darf die Liste nicht kosten
+    }
+    for (const r of liste ?? []) {
+      if (r?.address && r.etn > 0) transfers.push({ day: e.day, to_address: r.address, etn: r.etn });
+    }
+  }
+  transfers.sort((a, b) => b.etn - a.etn);
+  const top = transfers.slice(0, 10);
+
   // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
-  const adressen = [...new Set((transfers.results ?? []).map((r) => r.to_address))];
+  const adressen = [...new Set(top.map((r) => r.to_address))];
   const info = {};
   if (adressen.length) {
     const platz = adressen.map(() => "?").join(",");
@@ -1718,7 +1746,7 @@ async function bilanz(db, env) {
     verloren,
     endspurt,
     neue_wallets: neue,
-    top_transfers: (transfers.results ?? []).map((r) => ({
+    top_transfers: top.map((r) => ({
       ...schmuecke(r.to_address),
       tag: r.day,
       etn: r.etn,
@@ -1727,7 +1755,11 @@ async function bilanz(db, env) {
     // Bridge-Historie nicht fertig ist, sind "Top 10" die Top 10 des bisher
     // geprueften Fensters - und das gehoert dazugeschrieben, sonst liest sich
     // eine Teilmenge wie eine Bestenliste.
-    transfers_ab: stand?.aeltestes_bekannt?.slice(0, 10) ?? null,
+    // Wie weit die Auswertung reicht. Der Durchgang meldet es genauer; ohne
+    // ihn bleibt der aelteste ausgewertete Tag die ehrlichste Angabe.
+    transfers_ab:
+      stand?.aeltestes_bekannt?.slice(0, 10) ??
+      (ereignisse.results ?? []).reduce((m, e) => (m == null || e.day < m ? e.day : m), null),
     transfers_vollstaendig: !!stand?.fertig,
     mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
   };

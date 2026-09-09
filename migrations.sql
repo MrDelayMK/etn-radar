@@ -126,10 +126,6 @@ CREATE TABLE IF NOT EXISTS stichtag (
   gesetzt_am  TEXT NOT NULL
 );
 
--- Fuer die Top-Transfers der Bridge in der Bilanz. Ohne den Index waere jede
--- Anzeige ein voller Durchlauf durch bridge_transfers.
-CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn DESC);
-
 -- Fuer "welche Wallets gibt es erst nach dem Stichtag". Ohne Index waere das
 -- ein Durchlauf durch alle erfassten Adressen.
 CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);

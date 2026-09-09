@@ -502,5 +502,4 @@ CREATE TABLE IF NOT EXISTS stichtag (
   gesetzt_am  TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn DESC);
 CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);

@@ -2792,7 +2792,7 @@ async function ladeBilanz() {
   el("bzTransfers").innerHTML = tr.length
     ? tr.map((r, i) => zeile(r, i, new Date(r.tag).toLocaleDateString(LOC, {
         day: "2-digit", month: "short", year: "numeric" }))).join("")
-    : "No single transfer above " + kurz(d.mindestbetrag) + " ETN found yet.";
+    : "No single migration above " + kurz(d.mindestbetrag) + " ETN found in the period checked.";
 
   el("bzTransfersNote").textContent = d.transfers_ab
     ? d.transfers_vollstaendig
