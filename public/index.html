@@ -150,20 +150,6 @@ svg.chart{width:100%;display:block}
   border-radius:10px;padding:13px 16px;font-size:13.5px;color:#ffd4d2
 }
 /* ---------- Aftermath ---------- */
-.bilanzhero{
-  position:relative;overflow:hidden;
-  background:radial-gradient(120% 140% at 12% 0%,#5b9cff26 0%,#5b9cff0d 44%,transparent 72%),
-             linear-gradient(150deg,#141c2e 0%,#111827 55%,#181428 100%);
-  border:1px solid #2b3a5c;border-radius:20px;padding:26px 28px 22px
-}
-.bhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.tag-bilanz{
-  background:#5b9cff1f;border:1px solid #5b9cff55;color:#9dc2ff;padding:4px 12px;
-  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.11em
-}
-.bbig{font-size:clamp(38px,5.6vw,60px);font-weight:700;letter-spacing:-.04em;line-height:1}
-.bsub{margin-top:9px;font-size:15.5px;color:var(--tx);line-height:1.5;max-width:64ch}
-.bsub b{color:#fff}
 .bfacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px}
 .bfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
 .bfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
@@ -874,7 +860,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <nav id="nav">
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
   <button data-p="migration"><span class="ic">🌉</span>Migration</button>
-  <button data-p="bilanz"><span class="ic">🏁</span>Aftermath</button>
   <button data-p="tiers"><span class="ic">🏔️</span>Tiers</button>
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
@@ -1019,13 +1004,13 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="head">
         <div style="min-width:280px">
           <div class="lbl">
-            <span class="ic">🌉</span><span>Migration Watch</span>
+            <span class="ic" id="migIcon">🌉</span><span id="migLabel">Migration Watch</span>
             <span class="pill" id="deadlinePill">&mdash;</span>
           </div>
           <div class="big num" id="bridgeEtn">&mdash;</div>
           <div class="bigsub" id="bridgeSub">still waiting to be migrated</div>
         </div>
-        <div class="stats">
+        <div class="stats" id="migStats">
           <div class="fact"><div class="k">Days to deadline</div><div class="v num" id="daysLeft">&mdash;</div></div>
           <div class="fact"><div class="k">Migrating / day</div><div class="v num" id="perDay">&mdash;</div></div>
           <div class="fact"><div class="k">Needed / day</div><div class="v num" id="perDayNeeded">&mdash;</div></div>
@@ -1088,30 +1073,14 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       </div>
     </div>
   </section>
-</div>
 
-<!-- ================= AFTERMATH =================
-     Was die Migration am Ende gekostet hat. Schon vor dem Stichtag sichtbar,
-     damit die Seite an dem einen Tag, an dem es darauf ankommt, nicht zum
-     ersten Mal laeuft. -->
-<div class="page" id="page-bilanz">
-  <section style="margin-top:22px">
-    <div class="bilanzhero" id="bilanzHero">
-      <div class="bhead">
-        <span class="tag-bilanz" id="bzTag">&mdash;</span>
-        <span class="dim3" id="bzDatum">&mdash;</span>
-      </div>
-      <div class="bbig num" id="bzBig">&mdash;</div>
-      <div class="bsub" id="bzSub">&mdash;</div>
-      <div class="bfacts">
-        <div><div class="k">Value at that price</div><div class="v num" id="bzWert">&mdash;</div></div>
-        <div><div class="k">Migrated in last 30 d</div><div class="v num" id="bzSpurt">&mdash;</div></div>
-        <div><div class="k">30 d before that</div><div class="v num" id="bzSpurtVor">&mdash;</div></div>
-      </div>
-    </div>
-  </section>
-
-  <section>
+  <!-- Bilanz. Steht auf DERSELBEN Seite, nicht auf einer zweiten: nach dem
+       Stichtag waere ein eigener Migrations-Reiter ein toter Reiter - Countdown
+       und Prognose auf einen Termin, der vorbei ist. Stattdessen bleibt die
+       Seite und wechselt ihren Inhalt. Was Geschichte ist (Verlauf, Tempo,
+       grosse Ereignisse), bleibt stehen; was nur bis zum Termin galt,
+       verschwindet. -->
+  <section id="bzTabBox" hidden>
     <h2>📐 Before and after</h2>
     <div class="card" style="overflow-x:auto">
       <table class="btab" id="bzTab"><tbody></tbody></table>
@@ -2236,7 +2205,9 @@ async function ladeOverview() {
     el("chartRange").textContent =
       new Date(v[0].day).toLocaleDateString(LOC) + " – " +
       new Date(v[v.length - 1].day).toLocaleDateString(LOC) +
-      " · deadline " + new Date(m.deadline).toLocaleDateString(LOC);
+      (Date.now() < Date.parse(m.deadline + "T00:00:00Z") + 86400000
+        ? " · deadline " + new Date(m.deadline).toLocaleDateString(LOC)
+        : "");
     const diff = v[v.length - 1].etn - v[0].etn;
     const c = el("chartDelta");
     c.textContent = kurz(diff, true) + " ETN";
@@ -2723,38 +2694,52 @@ async function ladeBilanz() {
 
   const stich = new Date(d.stichtag + "T00:00:00Z");
   const stichText = stich.toLocaleDateString(LOC, { day: "2-digit", month: "long", year: "numeric" });
-  el("bzDatum").textContent = stichText;
-
   const vl = d.verloren ?? {};
-  if (d.vorbei) {
-    el("bzTag").textContent = "Final";
-    el("bzBig").innerHTML = kurz(vl.etn) +
-      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN lost for good</span>';
-    el("bzSub").innerHTML =
-      "The migration window closed on " + stichText + ". This much never crossed the bridge — " +
-      "<b>" + nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been, " +
-      "held by people who did not make the move in time. It stays where it is.";
-  } else {
-    el("bzTag").textContent = "Still open · " + d.tage_bis + " days";
-    el("bzBig").innerHTML = kurz(vl.etn) +
-      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would be left behind</span>';
-    el("bzSub").innerHTML =
-      "That is what is sitting in the bridge right now — <b>" +
-      nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been. " +
-      "The window closes on <b>" + stichText + "</b>; whatever is still in there at that " +
-      "moment is what this page will settle up.";
-  }
-  el("bzWert").textContent = vl.wert_usd != null ? "$" + kurz(vl.wert_usd) : "—";
-
   const e30 = d.endspurt ?? {};
-  el("bzSpurt").textContent = e30.letzte_30 != null ? kurz(e30.letzte_30) + " ETN" : "—";
-  el("bzSpurtVor").textContent = e30.davor_30 != null ? kurz(e30.davor_30) + " ETN" : "—";
-  // Faerbung nach der Richtung: zieht die Migration an, ist das die gute
-  // Nachricht - unabhaengig davon, wie weit sie noch entfernt ist.
-  el("bzSpurt").className = "v num " + (e30.faktor == null ? "" : e30.faktor >= 1 ? "up" : "down");
+
+  // Vor dem Stichtag bleibt der Kopf, wie ladeOverview() ihn geschrieben hat:
+  // Restmenge, Countdown, Tempo. Danach ist das alles beantwortet, und derselbe
+  // Platz traegt das Ergebnis.
+  if (d.vorbei) {
+    el("migIcon").textContent = "🏁";
+    el("migLabel").textContent = "Migration closed";
+    el("deadlinePill").textContent = "Closed " +
+      stich.toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
+    el("bridgeEtn").innerHTML = kurz(vl.etn) +
+      ' <span style="font-size:.4em;color:var(--tx2);font-weight:500">ETN lost for good</span>';
+    el("bridgeSub").innerHTML =
+      "<b>" + nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been " +
+      "never crossed the bridge — held by people who did not make the move in time";
+
+    // Countdown und noetiges Tempo sind gegenstandslos, sobald der Termin
+    // vorbei ist. An ihrer Stelle steht, was die Frist gekostet hat.
+    el("migStats").innerHTML =
+      '<div class="fact"><div class="k">Value at that price</div><div class="v num">' +
+        (vl.wert_usd != null ? "$" + kurz(vl.wert_usd) : "—") + "</div></div>" +
+      '<div class="fact"><div class="k">Last 30 d before close</div><div class="v num">' +
+        (e30.letzte_30 != null ? kurz(e30.letzte_30) : "—") + "</div></div>" +
+      '<div class="fact"><div class="k">The 30 d before that</div><div class="v num">' +
+        (e30.davor_30 != null ? kurz(e30.davor_30) : "—") + "</div></div>" +
+      '<div class="fact"><div class="k">Made it across</div><div class="v num up">' +
+        kurz(d.heute?.zirkulierend ?? d.punkte?.T0?.zirkulierend) + "</div></div>";
+
+    // Die Prognosekarte sagt voraus, was laengst feststeht.
+    const burn = document.querySelector(".burncard")?.closest("section");
+    if (burn) burn.hidden = true;
+
+    // Auch der Reiter heisst dann anders - "Migration" beschreibt ab hier
+    // nichts mehr, was noch laeuft.
+    const knopf = document.querySelector('#nav [data-p="migration"]');
+    if (knopf) knopf.innerHTML = '<span class="ic">🏁</span>Aftermath';
+  }
 
   // --- Vergleichstabelle ---
   const quelle = { ...d.punkte, heute: d.heute };
+  // Solange kein einziger Marker steht - also bis zum ersten faelligen, dem
+  // 03.11.2026 - haette die Tabelle genau eine gefuellte Spalte. Eine Tabelle
+  // mit einer Spalte vergleicht nichts.
+  const box = el("bzTabBox");
+  if (box) box.hidden = !Object.keys(d.punkte ?? {}).length;
   const spalten = BILANZ_SPALTEN.filter(([k]) => quelle[k] || k === "T0" || k === "heute");
   const kopf =
     "<thead><tr><th></th>" +
@@ -4283,9 +4268,17 @@ const uebersicht = () => (uebersichtLaeuft ??= ladeOverview());
 const LADER = {
   overview: () =>
     Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), ladeWatchlist(), fbBesucher()]),
-  migration: () =>
-    Promise.all([uebersicht(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
-  bilanz: () => ladeBilanz(),
+  // Reihenfolge ist hier wichtig, nicht Geschmack: ladeOverview() schreibt den
+  // Kopfbereich fuer die Zeit VOR dem Stichtag, ladeBilanz() ueberschreibt ihn
+  // danach. Parallel gestartet gewaenne mal der eine, mal der andere.
+  migration: async () => {
+    await uebersicht();
+    await Promise.all([
+      ladeBilanz(),
+      ladeBridgeEvents(),
+      ladeJobStatus("bridge", "bridgeBtn"),
+    ]);
+  },
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),
@@ -4956,6 +4949,7 @@ async function pruefeNeueDaten() {
     // holen - der Rest laedt beim Hinwechseln.
     const aktuell = document.querySelector("#nav button.on")?.dataset.p;
     geladen.clear();
+    uebersichtLaeuft = null;
     if (aktuell && LADER[aktuell]) {
       geladen.add(aktuell);
       await LADER[aktuell]();

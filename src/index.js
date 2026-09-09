@@ -957,6 +957,12 @@ async function besuchMelden(request, db) {
     herkunft = null;
   }
 
+  // Der Schreibvorgang darf den Besucher NIE erreichen. Faellt er aus - fehlende
+  // Spalte nach einem Deploy vor der Migration, erschoepftes Schreibkontingent,
+  // was auch immer - ist die Zaehlung fuer diesen Besuch verloren und sonst
+  // nichts. Ein 500 auf dem Weg nach draussen waere der teuerste denkbare Preis
+  // fuer eine Statistik.
+  try {
   await db
     .prepare(
       "INSERT INTO besuche (ts, tag, besucher, dauer_s, klicks, bereiche, einstieg," +
@@ -975,6 +981,9 @@ async function besuchMelden(request, db) {
       erst
     )
     .run();
+  } catch {
+    /* siehe oben - Zaehlen ist Beiwerk */
+  }
 
   return json({ ok: true }, 200, 0);
 }
