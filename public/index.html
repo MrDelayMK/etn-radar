@@ -1766,45 +1766,56 @@ function periodTabs(host, aktiv, onChange) {
  * Sechzigfachen des hoechsten Balkens, und alles Gemessene waere wieder ein
  * unsichtbarer Strich am unteren Rand. Derselbe Fehler, nur umgedreht.
  */
-function wochenTempo(punkte) {
+function tempoReihe(punkte, takt) {
   // daily_balances traegt nur Tage MIT Aenderung. Eine Luecke heisst also
   // "keine Bewegung", nicht "keine Daten" - der Abfluss wird darum dem Tag
   // zugeschlagen, an dem er gemessen wurde, und die Tage davor bleiben null.
-  const wochen = new Map();
-  const montag = (tag) => {
+  if (!punkte.length) return [];
+  const monatlich = takt === "monat";
+  const beginn = (tag) => {
     const d = new Date(tag + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    if (monatlich) d.setUTCDate(1);
+    else d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); // Montag
     return d;
   };
+
+  const eimer = new Map();
   for (let i = 1; i < punkte.length; i++) {
     const raus = punkte[i - 1].etn - punkte[i].etn;
     if (!(raus > 0)) continue;
-    const k = montag(punkte[i].day).toISOString().slice(0, 10);
-    wochen.set(k, (wochen.get(k) ?? 0) + raus);
+    const k = beginn(punkte[i].day).toISOString().slice(0, 10);
+    eimer.set(k, (eimer.get(k) ?? 0) + raus);
   }
-  if (!punkte.length) return [];
-  // Wochen ohne jede Bewegung fehlen in der Map und muessen ergaenzt werden -
-  // sonst verschwaende eine Null-Woche aus dem Bild, und genau die ist eine
-  // Aussage.
+
+  // Zeitraeume ganz ohne Bewegung fehlen in der Map und muessen ergaenzt
+  // werden - sonst verschwaende eine Null-Woche aus dem Bild, und genau die
+  // ist eine Aussage.
   const ende = Date.parse(punkte[punkte.length - 1].day + "T00:00:00Z");
   const reihe = [];
-  for (const d = montag(punkte[0].day); d.getTime() <= ende; d.setUTCDate(d.getUTCDate() + 7)) {
-    const k = d.toISOString().slice(0, 10);
-    reihe.push({ woche: k, etn: wochen.get(k) ?? 0 });
+  for (const d = beginn(punkte[0].day); d.getTime() <= ende; ) {
+    reihe.push({ ab: d.toISOString().slice(0, 10), etn: eimer.get(d.toISOString().slice(0, 10)) ?? 0 });
+    if (monatlich) d.setUTCMonth(d.getUTCMonth() + 1);
+    else d.setUTCDate(d.getUTCDate() + 7);
   }
-  // Die erste Woche ist fast immer angeschnitten (die Historie beginnt
-  // mitten in ihr) und saehe darum kuenstlich schwach aus.
-  return reihe.length > 2 ? reihe.slice(1) : reihe;
+
+  // Der erste Eimer ist fast immer angeschnitten - die Historie beginnt
+  // mitten in ihm - und saehe darum kuenstlich schwach aus. Beim letzten ist
+  // das genauso, er wird aber gebraucht: er ist der aktuelle Stand. Also
+  // bleibt er drin und wird im Tooltip als laufend gekennzeichnet.
+  const angeschnitten = Date.parse(punkte[0].day) > Date.parse(reihe[0]?.ab ?? punkte[0].day);
+  return angeschnitten && reihe.length > 2 ? reihe.slice(1) : reihe;
 }
 
 function zeichneTempoChart(svg, punkte, opts) {
   if (punkte) svg._tp = punkte;
   if (opts) svg._to = opts;
+  const o = svg._to ?? {};
   const holder = svg.parentElement;
   const tip = holder.querySelector(".tip");
   if (holder.clientWidth === 0) return;
 
-  const reihe = wochenTempo(svg._tp ?? []);
+  const takt = o.takt ?? "woche";
+  const reihe = tempoReihe(svg._tp ?? [], takt);
   const W = Math.max(320, Math.round(holder.clientWidth));
   const H = W < 640 ? 260 : 330;
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
@@ -1835,7 +1846,9 @@ function zeichneTempoChart(svg, punkte, opts) {
     i % schritt ? "" :
       '<text x="' + (X(i) + breite / 2) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12" ' +
       'text-anchor="middle" font-family="ui-monospace,monospace">' +
-      new Date(r.woche).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>"
+      new Date(r.ab).toLocaleDateString(LOC,
+        takt === "monat" ? { month: "short", year: "2-digit" } : { month: "short", day: "numeric" }) +
+      "</text>"
   ).join("");
 
   const balken = reihe.map((r, i) => {
@@ -1854,11 +1867,21 @@ function zeichneTempoChart(svg, punkte, opts) {
     const i = Math.floor((x - PL) / breite);
     if (i < 0 || i >= reihe.length) { tip.classList.remove("on"); return; }
     const w = reihe[i];
-    const bis = new Date(Date.parse(w.woche) + 6 * 86400000);
+    const ab = new Date(w.ab + "T00:00:00Z");
+    const naechster = new Date(ab);
+    if (takt === "monat") naechster.setUTCMonth(ab.getUTCMonth() + 1);
+    else naechster.setUTCDate(ab.getUTCDate() + 7);
+    // Der letzte Eimer laeuft noch. Ohne diesen Hinweis liest man den halben
+    // Monat als Einbruch.
+    const laufend = i === reihe.length - 1;
+    const bisZeit = Math.min(naechster.getTime(), Date.parse(o.letzterTag ?? w.ab) + 86400000);
+    const tage = Math.max(1, Math.round((bisZeit - ab.getTime()) / 86400000));
     tip.innerHTML = "<b>" + kurz(w.etn) + " ETN</b><span>" +
-      new Date(w.woche).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + " – " +
-      bis.toLocaleDateString(LOC, { month: "short", day: "numeric" }) +
-      " · " + kurz(w.etn / 7) + " per day</span>";
+      ab.toLocaleDateString(LOC, { month: "short", day: "numeric" }) + " – " +
+      new Date(naechster.getTime() - 86400000).toLocaleDateString(LOC,
+        { month: "short", day: "numeric" }) +
+      " · " + kurz(w.etn / tage) + " per day" +
+      (laufend ? " · still running" : "") + "</span>";
     tip.classList.add("on");
     const b = tip.getBoundingClientRect();
     const px = X(i) + breite / 2;
@@ -2110,6 +2133,10 @@ function zeichneKonzChart(svg, punkte) {
 // beantwortet ("wie viel liegt noch drin"). Das Tempo ist die Nachfrage
 // darauf und steht einen Klick daneben.
 const MIG = { sicht: "bestand", punkte: [], opts: null };
+// Woche oder Monat. Die Woche zeigt einzelne grosse Migrationstage noch als
+// eigenen Balken; der Monat glaettet sie weg und zeigt dafuer den Trend.
+// Beides ist berechtigt, je nach Frage - darum beides.
+const MIG_TAKTE = { tempo_woche: "woche", tempo_monat: "monat" };
 
 function zeichneMigration() {
   const svg = el("bridgeChart");
@@ -2117,16 +2144,26 @@ function zeichneMigration() {
   // Beide Ansichten teilen sich dasselbe SVG. Der jeweils andere Zustand
   // haengt am Element und wuerde sonst beim Umschalten mitgezeichnet.
   svg.onmousemove = null;
-  if (MIG.sicht === "tempo") {
-    el("migTitel").textContent = "Leaving the bridge, per week";
-    zeichneTempoChart(svg, MIG.punkte, MIG.opts);
+  const takt = MIG_TAKTE[MIG.sicht];
+  if (takt) {
+    el("migTitel").textContent =
+      "Leaving the bridge, per " + (takt === "monat" ? "month" : "week");
+    zeichneTempoChart(svg, MIG.punkte, {
+      ...MIG.opts,
+      takt,
+      letzterTag: MIG.punkte[MIG.punkte.length - 1]?.day,
+    });
   } else {
     el("migTitel").textContent = "Still to migrate";
     zeichneChart(svg, MIG.punkte, MIG.opts?.totalSupply);
   }
 }
 
-const MIG_SICHTEN = [["bestand", "Amount left"], ["tempo", "Pace per week"]];
+const MIG_SICHTEN = [
+  ["bestand", "Amount left"],
+  ["tempo_woche", "Per week"],
+  ["tempo_monat", "Per month"],
+];
 function migSchalter() {
   const box = el("migViews");
   box.innerHTML = MIG_SICHTEN
@@ -4579,6 +4616,26 @@ function willkommenPruefen() {
   }
   if (gesehen && !new URLSearchParams(location.search).has("intro")) return;
   el("welcome").hidden = false;
+
+  // Als gesehen gilt es nicht erst beim Klick auf das X. Wer die Begruessung
+  // liest und dann einfach weiterscrollt oder einen Reiter oeffnet, hat sie
+  // gesehen - bekam sie aber beim naechsten Besuch trotzdem wieder, weil nur
+  // das Schliessen den Vermerk setzte. Auf dem Handy, wo drei Viertel der
+  // Besuche herkommen, drueckt das X praktisch niemand.
+  //
+  // Zehn Sekunden sichtbar reichen als Beleg. Wer nach zwei Sekunden wieder
+  // weg ist, hat nichts gelesen und soll sie beim naechsten Mal wiedersehen.
+  const merken = () => {
+    clearTimeout(willkommenUhr);
+    document.removeEventListener("click", merken, true);
+    try {
+      localStorage.setItem(WILLKOMMEN_KEY, "1");
+    } catch {
+      /* privater Modus - dann eben jedes Mal */
+    }
+  };
+  const willkommenUhr = setTimeout(merken, 10000);
+  document.addEventListener("click", merken, true);
 }
 
 /* ---------- Rueckmeldung ---------------------------------------------------
