@@ -255,12 +255,6 @@ svg.chart{width:100%;display:block}
 .migbar i{display:block;height:100%}
 .migbar .done{background:linear-gradient(90deg,#22d3a7,#4ade80)}
 .migbar .rest{background:linear-gradient(90deg,#f4635e,#fbbf24);flex:1}
-.miglegend{display:flex;gap:18px;flex-wrap:wrap;padding:2px 2px 10px;font-size:12px;color:var(--tx2)}
-.miglegend span{display:flex;align-items:center;gap:7px}
-.miglegend i{width:17px;height:0;border-top-width:2.4px;display:inline-block;flex-shrink:0}
-.miglegend i.ist{border-top-style:solid;border-top-color:#fbbf24}
-.miglegend i.proj{border-top-style:dashed;border-top-color:#fbbf24}
-.miglegend i.soll{border-top-style:dashed;border-top-color:#4ade80}
 .migbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tx2);margin-top:7px}
 .migbar-lbl b{color:var(--tx)}
 
@@ -1041,7 +1035,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="chartcard">
         <div class="top">
           <div>
-            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Still to migrate</div>
+            <div style="font-size:13.5px;color:var(--tx2);font-weight:560" id="migTitel">Still to migrate</div>
             <div style="font-size:12px;color:var(--tx3)" id="chartRange">&mdash;</div>
           </div>
           <div class="r" style="display:flex;align-items:center;gap:16px">
@@ -1055,11 +1049,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <div class="chartholder" id="chartHolder">
           <svg class="chart" id="bridgeChart"></svg>
           <div class="tip" id="chartTip"></div>
-        </div>
-        <div class="miglegend" id="migLegend" hidden>
-          <span><i class="ist"></i>Actually migrated</span>
-          <span><i class="proj"></i>If the pace stays as it is</span>
-          <span><i class="soll"></i>Pace needed to finish in time</span>
         </div>
       </div>
 
@@ -1755,150 +1744,127 @@ function periodTabs(host, aktiv, onChange) {
 // Achsenbeschriftung vorher auf ~6px zusammengeschrumpft und unlesbar war.
 // Als Nebeneffekt braucht die Maus-Zuordnung keine Umrechnung mehr.
 
-/* ---------- Migrationschart bis zum Stichtag ------------------------------
+/* ---------- Migrationstempo ----------------------------------------------
  *
- * Warum ein eigener Chart statt des allgemeinen darunter: der allgemeine
- * skaliert die Werteachse auf die vorhandene Spanne. Beim Bridge-Bestand sind
- * das ueber drei Monate 0,44 % - und die fuellen dann die volle Hoehe. Das
- * Bild zeigt einen Absturz, waehrend die Zahl darunter sagt, dass die
- * Migration 100-mal zu langsam laeuft. Eines von beidem luegt, und es ist das
- * Bild.
+ * Wie viel ETN hat die Bridge je Woche tatsaechlich verlassen.
  *
- * Hier steht die Achse deshalb fest auf 0 bis Gesamtbestand, und die Zeitachse
- * laeuft bis zum Stichtag weiter. Damit sagt das Bild dasselbe wie die Zahl:
- * die tatsaechliche Linie liegt praktisch waagrecht, waehrend die noetige
- * senkrecht nach unten faellt. Der Abstand zwischen beiden IST die Aussage.
+ * VORGESCHICHTE, damit sie nicht noch einmal gemacht wird: Hier stand zuerst
+ * ein Chart, der bis zum Stichtag reichte und drei Linien zeigte - den
+ * tatsaechlichen Verlauf, die Fortschreibung im heutigen Tempo und den Weg,
+ * der noetig waere. Von diesen drei Linien enthielt genau eine Messwerte. Die
+ * anderen beiden waren mit dem Lineal gezogen: eine Gerade zum Stichtag und
+ * eine Gerade zur Null. Sie sahen nach Erkenntnis aus und waren Arithmetik -
+ * und die eine Aussage, die daraus folgte, stand als Zahl ohnehin zweimal auf
+ * derselben Seite ("409K/Tag" gegen "57,6M/Tag noetig").
+ *
+ * Diese Ansicht besteht dagegen ausschliesslich aus Gemessenem und
+ * beantwortet die Frage, die keine Kachel beantwortet: wird die Migration
+ * schneller oder langsamer? Der Bestand allein zeigt das nicht - er faellt
+ * so oder so, nur unterschiedlich steil.
+ *
+ * Bewusst OHNE eine Linie fuer das noetige Tempo: die laege beim
+ * Sechzigfachen des hoechsten Balkens, und alles Gemessene waere wieder ein
+ * unsichtbarer Strich am unteren Rand. Derselbe Fehler, nur umgedreht.
  */
-function zeichneMigrationsChart(svg, punkte, opts) {
-  if (punkte) svg._mp = punkte;
-  if (opts) svg._mo = opts;
-  const daten = svg._mp;
-  const o = svg._mo ?? {};
+function wochenTempo(punkte) {
+  // daily_balances traegt nur Tage MIT Aenderung. Eine Luecke heisst also
+  // "keine Bewegung", nicht "keine Daten" - der Abfluss wird darum dem Tag
+  // zugeschlagen, an dem er gemessen wurde, und die Tage davor bleiben null.
+  const wochen = new Map();
+  const montag = (tag) => {
+    const d = new Date(tag + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d;
+  };
+  for (let i = 1; i < punkte.length; i++) {
+    const raus = punkte[i - 1].etn - punkte[i].etn;
+    if (!(raus > 0)) continue;
+    const k = montag(punkte[i].day).toISOString().slice(0, 10);
+    wochen.set(k, (wochen.get(k) ?? 0) + raus);
+  }
+  if (!punkte.length) return [];
+  // Wochen ohne jede Bewegung fehlen in der Map und muessen ergaenzt werden -
+  // sonst verschwaende eine Null-Woche aus dem Bild, und genau die ist eine
+  // Aussage.
+  const ende = Date.parse(punkte[punkte.length - 1].day + "T00:00:00Z");
+  const reihe = [];
+  for (const d = montag(punkte[0].day); d.getTime() <= ende; d.setUTCDate(d.getUTCDate() + 7)) {
+    const k = d.toISOString().slice(0, 10);
+    reihe.push({ woche: k, etn: wochen.get(k) ?? 0 });
+  }
+  // Die erste Woche ist fast immer angeschnitten (die Historie beginnt
+  // mitten in ihr) und saehe darum kuenstlich schwach aus.
+  return reihe.length > 2 ? reihe.slice(1) : reihe;
+}
+
+function zeichneTempoChart(svg, punkte, opts) {
+  if (punkte) svg._tp = punkte;
+  if (opts) svg._to = opts;
   const holder = svg.parentElement;
   const tip = holder.querySelector(".tip");
   if (holder.clientWidth === 0) return;
 
+  const reihe = wochenTempo(svg._tp ?? []);
   const W = Math.max(320, Math.round(holder.clientWidth));
   const H = W < 640 ? 260 : 330;
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   svg.style.height = H + "px";
 
-  if (!daten || daten.length < 2 || !o.deadline) {
+  if (reihe.length < 2) {
     svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
       'text-anchor="middle">not enough history yet</text>';
     return;
   }
 
-  const PT = 18, PB = 34, PL = 104, PR = 58;
-  const t0 = Date.parse(daten[0].day);
-  const tEnde = Date.parse(o.deadline + "T00:00:00Z");
-  const tJetzt = Date.parse(daten[daten.length - 1].day);
-  // Ist der Stichtag durch, endet die Achse bei der letzten Messung - sonst
-  // schoebe sich der Chart mit jedem Tag weiter ins Leere.
-  const tMax = Math.max(tEnde, tJetzt);
-  const spanneT = Math.max(1, tMax - t0);
-
-  // Werteachse fest bei 0. Der Nullpunkt ist hier keine Geschmacksfrage: das
-  // Ziel der Migration IST die Null, und nur mit ihr im Bild sieht man, wie
-  // weit der Weg dorthin noch ist.
-  const hi = Math.max(...daten.map((p) => p.etn)) * 1.06;
-
-  const X = (t) => PL + ((t - t0) / spanneT) * (W - PL - PR);
-  const Y = (v) => H - PB - (Math.max(0, v) / hi) * (H - PT - PB);
-
-  const pfad = (punkteXY) =>
-    punkteXY.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join("");
-
-  const ist = daten.map((p) => [X(Date.parse(p.day)), Y(p.etn)]);
-  const jetztEtn = daten[daten.length - 1].etn;
-
-  // Zwei Fortschreibungen ab heute: das aktuelle Tempo, und das Tempo, das
-  // noetig waere. Beide nur, solange der Stichtag noch vor uns liegt.
-  let proj = null, soll = null;
-  if (tEnde > tJetzt) {
-    const tage = (tEnde - tJetzt) / 86400000;
-    const rest = Math.max(0, jetztEtn - (o.proTag ?? 0) * tage);
-    proj = [[X(tJetzt), Y(jetztEtn)], [X(tEnde), Y(rest)]];
-    soll = [[X(tJetzt), Y(jetztEtn)], [X(tEnde), Y(0)]];
-  }
+  const PT = 18, PB = 34, PL = 88, PR = 14;
+  const hi = Math.max(...reihe.map((r) => r.etn)) * 1.12 || 1;
+  const breite = (W - PL - PR) / reihe.length;
+  const X = (i) => PL + i * breite;
+  const Y = (v) => H - PB - (v / hi) * (H - PT - PB);
 
   const linien = [0, .25, .5, .75, 1].map((f) => {
     const y = PT + f * (H - PT - PB);
-    const wert = hi - f * hi;
-    const pct = o.totalSupply ? " (" + nf(wert / o.totalSupply * 100, 0) + "%)" : "";
     return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
       '" stroke="#1e293b" stroke-width="1"/>' +
       '<text x="' + (PL - 10) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12.5" ' +
-      'text-anchor="end" font-family="ui-monospace,monospace">' + kurz(wert) + pct + "</text>";
+      'text-anchor="end" font-family="ui-monospace,monospace">' + kurz(hi - f * hi) + "</text>";
   }).join("");
 
-  // Zeitachse: gleichmaessige Abstaende ueber den GESAMTEN Bereich, also auch
-  // ueber den Teil, der noch in der Zukunft liegt.
-  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
-  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
-    const t = t0 + (n / marken) * spanneT;
-    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
-    return '<text x="' + X(t) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
-      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
-      new Date(t).toLocaleDateString(LOC, { month: "short", year: "2-digit" }) + "</text>";
+  const schritt = Math.max(1, Math.ceil(reihe.length / Math.max(2, Math.floor((W - PL - PR) / 92))));
+  const datumTexte = reihe.map((r, i) =>
+    i % schritt ? "" :
+      '<text x="' + (X(i) + breite / 2) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12" ' +
+      'text-anchor="middle" font-family="ui-monospace,monospace">' +
+      new Date(r.woche).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>"
+  ).join("");
+
+  const balken = reihe.map((r, i) => {
+    const y = Y(r.etn);
+    const h = r.etn > 0 ? Math.max(2, H - PB - y) : 0;
+    return '<rect x="' + (X(i) + breite * 0.14).toFixed(1) + '" y="' + (H - PB - h).toFixed(1) +
+      '" width="' + (breite * 0.72).toFixed(1) + '" height="' + h.toFixed(1) +
+      '" rx="2.5" fill="#fbbf24" opacity=".85"/>';
   }).join("");
 
-  const xJetzt = X(tJetzt), xEnde = X(tEnde);
-  svg.innerHTML =
-    '<defs><linearGradient id="mgr" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="#fbbf24" stop-opacity=".26"/>' +
-    '<stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/></linearGradient></defs>' +
-    linien + datumTexte +
-    // Stichtags-Marke
-    '<line x1="' + xEnde + '" y1="' + PT + '" x2="' + xEnde + '" y2="' + (H - PB) +
-    '" stroke="#f4635e" stroke-width="1.5" stroke-dasharray="5 4" opacity=".85"/>' +
-    '<text x="' + (xEnde + 6) + '" y="' + (PT + 11) + '" fill="#ff8f8b" font-size="11.5" ' +
-    'font-weight="700" font-family="ui-monospace,monospace">DEADLINE</text>' +
-    // Flaeche unter dem tatsaechlichen Verlauf
-    '<path d="' + pfad(ist) + "L" + xJetzt.toFixed(1) + " " + (H - PB) + "L" + PL + " " +
-    (H - PB) + 'Z" fill="url(#mgr)"/>' +
-    (soll ? '<path d="' + pfad(soll) + '" fill="none" stroke="#4ade80" stroke-width="2.2" ' +
-      'stroke-dasharray="7 5" stroke-linecap="round"/>' : "") +
-    (proj ? '<path d="' + pfad(proj) + '" fill="none" stroke="#fbbf24" stroke-width="2.2" ' +
-      'stroke-dasharray="7 5" stroke-linecap="round" opacity=".8"/>' : "") +
-    '<path d="' + pfad(ist) + '" fill="none" stroke="#fbbf24" stroke-width="2.6" ' +
-    'stroke-linejoin="round" stroke-linecap="round"/>' +
-    '<circle cx="' + xJetzt + '" cy="' + Y(jetztEtn) + '" r="4.5" fill="#fbbf24"/>' +
-    '<g id="mcross" style="display:none">' +
-    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#fbbf24" stroke-width="1" ' +
-    'stroke-dasharray="4 4" opacity=".7"/>' +
-    '<circle r="6" fill="#fbbf24" stroke="#0b111e" stroke-width="2.5"/></g>';
+  svg.innerHTML = linien + datumTexte + balken;
 
-  // Ablesen: nur ueber dem tatsaechlichen Verlauf, nicht ueber den beiden
-  // Fortschreibungen - dort gaebe es nichts abzulesen ausser der eigenen
-  // Rechnung.
-  const kreuz = svg.querySelector("#mcross");
   holder.onmousemove = (e) => {
     const r = holder.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * W;
-    if (x < PL || x > xJetzt) { kreuz.style.display = "none"; tip.classList.remove("on"); return; }
-    const t = t0 + ((x - PL) / (W - PL - PR)) * spanneT;
-    let best = 0, bestD = Infinity;
-    daten.forEach((q, i) => {
-      const d = Math.abs(Date.parse(q.day) - t);
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    const q = daten[best];
-    const px = X(Date.parse(q.day)), py = Y(q.etn);
-    kreuz.style.display = "";
-    kreuz.querySelector("line").setAttribute("x1", px);
-    kreuz.querySelector("line").setAttribute("x2", px);
-    kreuz.querySelector("circle").setAttribute("cx", px);
-    kreuz.querySelector("circle").setAttribute("cy", py);
-    tip.innerHTML = "<b>" + kurz(q.etn) + " ETN</b><span>" +
-      new Date(q.day).toLocaleDateString(LOC, { year: "numeric", month: "short", day: "numeric" }) +
-      (o.totalSupply ? " · " + nf(q.etn / o.totalSupply * 100, 1) + "% of supply" : "") +
-      "</span>";
+    const i = Math.floor((x - PL) / breite);
+    if (i < 0 || i >= reihe.length) { tip.classList.remove("on"); return; }
+    const w = reihe[i];
+    const bis = new Date(Date.parse(w.woche) + 6 * 86400000);
+    tip.innerHTML = "<b>" + kurz(w.etn) + " ETN</b><span>" +
+      new Date(w.woche).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + " – " +
+      bis.toLocaleDateString(LOC, { month: "short", day: "numeric" }) +
+      " · " + kurz(w.etn / 7) + " per day</span>";
     tip.classList.add("on");
     const b = tip.getBoundingClientRect();
+    const px = X(i) + breite / 2;
     tip.style.left = Math.min(Math.max(0, (px / W) * r.width - b.width / 2), r.width - b.width) + "px";
   };
-  holder.onmouseleave = () => { kreuz.style.display = "none"; tip.classList.remove("on"); };
+  holder.onmouseleave = () => tip.classList.remove("on");
 }
 
 function zeichneChart(svg, punkte, totalSupply) {
@@ -2140,22 +2106,27 @@ function zeichneKonzChart(svg, punkte) {
  * sie zeigt die Bewegung der letzten Monate, die in der Gesamtsicht
  * zwangslaeufig zur waagrechten Linie wird.
  */
-const MIG = { sicht: "deadline", punkte: [], opts: null };
+// Vorgabe ist der Bestand: die Ansicht, die eine Frage ohne Vorwissen
+// beantwortet ("wie viel liegt noch drin"). Das Tempo ist die Nachfrage
+// darauf und steht einen Klick daneben.
+const MIG = { sicht: "bestand", punkte: [], opts: null };
 
 function zeichneMigration() {
   const svg = el("bridgeChart");
   if (!MIG.punkte.length) return;
-  const legende = el("migLegend");
-  if (MIG.sicht === "deadline") {
-    legende.hidden = false;
-    zeichneMigrationsChart(svg, MIG.punkte, MIG.opts);
+  // Beide Ansichten teilen sich dasselbe SVG. Der jeweils andere Zustand
+  // haengt am Element und wuerde sonst beim Umschalten mitgezeichnet.
+  svg.onmousemove = null;
+  if (MIG.sicht === "tempo") {
+    el("migTitel").textContent = "Leaving the bridge, per week";
+    zeichneTempoChart(svg, MIG.punkte, MIG.opts);
   } else {
-    legende.hidden = true;
+    el("migTitel").textContent = "Still to migrate";
     zeichneChart(svg, MIG.punkte, MIG.opts?.totalSupply);
   }
 }
 
-const MIG_SICHTEN = [["deadline", "To the deadline"], ["detail", "Recent detail"]];
+const MIG_SICHTEN = [["bestand", "Amount left"], ["tempo", "Pace per week"]];
 function migSchalter() {
   const box = el("migViews");
   box.innerHTML = MIG_SICHTEN
@@ -4841,6 +4812,11 @@ addEventListener("visibilitychange", () => {
 
 function besuchSenden() {
   if (ZAEHLER.gesendet || !ZAEHLER.bewegt) return;
+  // Der Betreiber ist kein Besucher. Wer sich mit dem Admin-Wort angemeldet
+  // hat, sieht sich seine eigene Seite an - das gehoert nicht in eine
+  // Statistik ueber deren Nutzung. Ohne diese Zeile misst man am Ende vor
+  // allem sich selbst.
+  if (ADMIN.token) return;
   ZAEHLER.gesendet = true;
   zaehlerPausieren();
   const daten = {
