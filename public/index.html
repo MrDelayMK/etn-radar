@@ -245,29 +245,6 @@ svg.chart{width:100%;display:block}
 .migbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tx2);margin-top:7px}
 .migbar-lbl b{color:var(--tx)}
 
-/* ---------- Big migration events ---------- */
-.evday{background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:7px;overflow:hidden}
-.evday:last-child{margin-bottom:0}
-.evday summary{
-  display:flex;align-items:center;gap:14px;padding:11px 15px;cursor:pointer;
-  list-style:none;transition:background .12s
-}
-.evday summary::-webkit-details-marker{display:none}
-.evday summary::before{content:"▸";color:var(--tx3);font-size:11px;transition:transform .15s;flex-shrink:0}
-.evday[open] summary::before{transform:rotate(90deg)}
-.evday summary:hover{background:#ffffff08}
-.evday[open] summary{border-bottom:1px solid var(--line)}
-.evday .date{font-size:13px;font-weight:600;flex:1;min-width:105px}
-.evday .out{font-size:14.5px;font-weight:660;color:var(--down)}
-.evday .wer{font-size:11.5px;color:var(--tx2);min-width:98px;text-align:right}
-.evday .shape{padding:11px 15px 3px;font-size:12.5px;color:var(--tx2)}
-.evday .shape b{color:var(--tx)}
-.evday .incomplete{padding:11px 15px;font-size:12.5px;color:var(--warn)}
-.evday .evrecip,.evday .dim3{padding-left:15px;padding-right:15px}
-.evrecip{display:flex;align-items:center;gap:11px;padding:7px 0;border-top:1px solid var(--line)}
-.evrecip .id{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.evrecip .val{flex-shrink:0;font-size:12.5px;font-weight:600}
-
 /* ---------- KPI ---------- */
 .kpis{grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
 .kpi .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);
@@ -1061,19 +1038,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="burnverdict" id="burnVerdict">&mdash;</div>
     </div>
   </section>
-  <section>
-    <h2>🌉 Big migration events
-      <button class="infoBtn" id="bridgeEventsInfo" data-info="The largest single migrations out of the bridge: transfers of 500,000 ETN or more, grouped by day. Everyday traffic — the hundreds of small migrations that happen daily — is left out on purpose. Amounts are the transfers themselves, traced from the bridge's internal transactions.">ⓘ</button>
-    </h2>
-    <div class="card" id="bridgeEventsCard">
-      <div id="bridgeEvents" class="empty">Loading&hellip;</div>
-      <div class="tiersfoot" style="margin-top:14px">
-        <div class="dim3" style="font-size:11.5px">Runs weekly, or any time via the button.</div>
-        <button class="ghost" id="bridgeBtn" style="display:none">🔍 Scan for events now</button>
-      </div>
-    </div>
-  </section>
-
   <!-- Bilanz. Steht auf DERSELBEN Seite, nicht auf einer zweiten: nach dem
        Stichtag waere ein eigener Migrations-Reiter ein toter Reiter - Countdown
        und Prognose auf einen Termin, der vorbei ist. Stattdessen bleibt die
@@ -1088,12 +1052,15 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   </section>
 
   <section>
-    <h2>🐋 Biggest single migrations
-      <button class="infoBtn" data-info="The largest single transfers ever sent out of the bridge contract to a new-chain address. 'Holds today' is that address's balance in the current snapshot — a dash means it is not among the tracked wallets today, which usually means the ETN moved on.">ⓘ</button>
+    <h2>🌉 Biggest migrations out of the bridge
+      <button class="infoBtn" data-info="The largest single transfers ever sent out of the bridge contract to a new-chain address — 500,000 ETN or more. Everyday traffic, the hundreds of small migrations that happen daily, is left out on purpose. 'Holds today' is that address's balance in the current snapshot; a dash means it is not among the tracked wallets today, which usually means the ETN moved on.">ⓘ</button>
     </h2>
     <div class="card">
       <div id="bzTransfers" class="empty">Loading&hellip;</div>
-      <div class="dim3" id="bzTransfersNote" style="font-size:11.5px;margin-top:12px"></div>
+      <div class="tiersfoot" style="margin-top:14px">
+        <div class="dim3" id="bzTransfersNote" style="font-size:11.5px"></div>
+        <button class="ghost" id="bridgeBtn" style="display:none">🔍 Scan for events now</button>
+      </div>
     </div>
   </section>
 
@@ -1676,11 +1643,72 @@ const adminKopf = () => (ADMIN.token ? { "X-Admin-Token": ADMIN.token } : {});
   if (an) document.querySelectorAll(".labs").forEach((e) => e.removeAttribute("hidden"));
 })();
 
+/* ---------- Abrufe und der Browserspeicher --------------------------------
+ *
+ * Gemessen am 09.09.2026 auf der Live-Seite: /api/overview und /api/bilanz
+ * kamen mit transferSize 0 zurueck - also gar nicht aus dem Netz, sondern aus
+ * dem Speicher des Browsers, und das auch beim frischen Seitenaufruf.
+ *
+ * Die Ursache liegt nicht im Worker: der schickt "max-age=60". Cloudflare
+ * ueberschreibt das fuer alles, was es selbst zwischenspeichert, auf die
+ * Browser-Vorgabe der Zone - hier vier Stunden. Wer die Seite einmal besucht
+ * hatte, sah danach bis zu vier Stunden dieselben Zahlen, egal wie oft der
+ * Snapshot inzwischen gelaufen war. Der 20-Sekunden-Takt bemerkte den neuen
+ * Snapshot zwar, holte danach aber wieder nur die alte Antwort aus dem
+ * Browserspeicher - die Selbstaktualisierung lief ins Leere.
+ *
+ * Loesung: die Snapshot-Nummer haengt an der URL. Sie ist genau dann neu, wenn
+ * es neue Daten gibt, und dann ist es fuer den Browser eine andere Adresse,
+ * die er holen MUSS.
+ *
+ * Warum kein Zeitstempel: alle Besucher teilen sich dieselbe Nummer und damit
+ * dieselbe URL. Der Zwischenspeicher des Workers greift weiter, und die
+ * Datenbank wird sogar seltener gefragt als bisher - einmal je Snapshot statt
+ * einmal je Minute.
+ */
+let SNAPSHOT_MARKE = null;
+let markeLaeuft = null;
+let bekannteSnapshotId = null;
+
+// Diese Antworten haengen nicht am Snapshot und muessen immer frisch sein:
+// der Snapshot-Stand selbst, sonst merkte niemand je eine Aenderung, die
+// Betreiber-Ansichten, die sich jederzeit aendern koennen, und die
+// Job-Zustaende, die ein Knopfdruck sofort veraendert.
+const OHNE_MARKE = [
+  "/api/stand", "/api/feedback", "/api/besuche",
+  "/api/census/", "/api/clusters/", "/api/exchanges/", "/api/bridge/",
+];
+
+/** Die Snapshot-Nummer, einmal geholt und danach aus dem Gedaechtnis. */
+function markeBereit() {
+  return (markeLaeuft ??= (async () => {
+    try {
+      const st = await hole("/api/stand");
+      if (st?.snapshot_id != null) {
+        SNAPSHOT_MARKE = st.snapshot_id;
+        bekannteSnapshotId ??= st.snapshot_id;
+      }
+    } catch {
+      /* ohne Nummer laedt die Seite wie bisher - schlimmstenfalls aelter */
+    }
+  })());
+}
+
 async function hole(pfad, bust) {
-  // bust=true haengt einen Cache-Buster an: der Worker cached Antworten bis
-  // zu 2 Minuten ueber die Cloudflare Cache API, gekeyt auf die exakte URL.
-  // Der manuelle Refresh-Knopf soll wirklich neu laden, nicht aus diesem Cache.
-  const url = bust ? pfad + (pfad.includes("?") ? "&" : "?") + "_=" + Date.now() : pfad;
+  // Jeder snapshot-gebundene Abruf wartet selbst auf die Nummer. Sich auf die
+  // Reihenfolge der Aufrufe zu verlassen ging schief: die Statusabfragen und
+  // die Uebersicht starten am Modulanfang, also bevor sie feststuende.
+  if (!bust && SNAPSHOT_MARKE == null && !OHNE_MARKE.some((x) => pfad.startsWith(x))) {
+    await markeBereit();
+  }
+  // bust=true haengt einen Cache-Buster an: der manuelle Refresh-Knopf soll
+  // wirklich neu laden, nicht aus dem Zwischenspeicher.
+  let url = pfad;
+  if (bust) {
+    url = pfad + (pfad.includes("?") ? "&" : "?") + "_=" + Date.now();
+  } else if (SNAPSHOT_MARKE != null && !OHNE_MARKE.some((x) => pfad.startsWith(x))) {
+    url = pfad + (pfad.includes("?") ? "&" : "?") + "s=" + SNAPSHOT_MARKE;
+  }
   const r = await fetch(url, { headers: adminKopf() });
   if (!r.ok) throw new Error(pfad + " → HTTP " + r.status);
   return r.json();
@@ -2812,69 +2840,6 @@ async function ladeBilanz() {
       nf(neu.anzahl) + "</div></div>" +
       '<div><div class="k">They hold</div><div class="v num">' + kurz(neu.etn) +
       " ETN</div></div></div>";
-  }
-}
-
-async function ladeBridgeEvents() {
-  const box = el("bridgeEvents");
-  try {
-    const d = await hole("/api/bridge-events");
-    const tage = d.ereignisse ?? [];
-    if (!tage.length) {
-      box.className = "empty";
-      box.textContent =
-        "No single migration transfer above 500,000 ETN in the period checked.";
-      return;
-    }
-    box.className = "";
-    // Den tatsaechlich geprueften Zeitraum in den Info-Punkt schreiben. Der
-    // Durchlauf kommt nicht immer die vollen 90 Tage zurueck; ohne diese
-    // Angabe sieht "keine Ereignisse" wie "es ist nichts passiert" aus.
-    // Der Durchgang durch die Bridge-Historie zieht sich ueber mehrere
-    // Laeufe. Bis er durch ist, gehoert in den Info-Punkt, wie weit die Suche
-    // bisher reicht - sonst liest sich eine kurze Liste wie "mehr gab es
-    // nicht", obwohl schlicht noch nicht alles angesehen wurde.
-    const info = document.querySelector('#bridgeEventsInfo');
-    if (info && d.abgedeckt_ab) {
-      const ab = new Date(d.abgedeckt_ab).toLocaleDateString(LOC);
-      info.dataset.info = info.dataset.info.replace(/ (Checked|Covers).*$/, "") +
-        (d.historie_vollstaendig
-          ? " Covers the whole history of the bridge, back to " + ab + "."
-          : " Checked back to " + ab + " so far — the scan works further back each week.");
-    }
-    box.innerHTML = tage.map((t) => {
-      const datum = new Date(t.day).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
-      const kopf =
-        '<summary><span class="date">' + datum + "</span>" +
-        '<span class="out num">−' + kurz(t.outflow_etn) + " ETN</span>" +
-        '<span class="wer">' +
-          (t.recipient_count === 1 ? "1 transfer" : nf(t.recipient_count) + " transfers") +
-        "</span></summary>";
-
-      // Die Auswertung liefert nur noch grosse Einzeltransfers - Tage, an
-      // denen ausschliesslich Kleinbetraege liefen, tauchen gar nicht mehr auf.
-      const empf = t.top_empfaenger ?? [];
-      const weitere = t.recipient_count - empf.length;
-
-      return "<details class=\"evday\">" + kopf +
-        '<div class="shape">' +
-        (t.recipient_count === 1
-          ? "One wallet took the whole amount in a <b>single</b> transfer."
-          : "<b>" + nf(t.recipient_count) + "</b> large transfers went out that day.") +
-        "</div>" +
-        empf.map((r) =>
-          '<a class="evrecip" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
-            '<div class="id">' + kurzAdr(r.address) + "</div>" +
-            '<div class="val num">' + kurz(r.etn) + " ETN</div></a>"
-        ).join("") +
-        (weitere > 0
-          ? '<div class="dim3" style="font-size:11.5px;padding-top:8px">and ' + weitere + " more</div>"
-          : "") +
-        "</details>";
-    }).join("");
-  } catch (e) {
-    box.className = "empty";
-    box.textContent = "Error: " + esc(e.message);
   }
 }
 
@@ -4159,7 +4124,7 @@ el("shareGoTG").onclick = () => shareOeffnen("tg");
     // Zeile/Karte mit genau einer Wallet-Adresse, ist die gemeint.
     let a = e.target.closest('a[href^="' + EXPLORER + '"]');
     if (!a) {
-      const zeile = e.target.closest("tr, .mv, .ev, .cmember, .evrecip, .flowex");
+      const zeile = e.target.closest("tr, .mv, .ev, .cmember, .flowex");
       const treffer = zeile?.querySelectorAll('a[href^="' + EXPLORER + '"]');
       if (treffer?.length === 1) a = treffer[0];
     }
@@ -4273,11 +4238,7 @@ const LADER = {
   // danach. Parallel gestartet gewaenne mal der eine, mal der andere.
   migration: async () => {
     await uebersicht();
-    await Promise.all([
-      ladeBilanz(),
-      ladeBridgeEvents(),
-      ladeJobStatus("bridge", "bridgeBtn"),
-    ]);
+    await Promise.all([ladeBilanz(), ladeJobStatus("bridge", "bridgeBtn")]);
   },
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
@@ -4919,7 +4880,7 @@ addEventListener("visibilitychange", () => { if (document.hidden) besuchSenden()
 
 // Die Seite bleibt bei vielen offen liegen. Ohne diesen Takt bliebe "snapshot
 // 3 min ago" stundenlang stehen, obwohl nichts mehr nachkommt.
-let bekannteSnapshotId = null;
+// (bekannteSnapshotId steht oben bei SNAPSHOT_MARKE - beide gehoeren zusammen.)
 
 /**
  * Nachladen, wenn es wirklich etwas Neues gibt.
@@ -4944,6 +4905,8 @@ async function pruefeNeueDaten() {
     }
     if (s.snapshot_id === bekannteSnapshotId) return;
     bekannteSnapshotId = s.snapshot_id;
+    // Ohne das hier holte der Takt gleich wieder die alte Adresse.
+    SNAPSHOT_MARKE = s.snapshot_id;
 
     // Alle Bereiche als ungeladen markieren, aber nur den sichtbaren jetzt
     // holen - der Rest laedt beim Hinwechseln.
