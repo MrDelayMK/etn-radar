@@ -1128,13 +1128,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     </div>
   </section>
 
-  <section>
-    <h2>📥 Who took out the most</h2>
-    <div class="card">
-      <div id="bzEmpfaenger" class="empty">Loading&hellip;</div>
-    </div>
-  </section>
-
   <section id="bzNeuBox" hidden>
     <h2>🌱 Moved in after the deadline
       <button class="infoBtn" data-info="Addresses that first showed up in a snapshot after the deadline had passed. That means they grew into the tracked range afterwards — it does not necessarily mean the address itself is new on the chain.">ⓘ</button>
@@ -2707,6 +2700,7 @@ const BILANZ_SPALTEN = [
   ["heute", "Today"],
 ];
 
+
 async function ladeBilanz() {
   let d;
   try {
@@ -2809,16 +2803,6 @@ async function ladeBilanz() {
       : "Checked back to " + new Date(d.transfers_ab).toLocaleDateString(LOC) +
         " so far — the scan works further back each week, so this ranking can still change."
     : "";
-
-  const emp = d.top_empfaenger ?? [];
-  el("bzEmpfaenger").className = emp.length ? "" : "empty";
-  el("bzEmpfaenger").innerHTML = emp.length
-    ? emp.map((r, i) => zeile(r, i,
-        (r.anzahl === 1 ? "1 transfer" : nf(r.anzahl) + " transfers") +
-        " · " + new Date(r.erster).toLocaleDateString(LOC) +
-        (r.letzter !== r.erster ? " – " + new Date(r.letzter).toLocaleDateString(LOC) : "")
-      )).join("")
-    : "Nothing recorded yet.";
 
   // --- Wallets, die es vorher nicht gab ---
   const neu = d.neue_wallets;
@@ -4667,18 +4651,16 @@ async function fbBesucher() {
     };
     const kachel = (k, w) =>
       '<div class="stkachel"><span class="k">' + k + '</span><span class="w">' + w + "</span></div>";
-    // Solange keine einzige Meldung eine Vorgeschichte mitbringt, ist der
-    // Anteil nicht null, sondern unbekannt - und ein angezeigtes "0 %" waere
-    // eine Behauptung, die niemand geprueft hat.
     const anteil = (teil, ganz) =>
       !ganz || teil == null ? "—" : nf((teil / ganz) * 100, 0) + "%";
 
     const tage = (d.pro_tag ?? [])
       .map((t) =>
         '<div class="sttag"><span class="d">' + t.tag + "</span>" +
-        "<span>" + nf(t.leute) + " people · " + nf(t.besuche) + " visits · " +
-        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) +
-        (t.wieder ? " · " + nf(t.wieder) + " returning" : "") + "</span></div>"
+        "<span>" + nf(t.leute) + " people" +
+        (t.wieder ? " (" + nf(t.wieder) + " returning)" : "") +
+        " · " + nf(t.besuche) + " visits · " +
+        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) + "</span></div>"
       )
       .join("");
 
@@ -4697,10 +4679,11 @@ async function fbBesucher() {
       kachel("Clicks", nf(g.klicks ?? 0)) +
       kachel("Avg. time", dauer(g.dauer)) +
       kachel("Mobile", nf(g.mobil ?? 0)) +
-      // Wiederkehr als Anteil, nicht als nackte Zahl: "31" sagt nichts, "57 %"
-      // beantwortet die Frage, ob die Seite benutzt oder nur angeklickt wird.
-      kachel("Returning", anteil(g.wieder, g.besuche)) +
-      kachel("Regulars", anteil(g.alt, g.besuche)) +
+      // Anteil an den Personen je Tag, nicht an den Besuchen: "57 %" sagt,
+      // ob die Seite benutzt oder nur angeklickt wird. Beide Zahlen stehen in
+      // der Tagesliste darunter und lassen sich dort nachzaehlen.
+      kachel("Returning", anteil(g.wieder, g.leute_tage)) +
+      kachel("Regulars", anteil(g.stamm, g.leute_tage)) +
       "</div>" +
       (tage ? '<div class="sttage">' + tage + "</div>" : '<div class="dim3" style="font-size:12px">No visits recorded yet.</div>') +
       (bereiche ? '<div class="stliste">' + bereiche + "</div>" : "") +

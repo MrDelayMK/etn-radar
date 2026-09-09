@@ -37,20 +37,15 @@ const MIN_EREIGNIS_ETN = 100000;
  * wird der Zustand an festgelegten Tagen eingefroren, jeder Marker genau
  * einmal und danach nie wieder angefasst.
  *
- * Die Abstaende sind bewusst symmetrisch. "Vorher" und "nachher" sind nur
- * dann vergleichbar, wenn beide Seiten denselben Zeitraum abdecken - ein
- * Vergleich von 30 Tagen davor mit 90 Tagen danach misst hauptsaechlich die
- * unterschiedliche Laenge.
+ * Die Abstaende sind bewusst symmetrisch: ein Vergleich von 30 Tagen davor
+ * mit 90 Tagen danach misst hauptsaechlich die unterschiedliche Laenge.
  *
- * T-90 faellt auf den 02.11.2026 und damit drei Monate vor den Stichtag. Das
- * ist Absicht: bis dahin laeuft das Verfahren mehrfach im Echtbetrieb, und
- * ein Fehler faellt auf, solange er noch reparabel ist. Ein Mechanismus, der
- * erst am entscheidenden Tag zum ersten Mal laeuft, ist an diesem Tag kaputt.
+ * T-90 faellt auf den 02.11.2026, drei Monate vor den Stichtag. Das ist
+ * Absicht - ein Mechanismus, der erst am entscheidenden Tag zum ersten Mal
+ * laeuft, ist an diesem Tag kaputt.
  */
 const STICHTAG_MARKER = [
-  ["T-90", -90], ["T-30", -30], ["T-7", -7],
-  ["T0", 0],
-  ["T+7", 7], ["T+30", 30], ["T+90", 90],
+  ["T-90", -90], ["T-30", -30], ["T0", 0], ["T+30", 30], ["T+90", 90],
 ];
 
 // Faellt zurueck auf denselben Wert wie wrangler.toml. Die Variable dort ist
@@ -587,16 +582,13 @@ export async function runIngest(env, db, opts = {}) {
 
   // --- 7e. Stichtags-Marker einfrieren -----------------------------------
   //
-  // Geschrieben wird ein Marker an dem Tag, an dem er faellig wird, und nur
-  // wenn er noch nicht steht. Ist der Ingest an genau diesem Tag ausgefallen,
-  // holt ihn der naechste Lauf nach - dann eben mit dem Stand von einem Tag
-  // spaeter, was in "tag" auch so festgehalten wird. Lieber ein Wert mit
-  // ehrlichem Datum als gar keiner.
+  // Ein Marker wird an dem Tag geschrieben, an dem er faellig wird, und nur
+  // wenn er noch nicht steht. War der Ingest an dem Tag aus, holt der naechste
+  // Lauf ihn nach - mit dem Stand von einem Tag spaeter, was in "tag" auch so
+  // steht. Lieber ein Wert mit ehrlichem Datum als gar keiner.
   //
-  // Die Zahlen kommen aus diesem Lauf, nicht aus einer Abfrage: sie liegen
-  // hier ohnehin im Speicher, und was aus dem laufenden Snapshot stammt, ist
-  // in sich stimmig - Kurs, Bestand und Verteilung gehoeren zum selben
-  // Zeitpunkt.
+  // Die Zahlen stammen aus diesem Lauf statt aus einer Abfrage: sie liegen
+  // hier ohnehin im Speicher und gehoeren alle zum selben Zeitpunkt.
   {
     const stichtag = String(env.MIGRATION_DEADLINE ?? STICHTAG_STANDARD);
     const basis = Date.parse(stichtag + "T00:00:00Z");

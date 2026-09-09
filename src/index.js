@@ -987,29 +987,24 @@ async function besucheLesen(db, u) {
   const [proTag, gesamt, bereiche, herkunft] = await Promise.all([
     db
       .prepare(
+        // Alles je Tag, alles in derselben Einheit: LEUTE. Die Gesamtwerte
+        // entstehen daraus durch Addition (siehe unten) - damit steht in der
+        // Kachel nie etwas, das sich nicht aus der Tagesliste nachrechnen
+        // laesst. "besuche" zaehlt daneben jeden einzelnen Aufruf, auch den
+        // dritten am selben Tag.
         "SELECT tag, count(DISTINCT besucher) leute, count(*) besuche," +
           " sum(klicks) klicks, avg(dauer_s) dauer," +
-          " count(DISTINCT CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag" +
-          "   THEN besucher END) wieder FROM besuche" +
-          " WHERE tag >= ? GROUP BY tag ORDER BY tag DESC"
+          " count(DISTINCT CASE WHEN erstbesuch < tag THEN besucher END) wieder," +
+          " count(DISTINCT CASE WHEN julianday(tag) - julianday(erstbesuch) >= 7" +
+          "   THEN besucher END) stamm" +
+          " FROM besuche WHERE tag >= ? GROUP BY tag ORDER BY tag DESC"
       )
       .bind(abTag)
       .all(),
     db
       .prepare(
         "SELECT count(DISTINCT besucher) leute, count(*) besuche, sum(klicks) klicks," +
-          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil," +
-          // Wiederkehr: das Geraet war an einem FRUEHEREN Tag schon da. Mehrere
-          // Besuche am selben Tag zaehlen nicht als Wiederkehr - sonst waere
-          // jedes Neuladen einer.
-          " sum(CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag THEN 1 ELSE 0 END) wieder," +
-          " sum(CASE WHEN erstbesuch IS NOT NULL AND erstbesuch = tag THEN 1 ELSE 0 END) neu," +
-          // Aelter als eine Woche: das unterscheidet den, der zweimal
-          // vorbeischaut, von dem, der die Seite benutzt.
-          " sum(CASE WHEN erstbesuch IS NOT NULL" +
-          "   AND julianday(tag) - julianday(erstbesuch) >= 7 THEN 1 ELSE 0 END) alt," +
-          " count(DISTINCT CASE WHEN erstbesuch IS NOT NULL AND erstbesuch < tag" +
-          "   THEN besucher END) wieder_leute" +
+          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil" +
           " FROM besuche WHERE tag >= ?"
       )
       .bind(abTag)
@@ -1037,10 +1032,22 @@ async function besucheLesen(db, u) {
     }
   }
 
+  // Die Wiederkehr-Summen werden addiert statt neu abgefragt: so kann die
+  // Kachel gar nicht etwas anderes sagen als die Tagesliste darunter.
+  const tageReihe = proTag.results ?? [];
+  const summe = (feld) => tageReihe.reduce((n, t) => n + (t[feld] ?? 0), 0);
+
   return {
     zeitraum_tage: tage,
-    gesamt: gesamt ?? null,
-    pro_tag: proTag.results ?? [],
+    gesamt: gesamt
+      ? {
+          ...gesamt,
+          leute_tage: summe("leute"), // Personen je Tag, ueber alle Tage addiert
+          wieder: summe("wieder"),
+          stamm: summe("stamm"),
+        }
+      : null,
+    pro_tag: tageReihe,
     bereiche: Object.entries(proBereich)
       .map(([name, n]) => ({ name, n }))
       .sort((a, b) => b.n - a.n),
@@ -1632,19 +1639,11 @@ async function bilanz(db, env) {
       ? endspurt.letzte_30 / endspurt.davor_30
       : null;
 
-  // Die groessten Einzelbetraege, die je die Bridge verlassen haben, und die
-  // Adressen mit der groessten Gesamtsumme. Zwei verschiedene Fragen: der eine
-  // grosse Griff, und wer ueber viele Vorgaenge am meisten geholt hat.
-  const [transfers, empfaenger, stand] = await Promise.all([
+  // Die groessten Einzelbetraege, die je die Bridge verlassen haben.
+  const [transfers, stand] = await Promise.all([
     db
       .prepare(
         "SELECT day, to_address, etn FROM bridge_transfers ORDER BY etn DESC LIMIT 10"
-      )
-      .all(),
-    db
-      .prepare(
-        "SELECT to_address, SUM(etn) etn, COUNT(*) anzahl, MIN(day) erster, MAX(day) letzter" +
-          " FROM bridge_transfers GROUP BY to_address ORDER BY etn DESC LIMIT 10"
       )
       .all(),
     db
@@ -1653,14 +1652,8 @@ async function bilanz(db, env) {
       .catch(() => null),
   ]);
 
-  // Label und heutiger Bestand fuer die genannten Adressen - in EINER Abfrage
-  // ueber beide Listen, nicht je Zeile eine.
-  const adressen = [
-    ...new Set([
-      ...(transfers.results ?? []).map((r) => r.to_address),
-      ...(empfaenger.results ?? []).map((r) => r.to_address),
-    ]),
-  ];
+  // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
+  const adressen = [...new Set((transfers.results ?? []).map((r) => r.to_address))];
   const info = {};
   if (adressen.length) {
     const platz = adressen.map(() => "?").join(",");
@@ -1720,13 +1713,6 @@ async function bilanz(db, env) {
       ...schmuecke(r.to_address),
       tag: r.day,
       etn: r.etn,
-    })),
-    top_empfaenger: (empfaenger.results ?? []).map((r) => ({
-      ...schmuecke(r.to_address),
-      etn: r.etn,
-      anzahl: r.anzahl,
-      erster: r.erster,
-      letzter: r.letzter,
     })),
     // Wie weit die Transfer-Historie reicht. Solange der Durchgang durch die
     // Bridge-Historie nicht fertig ist, sind "Top 10" die Top 10 des bisher
