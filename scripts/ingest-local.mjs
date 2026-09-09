@@ -28,6 +28,9 @@ const env = {
   EXPLORER_API: "https://blockexplorer.electroneum.com/api/v2",
   TRACK_TOP_N: String(topN),
   BRIDGE_ADDRESS: "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62",
+  // Ueberschreibbar, um das Einfrieren der Stichtags-Marker zu proben, ohne
+  // bis zum echten Termin zu warten (siehe src/ingest.js, Abschnitt 7e).
+  MIGRATION_DEADLINE: process.env.MIGRATION_DEADLINE ?? "2027-01-31",
 };
 
 const t0 = Date.now();

@@ -1483,6 +1483,232 @@ function brauchbar(r) {
   return vollstaendigGelistet ? abweichung < 0.001 : summe <= r.outflow_etn * 1.001;
 }
 
+/* ---------- Bilanz zum Migrations-Stichtag -------------------------------
+ *
+ * Was die Migration am Ende gekostet hat: wie viel ETN nie herueberkam, was
+ * das mit Umlaufmenge, Kurs und Marktkapitalisierung gemacht hat, und wer die
+ * groessten Betraege noch rechtzeitig geholt hat.
+ *
+ * ABSICHTLICH SCHON VOR DEM STICHTAG SICHTBAR. Ein Bildschirm, der erst am
+ * 31.01.2027 zum ersten Mal Daten bekommt, wird an genau diesem Tag zum
+ * ersten Mal getestet - und das ist der eine Tag, an dem sich ein Fehler
+ * nicht mehr reparieren laesst. Bis dahin steht in der "Nachher"-Spalte, was
+ * ehrlich ist: noch nichts. Die "Vorher"-Seite arbeitet dagegen ab sofort mit
+ * echten Zahlen.
+ *
+ * Die Vergleichspunkte kommen aus der Tabelle stichtag und werden am
+ * jeweiligen Tag eingefroren (src/ingest.js, Abschnitt 7e). Nachtraeglich
+ * liesse sich keiner davon rekonstruieren: der Bridge-Bestand laeuft weiter,
+ * der Kurs erst recht.
+ */
+async function bilanz(db, env) {
+  const stichtag = String(env.MIGRATION_DEADLINE ?? "2027-01-31");
+  const basis = Date.parse(stichtag + "T00:00:00Z");
+  const jetzt = Date.now();
+  // Der Stichtag selbst muss vorbei sein, nicht nur angebrochen - sonst
+  // stuende dort ein halber Tag als Ergebnis.
+  const vorbei = jetzt >= basis + 86400000;
+  const tageBis = Math.round((basis - jetzt) / 86400000);
+
+  const marker = (
+    await db.prepare("SELECT schluessel, tag, daten FROM stichtag").all()
+  ).results;
+  const punkte = {};
+  for (const m of marker) {
+    try {
+      punkte[m.schluessel] = { tag: m.tag, ...JSON.parse(m.daten) };
+    } catch {
+      /* eine kaputte Zeile darf nicht die ganze Seite kosten */
+    }
+  }
+
+  // Der heutige Stand, im selben Format wie ein eingefrorener Marker. Solange
+  // noch kein einziger gesetzt ist, ist er die gesamte "Vorher"-Seite; danach
+  // bleibt er die Spalte "heute".
+  const [snap, netz] = await Promise.all([
+    db
+      .prepare(
+        "SELECT taken_at, day, total_supply, bridge_wei, etn_price, addr_count," +
+          " total_addresses FROM snapshots WHERE status='ok' ORDER BY id DESC LIMIT 1"
+      )
+      .first(),
+    db.prepare("SELECT * FROM network_daily ORDER BY day DESC LIMIT 1").first(),
+  ]);
+
+  let heute = null;
+  if (snap) {
+    const bridgeEtn = snap.bridge_wei
+      ? Number(BigInt(snap.bridge_wei) / 10n ** 12n) / 1e6
+      : null;
+    const supply = Number(snap.total_supply ?? 0);
+    const zirk = supply - (bridgeEtn ?? 0);
+    heute = {
+      tag: snap.day,
+      bridge_etn: bridgeEtn,
+      total_supply: supply,
+      zirkulierend: zirk,
+      preis: snap.etn_price,
+      marktkapitalisierung: snap.etn_price != null ? zirk * snap.etn_price : null,
+      holder_1m: netz?.holders_1m ?? null,
+      holder_5m: netz?.holders_5m ?? null,
+      holder_10m: netz?.holders_10m ?? null,
+      top10_anteil: netz?.top10_share ?? null,
+      top100_anteil: netz?.top100_share ?? null,
+      adressen_gesamt: snap.total_addresses ?? null,
+      adressen_erfasst: snap.addr_count ?? null,
+    };
+  }
+
+  // Was nie herueberkam. Vor dem Stichtag ist das eine Hochrechnung aus dem
+  // heutigen Bestand, danach der festgehaltene Wert - beides klar getrennt,
+  // damit niemand eine Schaetzung fuer eine Tatsache haelt.
+  const amStichtag = punkte.T0 ?? null;
+  const grundlage = amStichtag ?? heute;
+  const verloren = grundlage
+    ? {
+        etn: grundlage.bridge_etn,
+        anteil_supply:
+          grundlage.total_supply > 0 ? grundlage.bridge_etn / grundlage.total_supply : null,
+        wert_usd:
+          grundlage.preis != null && grundlage.bridge_etn != null
+            ? grundlage.bridge_etn * grundlage.preis
+            : null,
+        endgueltig: !!amStichtag,
+      }
+    : null;
+
+  // Endspurt: zieht die Migration kurz vor Schluss an? Aus dem Bridge-Verlauf,
+  // ohne eine einzige zusaetzliche Anfrage. Die Reihe enthaelt nur Tage MIT
+  // Aenderung, darum wird jeweils der aelteste vorhandene Wert im Fenster
+  // gegen den juengsten gerechnet, nicht Zeile gegen Zeile.
+  const bReihe = (
+    await db
+      .prepare(
+        "SELECT day, etn FROM daily_balances WHERE address = ? AND day >= ?" +
+          " ORDER BY day ASC"
+      )
+      .bind(String(env.BRIDGE_ADDRESS).toLowerCase(), tagVor(60))
+      .all()
+  ).results;
+  const abfluss = (von, bis) => {
+    const f = bReihe.filter((r) => r.day >= von && r.day <= bis);
+    return f.length >= 2 ? f[0].etn - f[f.length - 1].etn : null;
+  };
+  const endspurt = {
+    letzte_30: abfluss(tagVor(30), tagVor(0)),
+    davor_30: abfluss(tagVor(60), tagVor(30)),
+  };
+  endspurt.faktor =
+    endspurt.davor_30 > 0 && endspurt.letzte_30 != null
+      ? endspurt.letzte_30 / endspurt.davor_30
+      : null;
+
+  // Die groessten Einzelbetraege, die je die Bridge verlassen haben, und die
+  // Adressen mit der groessten Gesamtsumme. Zwei verschiedene Fragen: der eine
+  // grosse Griff, und wer ueber viele Vorgaenge am meisten geholt hat.
+  const [transfers, empfaenger, stand] = await Promise.all([
+    db
+      .prepare(
+        "SELECT day, to_address, etn FROM bridge_transfers ORDER BY etn DESC LIMIT 10"
+      )
+      .all(),
+    db
+      .prepare(
+        "SELECT to_address, SUM(etn) etn, COUNT(*) anzahl, MIN(day) erster, MAX(day) letzter" +
+          " FROM bridge_transfers GROUP BY to_address ORDER BY etn DESC LIMIT 10"
+      )
+      .all(),
+    db
+      .prepare("SELECT aeltestes_bekannt, fertig FROM bridge_scan WHERE id = 1")
+      .first()
+      .catch(() => null),
+  ]);
+
+  // Label und heutiger Bestand fuer die genannten Adressen - in EINER Abfrage
+  // ueber beide Listen, nicht je Zeile eine.
+  const adressen = [
+    ...new Set([
+      ...(transfers.results ?? []).map((r) => r.to_address),
+      ...(empfaenger.results ?? []).map((r) => r.to_address),
+    ]),
+  ];
+  const info = {};
+  if (adressen.length) {
+    const platz = adressen.map(() => "?").join(",");
+    const zeilen = (
+      await db
+        .prepare(
+          "SELECT a.hash, a.label, a.label_type, a.checksum_hash, c.etn, c.rank_pos" +
+            " FROM addresses a LEFT JOIN current_balances c ON c.address = a.hash" +
+            " WHERE a.hash IN (" + platz + ")"
+        )
+        .bind(...adressen)
+        .all()
+    ).results;
+    for (const z of zeilen) info[z.hash] = z;
+  }
+  const schmuecke = (adr) => {
+    const i = info[adr] ?? {};
+    return {
+      address: adr,
+      checksum_hash: i.checksum_hash ?? null,
+      label: i.label ?? null,
+      label_type: i.label_type ?? null,
+      bestand_jetzt: i.etn ?? null,
+      rang_jetzt: i.rank_pos ?? null,
+    };
+  };
+
+  // Wallets, die es vor dem Stichtag noch nicht gab. Vorher ist die Liste
+  // leer - die Abfrage kostet dank Index trotzdem nichts.
+  const neueSeit = vorbei ? stichtag + "T00:00:00Z" : null;
+  let neue = null;
+  if (neueSeit) {
+    neue = await db
+      .prepare(
+        "SELECT COUNT(*) anzahl, SUM(c.etn) etn FROM addresses a" +
+          " JOIN current_balances c ON c.address = a.hash" +
+          " WHERE a.first_seen >= ? AND a.hash != ?"
+      )
+      // Ohne die Bridge. Sie ist keine zugezogene Wallet, und ihr Bestand ist
+      // groesser als der aller anderen zusammen - im Probelauf machte sie aus
+      // der Summe das Doppelte des tatsaechlichen Werts.
+      .bind(neueSeit, String(env.BRIDGE_ADDRESS).toLowerCase())
+      .first();
+  }
+
+  return {
+    stichtag,
+    vorbei,
+    tage_bis: vorbei ? null : Math.max(0, tageBis),
+    tage_seit: vorbei ? Math.round((jetzt - basis) / 86400000) : null,
+    punkte,
+    heute,
+    verloren,
+    endspurt,
+    neue_wallets: neue,
+    top_transfers: (transfers.results ?? []).map((r) => ({
+      ...schmuecke(r.to_address),
+      tag: r.day,
+      etn: r.etn,
+    })),
+    top_empfaenger: (empfaenger.results ?? []).map((r) => ({
+      ...schmuecke(r.to_address),
+      etn: r.etn,
+      anzahl: r.anzahl,
+      erster: r.erster,
+      letzter: r.letzter,
+    })),
+    // Wie weit die Transfer-Historie reicht. Solange der Durchgang durch die
+    // Bridge-Historie nicht fertig ist, sind "Top 10" die Top 10 des bisher
+    // geprueften Fensters - und das gehoert dazugeschrieben, sonst liest sich
+    // eine Teilmenge wie eine Bestenliste.
+    transfers_ab: stand?.aeltestes_bekannt?.slice(0, 10) ?? null,
+    transfers_vollstaendig: !!stand?.fertig,
+    mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
+  };
+}
+
 async function bridge_events_api(db) {
   const alle = (
     await db.prepare("SELECT * FROM bridge_events ORDER BY outflow_etn DESC LIMIT 40").all()
@@ -1978,6 +2204,9 @@ export default {
       else if (pfad === "/api/price") antwort = json(await preisverlauf(db, env, u), 200, 300);
       else if (pfad === "/api/clusters") antwort = json(await clusters_api(db));
       else if (pfad === "/api/bridge-events") antwort = json(await bridge_events_api(db));
+      // Laenger gecacht als der Rest: die Bilanz besteht aus eingefrorenen
+      // Werten und einer Wochen-Historie - nichts davon aendert sich in Minuten.
+      else if (pfad === "/api/bilanz") antwort = json(await bilanz(db, env), 200, 600);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
       else if (pfad === "/api/movers") antwort = json(await movers(db, env, u));
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));

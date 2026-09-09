@@ -17,6 +17,9 @@ const env = {
   TRACK_TOP_N: String(topN),
   BRIDGE_ADDRESS:
     process.env.BRIDGE_ADDRESS ?? "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62",
+  // Muss mitgereicht werden, sonst faellt das Einfrieren der Stichtags-Marker
+  // still auf den Standardwert zurueck (siehe src/ingest.js, Abschnitt 7e).
+  MIGRATION_DEADLINE: process.env.MIGRATION_DEADLINE ?? "2027-01-31",
 };
 
 const t0 = Date.now();

@@ -101,3 +101,35 @@ CREATE TABLE IF NOT EXISTS besuche (
 );
 CREATE INDEX IF NOT EXISTS idx_besuche_tag ON besuche(tag);
 CREATE INDEX IF NOT EXISTS idx_besuche_besucher ON besuche(tag, besucher);
+
+-- ---------------------------------------------------------------
+-- Eingefrorene Zustaende rund um den Migrations-Stichtag.
+--
+-- WARUM EINE EIGENE TABELLE, obwohl network_daily denselben Tag ohnehin
+-- traegt: Der Stichtag kommt genau einmal. Faellt der Ingest an diesem Tag
+-- aus, waere die Zeile fuer immer weg - und es gibt keinen zweiten Versuch.
+-- Hier steht sie als Ganzes, unabhaengig davon, ob spaeter jemand
+-- network_daily ausduennt oder eine Spalte umbaut.
+--
+-- Gefuellt wird NICHT rueckwirkend, sondern am jeweiligen Tag selbst aus dem
+-- laufenden Snapshot (src/ingest.js, Abschnitt 7e). Der erste Marker (T-90)
+-- faellt auf den 02.11.2026 - damit laeuft das Verfahren drei Monate lang im
+-- Echtbetrieb, bevor es auf den einen Tag ankommt, der zaehlt.
+--
+-- ON CONFLICT DO NOTHING ist Absicht: ein einmal gesetzter Marker darf sich
+-- nie mehr aendern, sonst waere "vorher" kein Vorher mehr.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stichtag (
+  schluessel  TEXT PRIMARY KEY,          -- T-90 | T-30 | T-7 | T0 | T+7 | T+30 | T+90
+  tag         TEXT NOT NULL,             -- YYYY-MM-DD, auf den sich der Marker bezieht
+  daten       TEXT NOT NULL,             -- JSON, siehe src/ingest.js
+  gesetzt_am  TEXT NOT NULL
+);
+
+-- Fuer die Top-Transfers der Bridge in der Bilanz. Ohne den Index waere jede
+-- Anzeige ein voller Durchlauf durch bridge_transfers.
+CREATE INDEX IF NOT EXISTS idx_bridge_transfers_etn ON bridge_transfers(etn DESC);
+
+-- Fuer "welche Wallets gibt es erst nach dem Stichtag". Ohne Index waere das
+-- ein Durchlauf durch alle erfassten Adressen.
+CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);

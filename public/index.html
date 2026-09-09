@@ -149,6 +149,57 @@ svg.chart{width:100%;display:block}
   margin-top:16px;background:#f4635e12;border:1px solid #f4635e33;border-left:3px solid var(--down);
   border-radius:10px;padding:13px 16px;font-size:13.5px;color:#ffd4d2
 }
+/* ---------- Aftermath ---------- */
+.bilanzhero{
+  position:relative;overflow:hidden;
+  background:radial-gradient(120% 140% at 12% 0%,#5b9cff26 0%,#5b9cff0d 44%,transparent 72%),
+             linear-gradient(150deg,#141c2e 0%,#111827 55%,#181428 100%);
+  border:1px solid #2b3a5c;border-radius:20px;padding:26px 28px 22px
+}
+.bhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.tag-bilanz{
+  background:#5b9cff1f;border:1px solid #5b9cff55;color:#9dc2ff;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.11em
+}
+.bbig{font-size:clamp(38px,5.6vw,60px);font-weight:700;letter-spacing:-.04em;line-height:1}
+.bsub{margin-top:9px;font-size:15.5px;color:var(--tx);line-height:1.5;max-width:64ch}
+.bsub b{color:#fff}
+.bfacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px}
+.bfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
+.bfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
+
+/* Vergleichstabelle. Die Spalten sind Zeitpunkte, die Zeilen Kennzahlen -
+   umgekehrt waere jede Zeile ein anderer Massstab und nichts vergleichbar. */
+.btab{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+.btab th,.btab td{padding:9px 12px;text-align:right;white-space:nowrap}
+.btab thead th{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);
+  font-weight:700;border-bottom:1px solid var(--line2)
+}
+.btab thead th.jetzt,.btab td.jetzt{background:#5b9cff0f}
+.btab thead th.stich,.btab td.stich{background:#f4635e12;color:#ff9a92}
+.btab tbody th{
+  text-align:left;font-weight:560;color:var(--tx2);font-size:12.5px;
+  border-top:1px solid var(--line)
+}
+.btab tbody td{border-top:1px solid var(--line);font-family:var(--mono);color:var(--tx)}
+.btab tbody tr:hover td{background:#ffffff06}
+.btab .offen{color:var(--tx3)}
+
+.bzrow{display:flex;align-items:center;gap:13px;padding:10px 0;border-top:1px solid var(--line)}
+.bzrow:first-child{border-top:0}
+.bzrow .pos{
+  width:24px;flex-shrink:0;text-align:center;font-family:var(--mono);font-size:12px;
+  color:var(--tx3);font-weight:700
+}
+.bzrow .wer{flex:1;min-width:0}
+.bzrow .adr{display:block;font-family:var(--mono);font-size:12.5px;color:var(--tx);
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bzrow .meta{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.bzrow .betrag{text-align:right;flex-shrink:0}
+.bzrow .betrag .b{display:block;font-size:14px;font-weight:660;color:var(--warn)}
+.bzrow .betrag .h{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+
 /* ---------- Burn forecast ---------- */
 .burncard{
   position:relative;overflow:hidden;
@@ -183,7 +234,7 @@ svg.chart{width:100%;display:block}
 }
 .burnfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
 .burnfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
-.burnbar{height:13px;background:#0a0f1b;border:1px solid var(--line);border-radius:7px;overflow:hidden;display:flex}
+.burnbar{margin-top:18px;height:13px;background:#0a0f1b;border:1px solid var(--line);border-radius:7px;overflow:hidden;display:flex}
 .burnbar i{display:block;height:100%}
 .burnbar #burnBarDone{background:linear-gradient(90deg,#22d3a7,#4ade80)}
 .burnbar .burn{background:repeating-linear-gradient(45deg,#f4635e,#f4635e 7px,#c93b36 7px,#c93b36 14px);flex:1}
@@ -196,10 +247,20 @@ svg.chart{width:100%;display:block}
 }
 .projbig b{color:#fff;font-weight:700}
 .migbar{height:10px;background:#0a0f1b;border-radius:6px;overflow:hidden;margin-top:14px;
-        border:1px solid var(--line);display:flex}
+        border:1px solid var(--line);display:flex;position:relative}
+/* Marke fuer den Stand vor 90 Tagen. Sie sitzt fast auf der Kante des
+   gruenen Balkens - genau das ist die Aussage. */
+.migbar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:#e2e8f0;
+          opacity:.85;border-radius:2px}
 .migbar i{display:block;height:100%}
 .migbar .done{background:linear-gradient(90deg,#22d3a7,#4ade80)}
 .migbar .rest{background:linear-gradient(90deg,#f4635e,#fbbf24);flex:1}
+.miglegend{display:flex;gap:18px;flex-wrap:wrap;padding:2px 2px 10px;font-size:12px;color:var(--tx2)}
+.miglegend span{display:flex;align-items:center;gap:7px}
+.miglegend i{width:17px;height:0;border-top-width:2.4px;display:inline-block;flex-shrink:0}
+.miglegend i.ist{border-top-style:solid;border-top-color:#fbbf24}
+.miglegend i.proj{border-top-style:dashed;border-top-color:#fbbf24}
+.miglegend i.soll{border-top-style:dashed;border-top-color:#4ade80}
 .migbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tx2);margin-top:7px}
 .migbar-lbl b{color:var(--tx)}
 
@@ -818,6 +879,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <nav id="nav">
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
   <button data-p="migration"><span class="ic">🌉</span>Migration</button>
+  <button data-p="bilanz"><span class="ic">🏁</span>Aftermath</button>
   <button data-p="tiers"><span class="ic">🏔️</span>Tiers</button>
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
@@ -969,33 +1031,43 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
           <div class="bigsub" id="bridgeSub">still waiting to be migrated</div>
         </div>
         <div class="stats">
-          <div class="fact"><div class="k">Migrating / day</div><div class="v num up" id="perDay">&mdash;</div></div>
           <div class="fact"><div class="k">Days to deadline</div><div class="v num" id="daysLeft">&mdash;</div></div>
+          <div class="fact"><div class="k">Migrating / day</div><div class="v num" id="perDay">&mdash;</div></div>
+          <div class="fact"><div class="k">Needed / day</div><div class="v num" id="perDayNeeded">&mdash;</div></div>
           <div class="fact"><div class="k">Already migrated</div><div class="v num" id="circ">&mdash;</div></div>
-          <div class="fact"><div class="k">Total ETN supply</div><div class="v num" id="supply">&mdash;</div></div>
         </div>
       </div>
 
       <div class="chartcard">
         <div class="top">
           <div>
-            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Still to migrate, over time</div>
+            <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Still to migrate</div>
             <div style="font-size:12px;color:var(--tx3)" id="chartRange">&mdash;</div>
           </div>
-          <div class="r">
-            <div style="font-size:12.5px;color:var(--tx2)">Change over period</div>
-            <div class="num up" style="font-size:18px;font-weight:650" id="chartDelta">&mdash;</div>
+          <div class="r" style="display:flex;align-items:center;gap:16px">
+            <div style="text-align:right">
+              <div style="font-size:12.5px;color:var(--tx2)">Change over period</div>
+              <div class="num up" style="font-size:18px;font-weight:650" id="chartDelta">&mdash;</div>
+            </div>
+            <div class="tabs" id="migViews"></div>
           </div>
         </div>
         <div class="chartholder" id="chartHolder">
           <svg class="chart" id="bridgeChart"></svg>
           <div class="tip" id="chartTip"></div>
         </div>
+        <div class="miglegend" id="migLegend" hidden>
+          <span><i class="ist"></i>Actually migrated</span>
+          <span><i class="proj"></i>If the pace stays as it is</span>
+          <span><i class="soll"></i>Pace needed to finish in time</span>
+        </div>
       </div>
 
-      <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i></div>
+      <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i>
+        <u id="migVor" hidden></u></div>
       <div class="migbar-lbl">
         <span>Migrated: <b id="migDoneLbl">&mdash;</b></span>
+        <span id="migVorLbl"></span>
         <span>Not migrated yet: <b id="migRestLbl">&mdash;</b></span>
       </div>
     </div>
@@ -1010,11 +1082,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       </div>
       <div class="burnbig num" id="burnEtn">&mdash;</div>
       <div class="burnsub" id="burnSub">&mdash;</div>
-      <div class="burnfacts">
-        <div><div class="k">Countdown</div><div class="v num" id="burnDays">&mdash;</div></div>
-        <div><div class="k">Current pace</div><div class="v num" id="burnPace">&mdash;</div></div>
-        <div><div class="k">Needed pace</div><div class="v num" id="burnNeeded">&mdash;</div></div>
-      </div>
       <div class="burnbar"><i id="burnBarDone"></i><i class="burn" id="burnBarBurn"></i></div>
       <div class="burnverdict" id="burnVerdict">&mdash;</div>
     </div>
@@ -1029,6 +1096,62 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <div class="dim3" style="font-size:11.5px">Runs weekly, or any time via the button.</div>
         <button class="ghost" id="bridgeBtn" style="display:none">🔍 Scan for events now</button>
       </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= AFTERMATH =================
+     Was die Migration am Ende gekostet hat. Schon vor dem Stichtag sichtbar,
+     damit die Seite an dem einen Tag, an dem es darauf ankommt, nicht zum
+     ersten Mal laeuft. -->
+<div class="page" id="page-bilanz">
+  <section style="margin-top:22px">
+    <div class="bilanzhero" id="bilanzHero">
+      <div class="bhead">
+        <span class="tag-bilanz" id="bzTag">&mdash;</span>
+        <span class="dim3" id="bzDatum">&mdash;</span>
+      </div>
+      <div class="bbig num" id="bzBig">&mdash;</div>
+      <div class="bsub" id="bzSub">&mdash;</div>
+      <div class="bfacts">
+        <div><div class="k">Share of all ETN</div><div class="v num" id="bzAnteil">&mdash;</div></div>
+        <div><div class="k">Value at that price</div><div class="v num" id="bzWert">&mdash;</div></div>
+        <div><div class="k">Migrated in last 30 d</div><div class="v num" id="bzSpurt">&mdash;</div></div>
+        <div><div class="k">30 d before that</div><div class="v num" id="bzSpurtVor">&mdash;</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>📐 Before and after</h2>
+    <div class="card" style="overflow-x:auto">
+      <table class="btab" id="bzTab"><tbody></tbody></table>
+    </div>
+  </section>
+
+  <section>
+    <h2>🐋 Biggest single migrations
+      <button class="infoBtn" data-info="The largest single transfers ever sent out of the bridge contract to a new-chain address. 'Holds today' is that address's balance in the current snapshot — a dash means it is not among the tracked wallets today, which usually means the ETN moved on.">ⓘ</button>
+    </h2>
+    <div class="card">
+      <div id="bzTransfers" class="empty">Loading&hellip;</div>
+      <div class="dim3" id="bzTransfersNote" style="font-size:11.5px;margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>📥 Who took out the most</h2>
+    <div class="card">
+      <div id="bzEmpfaenger" class="empty">Loading&hellip;</div>
+    </div>
+  </section>
+
+  <section id="bzNeuBox" hidden>
+    <h2>🌱 Moved in after the deadline
+      <button class="infoBtn" data-info="Addresses that first showed up in a snapshot after the deadline had passed. That means they grew into the tracked range afterwards — it does not necessarily mean the address itself is new on the chain.">ⓘ</button>
+    </h2>
+    <div class="card">
+      <div id="bzNeu" class="empty">&mdash;</div>
     </div>
   </section>
 </div>
@@ -1632,6 +1755,152 @@ function periodTabs(host, aktiv, onChange) {
 // Achsenbeschriftung vorher auf ~6px zusammengeschrumpft und unlesbar war.
 // Als Nebeneffekt braucht die Maus-Zuordnung keine Umrechnung mehr.
 
+/* ---------- Migrationschart bis zum Stichtag ------------------------------
+ *
+ * Warum ein eigener Chart statt des allgemeinen darunter: der allgemeine
+ * skaliert die Werteachse auf die vorhandene Spanne. Beim Bridge-Bestand sind
+ * das ueber drei Monate 0,44 % - und die fuellen dann die volle Hoehe. Das
+ * Bild zeigt einen Absturz, waehrend die Zahl darunter sagt, dass die
+ * Migration 100-mal zu langsam laeuft. Eines von beidem luegt, und es ist das
+ * Bild.
+ *
+ * Hier steht die Achse deshalb fest auf 0 bis Gesamtbestand, und die Zeitachse
+ * laeuft bis zum Stichtag weiter. Damit sagt das Bild dasselbe wie die Zahl:
+ * die tatsaechliche Linie liegt praktisch waagrecht, waehrend die noetige
+ * senkrecht nach unten faellt. Der Abstand zwischen beiden IST die Aussage.
+ */
+function zeichneMigrationsChart(svg, punkte, opts) {
+  if (punkte) svg._mp = punkte;
+  if (opts) svg._mo = opts;
+  const daten = svg._mp;
+  const o = svg._mo ?? {};
+  const holder = svg.parentElement;
+  const tip = holder.querySelector(".tip");
+  if (holder.clientWidth === 0) return;
+
+  const W = Math.max(320, Math.round(holder.clientWidth));
+  const H = W < 640 ? 260 : 330;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.style.height = H + "px";
+
+  if (!daten || daten.length < 2 || !o.deadline) {
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
+      'text-anchor="middle">not enough history yet</text>';
+    return;
+  }
+
+  const PT = 18, PB = 34, PL = 104, PR = 58;
+  const t0 = Date.parse(daten[0].day);
+  const tEnde = Date.parse(o.deadline + "T00:00:00Z");
+  const tJetzt = Date.parse(daten[daten.length - 1].day);
+  // Ist der Stichtag durch, endet die Achse bei der letzten Messung - sonst
+  // schoebe sich der Chart mit jedem Tag weiter ins Leere.
+  const tMax = Math.max(tEnde, tJetzt);
+  const spanneT = Math.max(1, tMax - t0);
+
+  // Werteachse fest bei 0. Der Nullpunkt ist hier keine Geschmacksfrage: das
+  // Ziel der Migration IST die Null, und nur mit ihr im Bild sieht man, wie
+  // weit der Weg dorthin noch ist.
+  const hi = Math.max(...daten.map((p) => p.etn)) * 1.06;
+
+  const X = (t) => PL + ((t - t0) / spanneT) * (W - PL - PR);
+  const Y = (v) => H - PB - (Math.max(0, v) / hi) * (H - PT - PB);
+
+  const pfad = (punkteXY) =>
+    punkteXY.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join("");
+
+  const ist = daten.map((p) => [X(Date.parse(p.day)), Y(p.etn)]);
+  const jetztEtn = daten[daten.length - 1].etn;
+
+  // Zwei Fortschreibungen ab heute: das aktuelle Tempo, und das Tempo, das
+  // noetig waere. Beide nur, solange der Stichtag noch vor uns liegt.
+  let proj = null, soll = null;
+  if (tEnde > tJetzt) {
+    const tage = (tEnde - tJetzt) / 86400000;
+    const rest = Math.max(0, jetztEtn - (o.proTag ?? 0) * tage);
+    proj = [[X(tJetzt), Y(jetztEtn)], [X(tEnde), Y(rest)]];
+    soll = [[X(tJetzt), Y(jetztEtn)], [X(tEnde), Y(0)]];
+  }
+
+  const linien = [0, .25, .5, .75, 1].map((f) => {
+    const y = PT + f * (H - PT - PB);
+    const wert = hi - f * hi;
+    const pct = o.totalSupply ? " (" + nf(wert / o.totalSupply * 100, 0) + "%)" : "";
+    return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
+      '" stroke="#1e293b" stroke-width="1"/>' +
+      '<text x="' + (PL - 10) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12.5" ' +
+      'text-anchor="end" font-family="ui-monospace,monospace">' + kurz(wert) + pct + "</text>";
+  }).join("");
+
+  // Zeitachse: gleichmaessige Abstaende ueber den GESAMTEN Bereich, also auch
+  // ueber den Teil, der noch in der Zukunft liegt.
+  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
+  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
+    const t = t0 + (n / marken) * spanneT;
+    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
+    return '<text x="' + X(t) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
+      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
+      new Date(t).toLocaleDateString(LOC, { month: "short", year: "2-digit" }) + "</text>";
+  }).join("");
+
+  const xJetzt = X(tJetzt), xEnde = X(tEnde);
+  svg.innerHTML =
+    '<defs><linearGradient id="mgr" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="#fbbf24" stop-opacity=".26"/>' +
+    '<stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/></linearGradient></defs>' +
+    linien + datumTexte +
+    // Stichtags-Marke
+    '<line x1="' + xEnde + '" y1="' + PT + '" x2="' + xEnde + '" y2="' + (H - PB) +
+    '" stroke="#f4635e" stroke-width="1.5" stroke-dasharray="5 4" opacity=".85"/>' +
+    '<text x="' + (xEnde + 6) + '" y="' + (PT + 11) + '" fill="#ff8f8b" font-size="11.5" ' +
+    'font-weight="700" font-family="ui-monospace,monospace">DEADLINE</text>' +
+    // Flaeche unter dem tatsaechlichen Verlauf
+    '<path d="' + pfad(ist) + "L" + xJetzt.toFixed(1) + " " + (H - PB) + "L" + PL + " " +
+    (H - PB) + 'Z" fill="url(#mgr)"/>' +
+    (soll ? '<path d="' + pfad(soll) + '" fill="none" stroke="#4ade80" stroke-width="2.2" ' +
+      'stroke-dasharray="7 5" stroke-linecap="round"/>' : "") +
+    (proj ? '<path d="' + pfad(proj) + '" fill="none" stroke="#fbbf24" stroke-width="2.2" ' +
+      'stroke-dasharray="7 5" stroke-linecap="round" opacity=".8"/>' : "") +
+    '<path d="' + pfad(ist) + '" fill="none" stroke="#fbbf24" stroke-width="2.6" ' +
+    'stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + xJetzt + '" cy="' + Y(jetztEtn) + '" r="4.5" fill="#fbbf24"/>' +
+    '<g id="mcross" style="display:none">' +
+    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#fbbf24" stroke-width="1" ' +
+    'stroke-dasharray="4 4" opacity=".7"/>' +
+    '<circle r="6" fill="#fbbf24" stroke="#0b111e" stroke-width="2.5"/></g>';
+
+  // Ablesen: nur ueber dem tatsaechlichen Verlauf, nicht ueber den beiden
+  // Fortschreibungen - dort gaebe es nichts abzulesen ausser der eigenen
+  // Rechnung.
+  const kreuz = svg.querySelector("#mcross");
+  holder.onmousemove = (e) => {
+    const r = holder.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    if (x < PL || x > xJetzt) { kreuz.style.display = "none"; tip.classList.remove("on"); return; }
+    const t = t0 + ((x - PL) / (W - PL - PR)) * spanneT;
+    let best = 0, bestD = Infinity;
+    daten.forEach((q, i) => {
+      const d = Math.abs(Date.parse(q.day) - t);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    const q = daten[best];
+    const px = X(Date.parse(q.day)), py = Y(q.etn);
+    kreuz.style.display = "";
+    kreuz.querySelector("line").setAttribute("x1", px);
+    kreuz.querySelector("line").setAttribute("x2", px);
+    kreuz.querySelector("circle").setAttribute("cx", px);
+    kreuz.querySelector("circle").setAttribute("cy", py);
+    tip.innerHTML = "<b>" + kurz(q.etn) + " ETN</b><span>" +
+      new Date(q.day).toLocaleDateString(LOC, { year: "numeric", month: "short", day: "numeric" }) +
+      (o.totalSupply ? " · " + nf(q.etn / o.totalSupply * 100, 1) + "% of supply" : "") +
+      "</span>";
+    tip.classList.add("on");
+    const b = tip.getBoundingClientRect();
+    tip.style.left = Math.min(Math.max(0, (px / W) * r.width - b.width / 2), r.width - b.width) + "px";
+  };
+  holder.onmouseleave = () => { kreuz.style.display = "none"; tip.classList.remove("on"); };
+}
+
 function zeichneChart(svg, punkte, totalSupply) {
   // Zustand haengt am SVG-Element, NICHT an einer gemeinsamen Variable:
   // dieselbe Funktion zeichnet den Bridge-Verlauf (Overview) und den
@@ -1863,9 +2132,48 @@ function zeichneKonzChart(svg, punkte) {
 // ein Chart, der bei Breite 0 uebersprungen wurde (verstecktes Fenster,
 // minimierter Tab), bekommt sonst unter Umstaenden nie eine zweite Chance -
 // der Observer feuert in dem Zustand nicht zuverlaessig.
+/**
+ * Welche Sicht der Migrationschart gerade zeigt.
+ *
+ * "deadline" ist die Vorgabe, weil sie die eigentliche Frage beantwortet:
+ * schafft die Migration den Termin? "detail" ist die alte, gezoomte Ansicht -
+ * sie zeigt die Bewegung der letzten Monate, die in der Gesamtsicht
+ * zwangslaeufig zur waagrechten Linie wird.
+ */
+const MIG = { sicht: "deadline", punkte: [], opts: null };
+
+function zeichneMigration() {
+  const svg = el("bridgeChart");
+  if (!MIG.punkte.length) return;
+  const legende = el("migLegend");
+  if (MIG.sicht === "deadline") {
+    legende.hidden = false;
+    zeichneMigrationsChart(svg, MIG.punkte, MIG.opts);
+  } else {
+    legende.hidden = true;
+    zeichneChart(svg, MIG.punkte, MIG.opts?.totalSupply);
+  }
+}
+
+const MIG_SICHTEN = [["deadline", "To the deadline"], ["detail", "Recent detail"]];
+function migSchalter() {
+  const box = el("migViews");
+  box.innerHTML = MIG_SICHTEN
+    .map(([k, t]) => '<button data-s="' + k + '"' + (MIG.sicht === k ? ' class="on"' : "") +
+      ">" + t + "</button>")
+    .join("");
+  box.querySelectorAll("button").forEach((b) => {
+    b.onclick = () => {
+      MIG.sicht = b.dataset.s;
+      migSchalter();
+      zeichneMigration();
+    };
+  });
+}
+
 function alleChartsNachziehen() {
   if (el("prChart")._punkte) zeichnePreisChart();
-  if (el("bridgeChart")._punkte) zeichneChart(el("bridgeChart"));
+  if (MIG.punkte.length) zeichneMigration();
   if (el("invChart")._punkte) zeichneChart(el("invChart"));
   if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart"));
   if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
@@ -1879,7 +2187,7 @@ function beobachte(holderId, zeichnen) {
 }
 beobachte("prHolder", () => { if (el("prChart")._punkte) zeichnePreisChart(); });
 beobachte("concHolder", () => { if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart")); });
-beobachte("chartHolder", () => { if (el("bridgeChart")._punkte) zeichneChart(el("bridgeChart")); });
+beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
 beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
 window.addEventListener("resize", alleChartsNachziehen);
@@ -1907,14 +2215,27 @@ async function ladeOverview() {
   el("perDay").textContent = kurz(m.abfluss_pro_tag);
   el("daysLeft").textContent = m.tage_bis_deadline ?? "—";
   el("circ").textContent = kurz(d.zirkulierend);
-  el("supply").textContent = kurz(d.total_supply);
+  // Das noetige Tempo gehoert direkt neben das tatsaechliche: nebeneinander
+  // braucht der Vergleich keine Erklaerung.
+  const noetigProTag = m.tage_bis_deadline ? d.bridge_etn / m.tage_bis_deadline : null;
+  el("perDayNeeded").textContent = noetigProTag != null ? kurz(noetigProTag) : "—";
+  el("perDayNeeded").className =
+    "v num " + (noetigProTag != null && noetigProTag > (m.abfluss_pro_tag || 0) ? "down" : "up");
 
   const v = d.bridge_verlauf ?? [];
-  zeichneChart(el("bridgeChart"), v, d.total_supply);
+  MIG.punkte = v;
+  MIG.opts = {
+    deadline: m.deadline,
+    totalSupply: d.total_supply,
+    proTag: m.abfluss_pro_tag ?? 0,
+  };
+  migSchalter();
+  zeichneMigration();
   if (v.length >= 2) {
     el("chartRange").textContent =
       new Date(v[0].day).toLocaleDateString(LOC) + " – " +
-      new Date(v[v.length - 1].day).toLocaleDateString(LOC);
+      new Date(v[v.length - 1].day).toLocaleDateString(LOC) +
+      " · deadline " + new Date(m.deadline).toLocaleDateString(LOC);
     const diff = v[v.length - 1].etn - v[0].etn;
     const c = el("chartDelta");
     c.textContent = kurz(diff, true) + " ETN";
@@ -1923,6 +2244,20 @@ async function ladeOverview() {
 
   const migrPct = d.bridge_anteil != null ? Math.max(0, Math.min(100, (1 - d.bridge_anteil) * 100)) : 0;
   el("migDone").style.width = migrPct.toFixed(1) + "%";
+
+  // Wo stand der Balken am Anfang der vorliegenden Historie? Der Abstand
+  // zwischen Marke und Balkenkante ist der gesamte Fortschritt dieses
+  // Zeitraums - und dass man ihn kaum sieht, ist die ehrlichste Darstellung
+  // des Tempos, die es gibt.
+  if (v.length >= 2 && d.total_supply > 0) {
+    const damals = Math.max(0, Math.min(100, (1 - v[0].etn / d.total_supply) * 100));
+    const marke = el("migVor");
+    marke.hidden = false;
+    marke.style.left = damals.toFixed(2) + "%";
+    const tage = Math.round((Date.parse(v[v.length - 1].day) - Date.parse(v[0].day)) / 86400000);
+    el("migVorLbl").innerHTML =
+      '<span class="dim3">' + tage + " days ago: <b>" + nf(damals, 1) + "%</b></span>";
+  }
   el("migDoneLbl").textContent = nf(migrPct, 1) + "%";
   el("migRestLbl").textContent = d.bridge_anteil != null ? nf(d.bridge_anteil * 100, 1) + "%" : "—";
 
@@ -1985,11 +2320,6 @@ function zeichneBurnKarte(d, m) {
   el("burnSub").innerHTML =
     "At today's pace that's what is still waiting on " + deadline + " — <b>" +
     nf(anteil, 1) + "%</b> of every ETN in existence, held by people who never made the move.";
-
-  el("burnDays").textContent = nf(tage) + " days";
-  el("burnPace").textContent = kurz(m.abfluss_pro_tag) + " /day";
-  el("burnNeeded").textContent = kurz(noetig) + " /day";
-  el("burnNeeded").className = "v num " + (faktor > 1 ? "down" : "up");
 
   // Balken: geretteter Anteil vs. verbrennender Anteil, gemessen an der
   // Menge, die HEUTE noch in der Bridge liegt.
@@ -2334,6 +2664,165 @@ function zeichneNetzChart(tage) {
   el("netTxRange").textContent = "peak " + kurz(max);
   el("netTxFrom").textContent = new Date(tage[0].day).toLocaleDateString(LOC);
   el("netTxTo").textContent = new Date(tage[tage.length - 1].day).toLocaleDateString(LOC);
+}
+
+/* ---------- Aftermath ----------------------------------------------------
+ *
+ * Die Bilanz zum Migrations-Stichtag. Laeuft ab sofort, nicht erst ab dem
+ * 31.01.2027: eine Seite, die an ihrem entscheidenden Tag zum ersten Mal
+ * Daten sieht, ist an diesem Tag kaputt. Vorher steht in den Spalten fuer
+ * "danach" ehrlich nichts - und die Spalte "heute" fuellt sich sofort.
+ */
+
+// Zeile der Vergleichstabelle: Beschriftung, Feld im Datensatz, Formatierung.
+const BILANZ_ZEILEN = [
+  ["Still in the bridge", "bridge_etn", (v) => kurz(v) + " ETN"],
+  ["Circulating supply", "zirkulierend", (v) => kurz(v) + " ETN"],
+  ["ETN price", "preis", (v) => "$" + (v < 0.01 ? v.toFixed(6) : v.toFixed(4))],
+  ["Market cap", "marktkapitalisierung", (v) => "$" + kurz(v)],
+  ["Wallets ≥ 1M ETN", "holder_1m", (v) => nf(v)],
+  ["Wallets ≥ 10M ETN", "holder_10m", (v) => nf(v)],
+  ["Top 10 hold", "top10_anteil", (v) => nf(v * 100, 1) + "%"],
+  ["Top 100 hold", "top100_anteil", (v) => nf(v * 100, 1) + "%"],
+  ["Addresses on chain", "adressen_gesamt", (v) => nf(v)],
+];
+
+// Spalten der Vergleichstabelle. "heute" steht bewusst am Ende: solange der
+// Stichtag noch aussteht, ist es die einzige gefuellte Spalte, und dort faellt
+// sie am wenigsten aus dem zeitlichen Verlauf.
+const BILANZ_SPALTEN = [
+  ["T-90", "90 d before"],
+  ["T-30", "30 d before"],
+  ["T0", "Deadline"],
+  ["T+30", "30 d after"],
+  ["T+90", "90 d after"],
+  ["heute", "Today"],
+];
+
+async function ladeBilanz() {
+  let d;
+  try {
+    d = await hole("/api/bilanz");
+  } catch (e) {
+    el("bzTransfers").textContent = "Error: " + e.message;
+    return;
+  }
+
+  const stich = new Date(d.stichtag + "T00:00:00Z");
+  const stichText = stich.toLocaleDateString(LOC, { day: "2-digit", month: "long", year: "numeric" });
+  el("bzDatum").textContent = stichText;
+
+  const vl = d.verloren ?? {};
+  if (d.vorbei) {
+    el("bzTag").textContent = "Final";
+    el("bzBig").innerHTML = kurz(vl.etn) +
+      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN never made it across</span>';
+    el("bzSub").innerHTML =
+      "The migration window closed on " + stichText + ". What was still sitting in the bridge " +
+      "at that moment belonged to holders who never moved it — and it stays there.";
+  } else {
+    el("bzTag").textContent = "Still open · " + d.tage_bis + " days";
+    el("bzBig").innerHTML = kurz(vl.etn) +
+      ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would be left behind</span>';
+    el("bzSub").innerHTML =
+      "That is what is sitting in the bridge right now. The window closes on <b>" + stichText +
+      "</b>; everything still in there at that point is what this page will settle up.";
+  }
+  el("bzAnteil").textContent = vl.anteil_supply != null ? nf(vl.anteil_supply * 100, 1) + "%" : "—";
+  el("bzWert").textContent = vl.wert_usd != null ? "$" + kurz(vl.wert_usd) : "—";
+
+  const e30 = d.endspurt ?? {};
+  el("bzSpurt").textContent = e30.letzte_30 != null ? kurz(e30.letzte_30) + " ETN" : "—";
+  el("bzSpurtVor").textContent = e30.davor_30 != null ? kurz(e30.davor_30) + " ETN" : "—";
+  // Faerbung nach der Richtung: zieht die Migration an, ist das die gute
+  // Nachricht - unabhaengig davon, wie weit sie noch entfernt ist.
+  el("bzSpurt").className = "v num " + (e30.faktor == null ? "" : e30.faktor >= 1 ? "up" : "down");
+
+  // --- Vergleichstabelle ---
+  const quelle = { ...d.punkte, heute: d.heute };
+  const spalten = BILANZ_SPALTEN.filter(([k]) => quelle[k] || k === "T0" || k === "heute");
+  const kopf =
+    "<thead><tr><th></th>" +
+    spalten.map(([k, t]) => {
+      const q = quelle[k];
+      const kl = k === "T0" ? " class=\"stich\"" : k === "heute" ? " class=\"jetzt\"" : "";
+      return "<th" + kl + ">" + t +
+        (q?.tag ? '<div style="font-weight:400;letter-spacing:0;text-transform:none;' +
+          'font-size:10px;margin-top:2px">' + new Date(q.tag).toLocaleDateString(LOC) + "</div>" : "") +
+        "</th>";
+    }).join("") +
+    "</tr></thead>";
+
+  const koerper = BILANZ_ZEILEN.map(([titel, feld, form]) =>
+    "<tr><th>" + titel + "</th>" +
+    spalten.map(([k]) => {
+      const q = quelle[k];
+      const v = q?.[feld];
+      const kl = k === "T0" ? "stich" : k === "heute" ? "jetzt" : "";
+      if (v == null || !isFinite(v)) {
+        return '<td class="' + kl + ' offen">—</td>';
+      }
+      return '<td class="' + kl + '">' + form(v) + "</td>";
+    }).join("") +
+    "</tr>"
+  ).join("");
+
+  el("bzTab").innerHTML = kopf + "<tbody>" + koerper + "</tbody>";
+
+  // --- Listen ---
+  // "haelt heute" ist bewusst vorsichtig formuliert: ein Strich heisst nicht
+  // "leer", sondern "heute nicht unter den erfassten Wallets". Beides sieht in
+  // der Datenbank gleich aus, und das eine als das andere auszugeben waere
+  // eine Behauptung ueber fremdes Geld.
+  const zeile = (r, i, zusatz) =>
+    '<a class="bzrow" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
+    '<span class="pos">' + (i + 1) + "</span>" +
+    '<span class="wer"><span class="adr">' +
+      (r.label ? esc(r.label) : kurzAdr(r.checksum_hash ?? r.address)) + "</span>" +
+      '<span class="meta">' + zusatz + "</span></span>" +
+    '<span class="betrag"><span class="b">' + kurz(r.etn) + " ETN</span>" +
+      '<span class="h">' +
+      (r.bestand_jetzt != null
+        ? "holds " + kurz(r.bestand_jetzt) + " today"
+        : "not tracked today") +
+      "</span></span></a>";
+
+  const tr = d.top_transfers ?? [];
+  el("bzTransfers").className = tr.length ? "" : "empty";
+  el("bzTransfers").innerHTML = tr.length
+    ? tr.map((r, i) => zeile(r, i, new Date(r.tag).toLocaleDateString(LOC, {
+        day: "2-digit", month: "short", year: "numeric" }))).join("")
+    : "No single transfer above " + kurz(d.mindestbetrag) + " ETN found yet.";
+
+  el("bzTransfersNote").textContent = d.transfers_ab
+    ? d.transfers_vollstaendig
+      ? "Covers the whole history of the bridge, back to " +
+        new Date(d.transfers_ab).toLocaleDateString(LOC) + "."
+      : "Checked back to " + new Date(d.transfers_ab).toLocaleDateString(LOC) +
+        " so far — the scan works further back each week, so this ranking can still change."
+    : "";
+
+  const emp = d.top_empfaenger ?? [];
+  el("bzEmpfaenger").className = emp.length ? "" : "empty";
+  el("bzEmpfaenger").innerHTML = emp.length
+    ? emp.map((r, i) => zeile(r, i,
+        (r.anzahl === 1 ? "1 transfer" : nf(r.anzahl) + " transfers") +
+        " · " + new Date(r.erster).toLocaleDateString(LOC) +
+        (r.letzter !== r.erster ? " – " + new Date(r.letzter).toLocaleDateString(LOC) : "")
+      )).join("")
+    : "Nothing recorded yet.";
+
+  // --- Wallets, die es vorher nicht gab ---
+  const neu = d.neue_wallets;
+  if (d.vorbei && neu?.anzahl) {
+    el("bzNeuBox").hidden = false;
+    el("bzNeu").className = "";
+    el("bzNeu").innerHTML =
+      '<div class="bfacts"><div><div class="k">Wallets</div><div class="v num">' +
+      nf(neu.anzahl) + "</div></div>" +
+      '<div><div class="k">They hold</div><div class="v num">' + kurz(neu.etn) +
+      " ETN</div></div></div>";
+  }
 }
 
 async function ladeBridgeEvents() {
@@ -3791,6 +4280,7 @@ const LADER = {
     Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), ladeWatchlist(), fbBesucher()]),
   migration: () =>
     Promise.all([uebersicht(), ladeBridgeEvents(), ladeJobStatus("bridge", "bridgeBtn")]),
+  bilanz: () => ladeBilanz(),
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),

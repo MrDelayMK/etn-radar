@@ -29,6 +29,35 @@ const SLEEPER_DAYS = 30;
 // Betraege unter 10.000 ETN.
 const MIN_EREIGNIS_ETN = 100000;
 
+/* ---------- Marker rund um den Migrations-Stichtag ------------------------
+ *
+ * Der Stichtag kommt genau einmal. Was an diesem Tag gilt - Bridge-Bestand,
+ * Kurs, Marktkapitalisierung, Verteilung - laesst sich danach nirgends mehr
+ * herholen: der Bridge-Bestand aendert sich weiter, der Kurs sowieso. Also
+ * wird der Zustand an festgelegten Tagen eingefroren, jeder Marker genau
+ * einmal und danach nie wieder angefasst.
+ *
+ * Die Abstaende sind bewusst symmetrisch. "Vorher" und "nachher" sind nur
+ * dann vergleichbar, wenn beide Seiten denselben Zeitraum abdecken - ein
+ * Vergleich von 30 Tagen davor mit 90 Tagen danach misst hauptsaechlich die
+ * unterschiedliche Laenge.
+ *
+ * T-90 faellt auf den 02.11.2026 und damit drei Monate vor den Stichtag. Das
+ * ist Absicht: bis dahin laeuft das Verfahren mehrfach im Echtbetrieb, und
+ * ein Fehler faellt auf, solange er noch reparabel ist. Ein Mechanismus, der
+ * erst am entscheidenden Tag zum ersten Mal laeuft, ist an diesem Tag kaputt.
+ */
+const STICHTAG_MARKER = [
+  ["T-90", -90], ["T-30", -30], ["T-7", -7],
+  ["T0", 0],
+  ["T+7", 7], ["T+30", 30], ["T+90", 90],
+];
+
+// Faellt zurueck auf denselben Wert wie wrangler.toml. Die Variable dort ist
+// die Quelle; das hier verhindert nur, dass ein Aufrufer, der sie nicht
+// durchreicht, die Marker stillschweigend ausfallen laesst.
+const STICHTAG_STANDARD = "2027-01-31";
+
 async function batched(db, statements) {
   let geschrieben = 0;
   for (let i = 0; i < statements.length; i += CHUNK) {
@@ -552,6 +581,64 @@ export async function runIngest(env, db, opts = {}) {
       stmts.push(setzeMarke.bind("hoch_12m", spanne.hoch, day, "eigene Reihe", takenAt));
       if (spanne.tief != null) {
         stmts.push(setzeMarke.bind("tief_12m", spanne.tief, day, "eigene Reihe", takenAt));
+      }
+    }
+  }
+
+  // --- 7e. Stichtags-Marker einfrieren -----------------------------------
+  //
+  // Geschrieben wird ein Marker an dem Tag, an dem er faellig wird, und nur
+  // wenn er noch nicht steht. Ist der Ingest an genau diesem Tag ausgefallen,
+  // holt ihn der naechste Lauf nach - dann eben mit dem Stand von einem Tag
+  // spaeter, was in "tag" auch so festgehalten wird. Lieber ein Wert mit
+  // ehrlichem Datum als gar keiner.
+  //
+  // Die Zahlen kommen aus diesem Lauf, nicht aus einer Abfrage: sie liegen
+  // hier ohnehin im Speicher, und was aus dem laufenden Snapshot stammt, ist
+  // in sich stimmig - Kurs, Bestand und Verteilung gehoeren zum selben
+  // Zeitpunkt.
+  {
+    const stichtag = String(env.MIGRATION_DEADLINE ?? STICHTAG_STANDARD);
+    const basis = Date.parse(stichtag + "T00:00:00Z");
+    if (Number.isFinite(basis)) {
+      const vorhanden = new Set(
+        (await db.prepare("SELECT schluessel FROM stichtag").all()).results.map(
+          (r) => r.schluessel
+        )
+      );
+      const faellig = STICHTAG_MARKER.filter(([schluessel, versatz]) => {
+        if (vorhanden.has(schluessel)) return false;
+        const soll = new Date(basis + versatz * 86400000).toISOString().slice(0, 10);
+        return day >= soll;
+      });
+
+      if (faellig.length) {
+        const zustand = JSON.stringify({
+          bridge_etn: bridgeEtn,
+          bridge_wei: bridgeRow?.balance_wei ?? null,
+          total_supply: totalSupplyEtn,
+          zirkulierend: circulating,
+          preis: price,
+          // Marktkapitalisierung auf der zirkulierenden Menge, nicht auf der
+          // Gesamtmenge: was in der Bridge liegt, ist nicht im Umlauf. Genau
+          // diese Unterscheidung ist nach dem Stichtag der ganze Punkt.
+          marktkapitalisierung: price != null ? circulating * price : null,
+          holder_1m: real.filter((r) => r.etn >= 1000000).length,
+          holder_5m: real.filter((r) => r.etn >= 5000000).length,
+          holder_10m: real.filter((r) => r.etn >= 10000000).length,
+          top10_anteil: circulating > 0 ? sumTop(10) / circulating : null,
+          top100_anteil: circulating > 0 ? sumTop(100) / circulating : null,
+          adressen_gesamt: top.total_addresses ?? null,
+          adressen_erfasst: rows.length,
+        });
+        const insMarker = db.prepare(
+          "INSERT INTO stichtag (schluessel, tag, daten, gesetzt_am) VALUES (?,?,?,?)" +
+            " ON CONFLICT(schluessel) DO NOTHING"
+        );
+        for (const [schluessel] of faellig) {
+          stmts.push(insMarker.bind(schluessel, day, zustand, takenAt));
+          log("  Stichtags-Marker " + schluessel + " festgehalten (" + day + ")");
+        }
       }
     }
   }
