@@ -37,7 +37,8 @@
 //      aufgebaut. Damit ist die Kopfzahl eines Tages per Konstruktion die
 //      Summe der Transfers, die darunter stehen.
 
-import { fetchInternalTransactions } from "./blockscout.js";
+import { fetchInternalTransactions, fetchAddress } from "./blockscout.js";
+import { haeppchenFalten, obenFalten, tagVon, uebertragLesen, uebertragText } from "./bridge-tage.js";
 
 // Ab welchem Einzelbetrag ein Transfer ueberhaupt interessant ist. Darunter
 // ist es Alltagsverkehr: an einem beliebigen Tag laufen hunderte kleine
@@ -93,6 +94,51 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
     seiten_gesamt: 0,
   };
 
+  // Die Tagessummen (bridge_tage) kamen erst nach den ersten Durchgaengen dazu.
+  // Steht schon ein Cursor, aber noch keine einzige Tagessumme, fehlen sie genau
+  // fuer das bereits gelesene Stueck - und ein Lauf, der nur weitermacht, fuellte
+  // diese Luecke nie. Dann von vorn. Die grossen Transfers kommen dabei
+  // unveraendert wieder heraus, ihr Schluessel verhindert Doppelte.
+  const tageDa = await db.prepare("SELECT 1 FROM bridge_tage LIMIT 1").first();
+  if (!tageDa && (stand.cursor || stand.fertig || stand.neuestes_bekannt)) {
+    log("Noch keine Tagessummen vorhanden - der Durchgang beginnt von vorn.");
+    Object.assign(stand, {
+      neuestes_bekannt: null, aeltestes_bekannt: null, cursor: null,
+      fertig: 0, seiten_gesamt: 0, uebertrag: null,
+    });
+  }
+  let uebertrag = uebertragLesen(stand.uebertrag);
+
+  // Bestand der Bridge zu Beginn des Laufs: der Anker, von dem aus die
+  // Tagessummen rueckwaerts zu einem Bestandsverlauf werden. Eine Anfrage je
+  // Lauf. Geholt VOR dem Blick nach oben - was waehrenddessen noch abfliesst,
+  // zaehlt schlimmstenfalls ein paar Sekunden Verkehr zu viel zum heutigen Tag.
+  let ankerWei = stand.anker_wei ?? null;
+  let ankerZeit = stand.anker_zeit ?? null;
+  try {
+    const a = await fetchAddress(api, bridge);
+    if (a?.balance_wei != null) {
+      ankerWei = String(a.balance_wei);
+      ankerZeit = new Date().toISOString();
+    }
+  } catch (e) {
+    log("  Bridge-Bestand nicht abrufbar (" + e.message + ") - der bisherige Anker bleibt.");
+  }
+
+  const insTag = db.prepare(
+    "INSERT INTO bridge_tage (day, abfluss_wei, abfluss_anzahl, zufluss_wei) VALUES (?,?,?,?)" +
+      " ON CONFLICT(day) DO UPDATE SET abfluss_wei=excluded.abfluss_wei," +
+      "   abfluss_anzahl=excluded.abfluss_anzahl, zufluss_wei=excluded.zufluss_wei"
+  );
+  const tageSchreiben = async (tage) => {
+    if (!tage.length) return;
+    await db.batch(
+      tage.map((t) =>
+        insTag.bind(t.day, String(t.abfluss_wei), t.abfluss_anzahl, String(t.zufluss_wei))
+      )
+    );
+  };
+
   let seiten = 0;
   let neueTransfers = 0;
   let neuestes = stand.neuestes_bekannt;
@@ -127,13 +173,36 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
   // Lauf faengt Schritt 2 ohnehin bei der neuesten Seite an.
   if (stand.neuestes_bekannt) {
     log("Neues seit " + stand.neuestes_bekannt.slice(0, 16) + " einsammeln ...");
+    // Zurueck bis vor den ANFANG des Tages des letzten bekannten Transfers,
+    // nicht nur bis zu diesem Transfer: nur dann ist dieser Tag danach
+    // vollstaendig gelesen und laesst sich neu auszaehlen statt zu ergaenzen.
+    // Eine Sekunde davor, damit auch ein Transfer genau um Mitternacht, der auf
+    // die naechste Seite gerutscht ist, noch mitkommt.
+    const abTag = tagVon(stand.neuestes_bekannt);
     const r = await fetchInternalTransactions(api, bridge, {
       maxPages: NACHLAUF_SEITEN,
-      bisZeit: stand.neuestes_bekannt,
+      bisZeit: new Date(Date.parse(abTag + "T00:00:00Z") - 1000).toISOString(),
     });
     seiten += r.seiten;
     neueTransfers += await speichern(r.transfers);
     spanne(r.transfers);
+
+    const aeltesterTag = r.transfers.reduce(
+      (m, t) => (m == null || tagVon(t.timestamp) < m ? tagVon(t.timestamp) : m),
+      null
+    );
+    const vollstaendig =
+      !r.cursor || r.seiten < NACHLAUF_SEITEN || (aeltesterTag != null && aeltesterTag < abTag);
+    await tageSchreiben(obenFalten(r.transfers, bridge, abTag, vollstaendig));
+    if (!vollstaendig) {
+      // Mehr neuer Verkehr, als der Deckel hergibt. Der neue Anker wuerde dann
+      // auf Tagessummen stehen, die nicht lueckenlos an die alten anschliessen -
+      // lieber der alte Anker und ein Verlauf, der ein paar Tage frueher endet.
+      log("  Mehr als " + NACHLAUF_SEITEN + " Seiten neuer Verkehr - die Tagessummen reichen nicht" +
+        " lueckenlos bis " + abTag + " zurueck, der Anker bleibt beim letzten Lauf.");
+      ankerWei = stand.anker_wei ?? null;
+      ankerZeit = stand.anker_zeit ?? null;
+    }
     log("  " + r.seiten + " Seiten, " + r.transfers.length + " Transfers angesehen");
   }
 
@@ -145,11 +214,13 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
     db
       .prepare(
         "INSERT INTO bridge_scan (id, neuestes_bekannt, aeltestes_bekannt, cursor, fertig," +
-          " seiten_gesamt, aktualisiert_am) VALUES (1,?,?,?,?,?,?)" +
+          " seiten_gesamt, aktualisiert_am, uebertrag, anker_wei, anker_zeit)" +
+          " VALUES (1,?,?,?,?,?,?,?,?,?)" +
           " ON CONFLICT(id) DO UPDATE SET neuestes_bekannt=excluded.neuestes_bekannt," +
           "   aeltestes_bekannt=excluded.aeltestes_bekannt, cursor=excluded.cursor," +
           "   fertig=excluded.fertig, seiten_gesamt=excluded.seiten_gesamt," +
-          "   aktualisiert_am=excluded.aktualisiert_am"
+          "   aktualisiert_am=excluded.aktualisiert_am, uebertrag=excluded.uebertrag," +
+          "   anker_wei=excluded.anker_wei, anker_zeit=excluded.anker_zeit"
       )
       .bind(
         neuestes,
@@ -157,7 +228,10 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
         cursor ? JSON.stringify(cursor) : null,
         fertig,
         (stand.seiten_gesamt ?? 0) + seiten,
-        new Date().toISOString()
+        new Date().toISOString(),
+        uebertragText(uebertrag),
+        ankerWei,
+        ankerZeit
       )
       .run();
 
@@ -197,6 +271,12 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
       seiten += r.seiten;
       neueTransfers += await speichern(r.transfers);
       spanne(r.transfers);
+      // Tagessummen VOR dem Cursor. Bricht der Lauf dazwischen ab, liest der
+      // naechste dasselbe Haeppchen mit demselben Uebertrag noch einmal und
+      // ueberschreibt mit denselben Zahlen (siehe src/bridge-tage.js).
+      const gefaltet = haeppchenFalten(r.transfers, bridge, uebertrag, !r.cursor);
+      await tageSchreiben(gefaltet.fertig);
+      uebertrag = gefaltet.uebertrag;
       cursor = r.cursor;
       fertig = r.cursor ? 0 : 1;
       await zustandSchreiben();

@@ -366,6 +366,9 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
     out.push(
       ...items.map((i) => ({
         hash: i.transaction_hash,
+        // Absender mit dabei: fuer die Tagessummen der Bridge zaehlt nur, was
+        // sie wirklich verlassen hat, nicht was hineinkam.
+        from: String(i.from?.hash ?? "").toLowerCase(),
         to: String(i.to.hash).toLowerCase(),
         value_wei: String(i.value),
         etn: Number(BigInt(i.value) / 10n ** 12n) / 1e6,

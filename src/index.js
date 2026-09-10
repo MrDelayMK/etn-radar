@@ -1546,6 +1546,54 @@ function brauchbar(r) {
   return vollstaendigGelistet ? abweichung < 0.001 : summe <= r.outflow_etn * 1.001;
 }
 
+/* ---------- Bridge-Bestand seit dem Start ---------------------------------
+ *
+ * Aus den Tagessummen des Bridge-Durchgangs (bridge_tage) rueckwaerts
+ * gerechnet, ausgehend vom Bestand zu Beginn seines letzten Laufs: der Bestand
+ * am Ende eines Tages ist der Bestand am Ende des naechsten Tages plus das, was
+ * an jenem naechsten Tag abgeflossen ist.
+ *
+ * Nur wenn der Durchgang die Historie bis zum Anfang gelesen hat. Eine halbe
+ * Historie saehe im Chart aus wie eine ganze - bis dahin bleibt die Seite bei
+ * den 120 Tagen aus der Uebersicht.
+ */
+async function bridgeVerlauf(db) {
+  const stand = await db
+    .prepare("SELECT fertig, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
+    .first()
+    .catch(() => null);
+  if (!stand?.fertig || !stand.anker_wei || !stand.anker_zeit) {
+    return { vollstaendig: false, punkte: [] };
+  }
+
+  const ankerTag = String(stand.anker_zeit).slice(0, 10);
+  const tage = (
+    await db
+      .prepare(
+        "SELECT day, abfluss_wei, zufluss_wei FROM bridge_tage WHERE day <= ? ORDER BY day DESC"
+      )
+      .bind(ankerTag)
+      .all()
+  ).results;
+
+  const inEtn = (wei) => Number(wei / 10n ** 12n) / 1e6;
+  let bestand = BigInt(stand.anker_wei);
+  const punkte = [];
+  if (tage[0]?.day !== ankerTag) punkte.push({ day: ankerTag, etn: inEtn(bestand) });
+  for (const t of tage) {
+    punkte.push({ day: t.day, etn: inEtn(bestand) });
+    bestand += BigInt(t.abfluss_wei) - BigInt(t.zufluss_wei);
+  }
+  // Der Stand vor dem ersten Abfluss - der Punkt, von dem aus die Migration
+  // ueberhaupt begann.
+  if (tage.length) {
+    const vorher = new Date(Date.parse(tage[tage.length - 1].day + "T00:00:00Z") - 86400000);
+    punkte.push({ day: vorher.toISOString().slice(0, 10), etn: inEtn(bestand) });
+  }
+  punkte.reverse();
+  return { vollstaendig: true, anker_zeit: stand.anker_zeit, punkte };
+}
+
 /* ---------- Bilanz zum Migrations-Stichtag -------------------------------
  *
  * Was die Migration am Ende gekostet hat: wie viel ETN nie herueberkam, was
@@ -2240,6 +2288,9 @@ export default {
       // Laenger gecacht als der Rest: die Bilanz besteht aus eingefrorenen
       // Werten und einer Wochen-Historie - nichts davon aendert sich in Minuten.
       else if (pfad === "/api/bilanz") antwort = json(await bilanz(db, env), 200, 600);
+      // Aendert sich nur, wenn der woechentliche Bridge-Durchgang laeuft - sechs
+      // Stunden Zwischenspeicher kosten also nichts an Aktualitaet.
+      else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db), 200, 21600);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
       else if (pfad === "/api/movers") antwort = json(await movers(db, env, u));
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));

@@ -270,7 +270,10 @@ CREATE TABLE IF NOT EXISTS bridge_scan (
   cursor            TEXT,                -- next_page_params als JSON, NULL = noch nicht begonnen
   fertig            INTEGER NOT NULL DEFAULT 0,  -- 1 = bis zum Anfang der Bridge durch
   seiten_gesamt     INTEGER NOT NULL DEFAULT 0,
-  aktualisiert_am   TEXT
+  aktualisiert_am   TEXT,
+  uebertrag         TEXT,          -- angefangener Tag fuer das naechste Haeppchen (JSON)
+  anker_wei         TEXT,          -- Bridge-Bestand zu Beginn des letzten Laufs
+  anker_zeit        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bridge_events (
@@ -503,3 +506,11 @@ CREATE TABLE IF NOT EXISTS stichtag (
 );
 
 CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);
+
+-- Tagessummen aller Abfluesse aus der Bridge - Begruendung in migrations.sql.
+CREATE TABLE IF NOT EXISTS bridge_tage (
+  day             TEXT PRIMARY KEY,
+  abfluss_wei     TEXT NOT NULL,
+  abfluss_anzahl  INTEGER NOT NULL,
+  zufluss_wei     TEXT NOT NULL DEFAULT '0'
+);

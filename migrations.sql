@@ -141,3 +141,18 @@ CREATE INDEX IF NOT EXISTS idx_addresses_first_seen ON addresses(first_seen);
 -- mitgeschickt. Wer seine Seitendaten loescht oder ein anderes Geraet nimmt,
 -- gilt wieder als neu; die Zahl untertreibt also eher, als dass sie uebertreibt.
 ALTER TABLE besuche ADD COLUMN erstbesuch TEXT;
+
+-- Tagessummen aller Abfluesse aus der Bridge (src/bridge-tage.js). Daraus
+-- entsteht der Bridge-Bestand bis zum Start im Maerz 2024 zurueck. Betraege in
+-- Wei als TEXT, wie ueberall, wo aufsummiert wird.
+CREATE TABLE IF NOT EXISTS bridge_tage (
+  day             TEXT PRIMARY KEY,
+  abfluss_wei     TEXT NOT NULL,
+  abfluss_anzahl  INTEGER NOT NULL,
+  zufluss_wei     TEXT NOT NULL DEFAULT '0'
+);
+-- Der angefangene aelteste Tag, der mit dem Cursor ins naechste Haeppchen
+-- wandert, und der Bridge-Bestand zu Beginn des letzten Laufs als Anker.
+ALTER TABLE bridge_scan ADD COLUMN uebertrag TEXT;
+ALTER TABLE bridge_scan ADD COLUMN anker_wei TEXT;
+ALTER TABLE bridge_scan ADD COLUMN anker_zeit TEXT;
