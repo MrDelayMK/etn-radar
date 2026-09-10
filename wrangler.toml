@@ -71,7 +71,7 @@ TELEGRAM_BOT_USERNAME = ""
 # Spendenadresse fuer den "Donate"-Knopf. Leer = Knopf unsichtbar. Die Seite
 # zeigt nur diese Adresse an und bietet sie zum Kopieren an - sie verbindet sich
 # nie mit einem Wallet und fordert nie eine Signatur an.
-DONATE_ADDRESS = ""
+DONATE_ADDRESS = "0x90ceAAE3a510DB56a2aCf9eD65C13F5691D81208"
 
 [[d1_databases]]
 binding = "DB"

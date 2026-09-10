@@ -88,8 +88,12 @@ header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:cent
 .dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 9px var(--up)}
 
 /* ---------- Tabs ---------- */
-nav{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
-nav::-webkit-scrollbar{display:none}
+nav{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+/* Nur die Reiter scrollen. Vorher scrollte die ganze Leiste, und bei 1024 Pixel
+   Breite lagen Feedback und Donate rechts ausserhalb - gemessen: 1.215 Pixel
+   Inhalt in 965 Pixeln Platz. Wer die Knoepfe nicht sieht, findet sie nicht. */
+nav .navtabs{display:flex;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+nav .navtabs::-webkit-scrollbar{display:none}
 nav button{
   background:none;border:0;border-bottom:2px solid transparent;color:var(--tx2);
   padding:13px 20px;font:620 14.5px var(--sans);cursor:pointer;white-space:nowrap;
@@ -548,8 +552,15 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 .fbhp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 /* Rechts angedockt statt in der Reihe - die Fusszeile allein findet
    niemand, der nicht ohnehin sucht. */
-#nav .navrechts{margin-left:auto}
-@media (max-width:760px){#nav .navrechts{margin-left:0}}
+/* Feedback und Donate uebereinander statt nebeneinander: zusammen so hoch wie
+   ein Reiter, aber nur halb so breit wie zwei. */
+nav .navrechts{display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding:2px 0}
+nav .navrechts button{
+  padding:2px 10px;font:600 11.5px/1.3 var(--sans);gap:5px;justify-content:flex-start;
+  border:1px solid var(--line2);border-radius:7px;color:var(--tx2)
+}
+nav .navrechts button .ic{font-size:12px;line-height:1}
+nav .navrechts button:hover{color:var(--tx);border-color:var(--acc)}
 
 /* Rangaenderung neben dem Platz: ob eine Bewegung das Wallet auch Plaetze
    gekostet hat, sieht man dem Betrag allein nicht an. */
@@ -839,6 +850,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 </div>
 
 <nav id="nav">
+  <div class="navtabs">
   <button data-p="overview" class="on"><span class="ic">🌊</span>Overview</button>
   <button data-p="migration"><span class="ic">🌉</span>Migration</button>
   <button data-p="tiers"><span class="ic">🏔️</span>Tiers</button>
@@ -847,8 +859,11 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
   <button data-p="about"><span class="ic">📡</span>About</button>
-  <button data-feedback class="navrechts"><span class="ic">💬</span>Feedback</button>
-  <button data-spende hidden><span class="ic">💛</span>Donate</button>
+  </div>
+  <div class="navrechts">
+    <button data-feedback><span class="ic">💬</span>Feedback</button>
+    <button data-spende hidden><span class="ic">💛</span>Donate</button>
+  </div>
 </nav>
 
 <!-- ================= OVERVIEW ================= -->
@@ -1153,7 +1168,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <button class="ghost" id="nextPage">Next →</button>
       <span class="info" id="pageInfo">&mdash;</span>
       <span class="info">page</span>
-      <input type="text" inputmode="numeric" id="pageJump" class="pagejump" placeholder="1">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" id="pageJump" class="pagejump" placeholder="1">
       <button class="ghost" id="pageJumpBtn">Go</button>
       <div class="tabs" style="margin-left:auto">
         <span class="info" style="align-self:center;margin-right:4px">rows</span>
@@ -1492,8 +1507,8 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <b>💛 Support ETN Radar</b>
       <button class="x" id="spendeClose" aria-label="Close">&times;</button>
     </div>
-    <div class="spendetext">ETN Radar is free and ad-free. If it is useful to you, send any amount of
-      ETN to this address from your own wallet — there is nothing to connect or sign here.</div>
+    <div class="spendetext">Enjoying the tool and want to support the project? Feel free to drop a few
+      ETN 😉😎 – just send them straight to the address below ✌️⚡</div>
     <div class="spendeadr" id="spendeAdr"></div>
     <div class="modalfoot">
       <button id="spendeCopy">📋 Copy address</button>
@@ -1714,6 +1729,10 @@ let bekannteSnapshotId = null;
 const OHNE_MARKE = [
   "/api/stand", "/api/feedback", "/api/besuche",
   "/api/census/", "/api/clusters/", "/api/exchanges/", "/api/bridge/",
+  // Aus dem umgekehrten Grund: der Bridge-Verlauf aendert sich nur mit dem
+  // woechentlichen Durchgang. An der Snapshot-Nummer haengend wuerde er alle
+  // 30 Minuten neu gerechnet - fuer dieselben Zahlen.
+  "/api/bridge-verlauf",
 ];
 
 /** Die Snapshot-Nummer, einmal geholt und danach aus dem Gedaechtnis. */
@@ -1842,7 +1861,9 @@ function zeichneTempoChart(svg, punkte, opts) {
   if (holder.clientWidth === 0) return;
 
   const takt = o.takt ?? "woche";
-  const reihe = tempoReihe(svg._tp ?? [], takt);
+  // Mit der ganzen Historie waeren es ueber 130 Wochen - Balken von wenigen
+  // Pixeln Breite. Die Woche zeigt darum das letzte Jahr, der Monat alles.
+  const reihe = tempoReihe(svg._tp ?? [], takt).slice(takt === "woche" ? -52 : 0);
   const W = Math.max(320, Math.round(holder.clientWidth));
   const H = W < 640 ? 260 : 330;
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
@@ -2290,7 +2311,9 @@ async function ladeOverview() {
     "v num " + (noetigProTag != null && noetigProTag > (m.abfluss_pro_tag || 0) ? "down" : "up");
 
   const v = d.bridge_verlauf ?? [];
-  MIG.punkte = v;
+  // Die ganze Historie hat Vorrang, sobald sie einmal geladen ist - sonst
+  // schluege der Chart bei jedem neuen Snapshot auf die 120 Tage zurueck.
+  MIG.punkte = MIG.voll ?? v;
   MIG.opts = {
     deadline: m.deadline,
     totalSupply: d.total_supply,
@@ -2298,35 +2321,10 @@ async function ladeOverview() {
   };
   migSchalter();
   zeichneMigration();
-  if (v.length >= 2) {
-    el("chartRange").textContent =
-      new Date(v[0].day).toLocaleDateString(LOC) + " – " +
-      new Date(v[v.length - 1].day).toLocaleDateString(LOC) +
-      (Date.now() < Date.parse(m.deadline + "T00:00:00Z") + 86400000
-        ? " · deadline " + new Date(m.deadline).toLocaleDateString(LOC)
-        : "");
-    const diff = v[v.length - 1].etn - v[0].etn;
-    const c = el("chartDelta");
-    c.textContent = kurz(diff, true) + " ETN";
-    c.className = "num " + (diff < 0 ? "up" : "down"); // a shrinking bridge is good news
-  }
+  migVerlaufBeschriften();
 
   const migrPct = d.bridge_anteil != null ? Math.max(0, Math.min(100, (1 - d.bridge_anteil) * 100)) : 0;
   el("migDone").style.width = migrPct.toFixed(1) + "%";
-
-  // Wo stand der Balken am Anfang der vorliegenden Historie? Der Abstand
-  // zwischen Marke und Balkenkante ist der gesamte Fortschritt dieses
-  // Zeitraums - und dass man ihn kaum sieht, ist die ehrlichste Darstellung
-  // des Tempos, die es gibt.
-  if (v.length >= 2 && d.total_supply > 0) {
-    const damals = Math.max(0, Math.min(100, (1 - v[0].etn / d.total_supply) * 100));
-    const marke = el("migVor");
-    marke.hidden = false;
-    marke.style.left = damals.toFixed(2) + "%";
-    const tage = Math.round((Date.parse(v[v.length - 1].day) - Date.parse(v[0].day)) / 86400000);
-    el("migVorLbl").innerHTML =
-      '<span class="dim3">' + tage + " days ago: <b>" + nf(damals, 1) + "%</b></span>";
-  }
   el("migDoneLbl").textContent = nf(migrPct, 1) + "%";
   el("migRestLbl").textContent = d.bridge_anteil != null ? nf(d.bridge_anteil * 100, 1) + "%" : "—";
 
@@ -2779,6 +2777,62 @@ const BILANZ_SPALTEN = [
   ["heute", "Today"],
 ];
 
+
+/**
+ * Beschriftet Chart und Fortschrittsbalken nach der Reihe, die gerade gezeigt
+ * wird - den 120 Tagen aus der Uebersicht oder der ganzen Historie.
+ */
+function migVerlaufBeschriften() {
+  const v = MIG.punkte;
+  const m = MIG.opts;
+  if (!m || v.length < 2) return;
+
+  el("chartRange").textContent =
+    new Date(v[0].day).toLocaleDateString(LOC) + " – " +
+    new Date(v[v.length - 1].day).toLocaleDateString(LOC) +
+    (Date.now() < Date.parse(m.deadline + "T00:00:00Z") + 86400000
+      ? " · deadline " + new Date(m.deadline).toLocaleDateString(LOC)
+      : "");
+  const diff = v[v.length - 1].etn - v[0].etn;
+  const c = el("chartDelta");
+  c.textContent = kurz(diff, true) + " ETN";
+  c.className = "num " + (diff < 0 ? "up" : "down"); // a shrinking bridge is good news
+
+  // Wo stand der Balken am Anfang der gezeigten Reihe? Der Abstand zwischen
+  // Marke und Balkenkante ist der gesamte Fortschritt dieses Zeitraums.
+  if (m.totalSupply > 0) {
+    const damals = Math.max(0, Math.min(100, (1 - v[0].etn / m.totalSupply) * 100));
+    const marke = el("migVor");
+    marke.hidden = false;
+    marke.style.left = damals.toFixed(2) + "%";
+    const tage = Math.round((Date.parse(v[v.length - 1].day) - Date.parse(v[0].day)) / 86400000);
+    // Ueber ein halbes Jahr sagt ein Datum mehr als eine Zahl von Tagen.
+    const wann = tage > 180
+      ? new Date(v[0].day).toLocaleDateString(LOC, { month: "short", year: "numeric" })
+      : tage + " days ago";
+    el("migVorLbl").innerHTML =
+      '<span class="dim3">' + wann + ": <b>" + nf(damals, 1) + "%</b></span>";
+  }
+}
+
+/**
+ * Der Bridge-Bestand seit ihrem Start im Maerz 2024. Kommt erst, wenn der
+ * Durchgang durch die Historie bis zum Anfang gelesen hat - bis dahin bleibt
+ * der Chart bei den 120 Tagen aus der Uebersicht.
+ */
+async function ladeBridgeVerlauf() {
+  let d;
+  try {
+    d = await hole("/api/bridge-verlauf");
+  } catch {
+    return;
+  }
+  if (!d?.vollstaendig || (d.punkte ?? []).length < 2) return;
+  MIG.voll = d.punkte;
+  MIG.punkte = d.punkte;
+  zeichneMigration();
+  migVerlaufBeschriften();
+}
 
 async function ladeBilanz() {
   let d;
@@ -4332,7 +4386,7 @@ const LADER = {
   // danach. Parallel gestartet gewaenne mal der eine, mal der andere.
   migration: async () => {
     await uebersicht();
-    await Promise.all([ladeBilanz(), ladeJobStatus("bridge", "bridgeBtn")]);
+    await Promise.all([ladeBilanz(), ladeBridgeVerlauf(), ladeJobStatus("bridge", "bridgeBtn")]);
   },
   tiers: () => uebersicht(),
   about: () => Promise.resolve(),
@@ -4356,7 +4410,7 @@ function zeigeSeite(name) {
   const wechsel = document.querySelector("#nav button.on")?.dataset.p !== name;
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
   if (wechsel) window.scrollTo({ top: 0 });
-  [...el("nav").children].forEach((b) => b.classList.toggle("on", b.dataset.p === name));
+  el("nav").querySelectorAll("button[data-p]").forEach((b) => b.classList.toggle("on", b.dataset.p === name));
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
   if (!geladen.has(name)) {
     geladen.add(name);
@@ -4546,6 +4600,13 @@ function lbSeiteSpringen() {
 }
 el("pageJumpBtn").onclick = lbSeiteSpringen;
 el("pageJump").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSeiteSpringen(); });
+// Nur Ziffern. inputmode="numeric" zeigt auf dem Handy die Zahlentastatur, haelt
+// am Rechner aber niemanden davon ab, Buchstaben zu tippen - die landeten dann
+// stillschweigend auf Seite 1. Gefiltert beim Tippen UND beim Einfuegen.
+el("pageJump").addEventListener("input", (e) => {
+  const nurZiffern = e.target.value.replace(/[^0-9]/g, "").slice(0, 5);
+  if (nurZiffern !== e.target.value) e.target.value = nurZiffern;
+});
 
 // ---------- Balance-Filter ----------
 // Presets grob an der Tier-Skala orientiert - deckt die typischen Fragen ab
