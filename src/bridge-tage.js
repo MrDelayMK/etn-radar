@@ -1,5 +1,5 @@
 // Tagessummen aller Abfluesse aus der Bridge - die Grundlage, um den
-// Bridge-Bestand bis zu ihrem Start im Maerz 2024 zurueckzurechnen.
+// Bridge-Bestand seit Anfang 2026 zurueckzurechnen.
 //
 // WARUM NICHT DIE TAGESBILANZ DES EXPLORERS: coin-balance-history-by-day
 // reicht nur rund 90 Tage zurueck, und ihre Tagesgrenze stimmt nicht mit der
@@ -22,9 +22,13 @@
 //     Haeppchen mit demselben Uebertrag noch einmal und kommt auf dieselben
 //     Zahlen. Mit Aufaddieren waere genau dieser Tag doppelt gezaehlt.
 //
-// Betraege laufen als BigInt in Wei. Hunderttausende Einzelbetraege ueber
-// zweieinhalb Jahre aufzusummieren ist genau der Fall, vor dem schema.sql
-// warnt.
+// Betraege laufen als BigInt in Wei. Hunderttausende Einzelbetraege
+// aufzusummieren ist genau der Fall, vor dem schema.sql warnt.
+
+// Ab wann der Verlauf gebraucht wird. Die Bridge laeuft seit Maerz 2024, aber
+// fuer den Stichtag zaehlt das Jahr davor - jeder Monat weiter zurueck kostet
+// den Explorer nur zusaetzliche Seiten.
+export const HISTORIE_AB = "2026-01-01";
 
 /** UTC-Tag eines Zeitstempels, "JJJJ-MM-TT". */
 export const tagVon = (zeit) => String(zeit).slice(0, 10);

@@ -9,6 +9,7 @@ import { TIERS, tierProgress, tierFor, tierMax, FAST_TIER_MIN } from "./tiers.js
 import { clusterGruppen } from "./clusters.js";
 import { handleTelegramWebhook } from "./telegram.js";
 import { fetchAddress } from "./blockscout.js";
+import { HISTORIE_AB } from "./bridge-tage.js";
 
 // Die Daten aendern sich nur alle 30 Minuten - zwei Minuten waren also
 // fuenfzehnmal haeufiger nachgefragt als noetig. Bei Andrang ist das der
@@ -1559,10 +1560,14 @@ function brauchbar(r) {
  */
 async function bridgeVerlauf(db) {
   const stand = await db
-    .prepare("SELECT fertig, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
+    .prepare("SELECT fertig, aeltestes_bekannt, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
     .first()
     .catch(() => null);
-  if (!stand?.fertig || !stand.anker_wei || !stand.anker_zeit) {
+  // Weit genug zurueck ist auch ein Stand, der noch nicht als fertig markiert
+  // wurde - etwa ein Lauf, der ueber HISTORIE_AB hinaus las und abgebrochen wurde.
+  const weitGenug =
+    stand?.fertig || String(stand?.aeltestes_bekannt ?? "9999").slice(0, 10) < HISTORIE_AB;
+  if (!weitGenug || !stand.anker_wei || !stand.anker_zeit) {
     return { vollstaendig: false, punkte: [] };
   }
 
@@ -1570,9 +1575,10 @@ async function bridgeVerlauf(db) {
   const tage = (
     await db
       .prepare(
-        "SELECT day, abfluss_wei, zufluss_wei FROM bridge_tage WHERE day <= ? ORDER BY day DESC"
+        "SELECT day, abfluss_wei, zufluss_wei FROM bridge_tage WHERE day >= ? AND day <= ?" +
+          " ORDER BY day DESC"
       )
-      .bind(ankerTag)
+      .bind(HISTORIE_AB, ankerTag)
       .all()
   ).results;
 
@@ -1584,10 +1590,9 @@ async function bridgeVerlauf(db) {
     punkte.push({ day: t.day, etn: inEtn(bestand) });
     bestand += BigInt(t.abfluss_wei) - BigInt(t.zufluss_wei);
   }
-  // Der Stand vor dem ersten Abfluss - der Punkt, von dem aus die Migration
-  // ueberhaupt begann.
+  // Der Stand zum Jahreswechsel - der Punkt, an dem der Verlauf beginnt.
   if (tage.length) {
-    const vorher = new Date(Date.parse(tage[tage.length - 1].day + "T00:00:00Z") - 86400000);
+    const vorher = new Date(Date.parse(HISTORIE_AB + "T00:00:00Z") - 86400000);
     punkte.push({ day: vorher.toISOString().slice(0, 10), etn: inEtn(bestand) });
   }
   punkte.reverse();

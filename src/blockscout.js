@@ -350,8 +350,8 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
   const frist = opts.fristMs ? Date.now() + opts.fristMs : null;
   const out = [];
   // Mit startCursor setzt der Aufruf dort fort, wo ein frueherer aufgehoert
-  // hat. Die Bridge-Historie reicht bis Maerz 2024 zurueck und ist nur von
-  // der neuesten Seite aus rueckwaerts erreichbar - ohne Fortsetzen muesste
+  // hat. Die Bridge-Historie ist nur von der neuesten Seite aus rueckwaerts
+  // erreichbar - ohne Fortsetzen muesste
   // jeder Lauf die ganze Strecke neu gehen.
   let next = opts.startCursor ?? null;
   let seite = 0;
