@@ -1513,39 +1513,6 @@ async function clusters_api(db) {
 // statt erst beim naechsten woechentlichen Lauf.
 const BRIDGE_MIN_TRANSFER_ETN = 500000;
 
-/**
- * Haelt ein gespeicherter Tag der eigenen Zusage stand?
- *
- * Zwei Pruefungen, beide direkt aus dem, was das Panel verspricht:
- *
- *   1. Mindestens ein Einzeltransfer erreicht die Schwelle. Ein Tag aus
- *      siebenhundert Ueberweisungen zu je 50.000 ETN ist Alltagsverkehr.
- *   2. Die Kopfzahl IST die Summe der aufgefuehrten Transfers. Genau diese
- *      Zusage war einmal gebrochen: die Summe kam aus der Tagesbilanz der
- *      Bridge, die Empfaengerliste aus den Zeitstempeln der Transfers - und
- *      weil beide Seiten den Tag anders abgrenzen, stand ueber einem einzigen
- *      Transfer von 3,0 Millionen eine Ueberschrift von 6,97 Millionen.
- *
- * Sind mehr grosse Transfers vorhanden als aufgefuehrt (die Liste haelt zehn),
- * kann die Summe der Liste nur eine Untergrenze sein - dann wird auch nur das
- * geprueft.
- */
-function brauchbar(r) {
-  let empf;
-  try {
-    empf = r.top_recipients ? JSON.parse(r.top_recipients) : [];
-  } catch {
-    return false;
-  }
-  if (!empf.length) return false;
-  if (!empf.some((e) => e.etn >= BRIDGE_MIN_TRANSFER_ETN)) return false;
-
-  const summe = empf.reduce((s, e) => s + e.etn, 0);
-  const vollstaendigGelistet = (r.recipient_count ?? empf.length) <= empf.length;
-  // Ein Promille Spielraum fuer die Wei-nach-ETN-Umrechnung.
-  const abweichung = Math.abs(r.outflow_etn - summe) / (r.outflow_etn || 1);
-  return vollstaendigGelistet ? abweichung < 0.001 : summe <= r.outflow_etn * 1.001;
-}
 
 /* ---------- Bridge-Bestand seit dem Start ---------------------------------
  *
@@ -1719,46 +1686,29 @@ async function bilanz(db, env) {
       ? endspurt.letzte_30 / endspurt.davor_30
       : null;
 
-  // Die groessten Einzelbetraege, die je die Bridge verlassen haben.
+  // Die groessten Einzelbetraege seit HISTORIE_AB, direkt aus dem Rohbestand.
   //
-  // Gelesen aus bridge_events, NICHT aus der Rohtabelle bridge_transfers: die
-  // Ereignisse liegen fertig ausgewertet vor und enthalten je Tag die
-  // Empfaenger mit Betrag, waehrend der Rohbestand erst existiert, wenn der
-  // Durchgang durch die Bridge-Historie gelaufen ist. Genau daran hing diese
-  // Liste zuerst - und war deshalb leer, obwohl dieselben Betraege eine
-  // Bildschirmhoehe weiter oben standen.
-  //
-  // Warum die Sortierung nach Tagessumme reicht, um die groessten
-  // EINZELbetraege zu finden: ein einzelner Transfer kann nie groesser sein
-  // als die Summe seines Tages. Die zehn groessten Einzelbetraege stecken
-  // damit zwangslaeufig in den Tagen mit den groessten Summen.
-  const [ereignisse, stand] = await Promise.all([
+  // Vorher aus bridge_events. Die Tabelle wird aber erst im letzten Schritt
+  // eines Laufs neu aufgebaut - nach dem abgebrochenen Lauf vom 10.09.2026
+  // zeigte die Liste darum noch den Stand vom 07.09., ohne den groessten
+  // Transfer des Jahres (189,7 Mio. am 06.05.). Der Rohbestand dagegen ist nach
+  // jedem Haeppchen aktuell - und klein: live unter hundert gelesene Zeilen.
+  const [roh, stand] = await Promise.all([
     db
       .prepare(
-        "SELECT day, top_recipients FROM bridge_events WHERE top_recipients IS NOT NULL" +
-          " ORDER BY outflow_etn DESC LIMIT 60"
+        "SELECT day, to_address, etn FROM bridge_transfers WHERE day >= ?" +
+          " ORDER BY etn DESC LIMIT 10"
       )
+      .bind(HISTORIE_AB)
       .all(),
     db
       .prepare("SELECT aeltestes_bekannt, fertig FROM bridge_scan WHERE id = 1")
       .first()
       .catch(() => null),
   ]);
-
-  const transfers = [];
-  for (const e of ereignisse.results ?? []) {
-    let liste;
-    try {
-      liste = JSON.parse(e.top_recipients);
-    } catch {
-      continue; // eine kaputte Zeile darf die Liste nicht kosten
-    }
-    for (const r of liste ?? []) {
-      if (r?.address && r.etn > 0) transfers.push({ day: e.day, to_address: r.address, etn: r.etn });
-    }
-  }
-  transfers.sort((a, b) => b.etn - a.etn);
-  const top = transfers.slice(0, 10);
+  const top = roh.results ?? [];
+  const aeltesterTag = stand?.aeltestes_bekannt?.slice(0, 10) ?? null;
+  const transferVollstaendig = !!stand?.fertig || (aeltesterTag != null && aeltesterTag < HISTORIE_AB);
 
   // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
   const adressen = [...new Set(top.map((r) => r.to_address))];
@@ -1822,16 +1772,12 @@ async function bilanz(db, env) {
       tag: r.day,
       etn: r.etn,
     })),
-    // Wie weit die Transfer-Historie reicht. Solange der Durchgang durch die
-    // Bridge-Historie nicht fertig ist, sind "Top 10" die Top 10 des bisher
+    // Wie weit die Transfer-Historie reicht. Solange der Durchgang nicht bis
+    // HISTORIE_AB zurueckgelesen hat, sind "Top 10" die Top 10 des bisher
     // geprueften Fensters - und das gehoert dazugeschrieben, sonst liest sich
     // eine Teilmenge wie eine Bestenliste.
-    // Wie weit die Auswertung reicht. Der Durchgang meldet es genauer; ohne
-    // ihn bleibt der aelteste ausgewertete Tag die ehrlichste Angabe.
-    transfers_ab:
-      stand?.aeltestes_bekannt?.slice(0, 10) ??
-      (ereignisse.results ?? []).reduce((m, e) => (m == null || e.day < m ? e.day : m), null),
-    transfers_vollstaendig: !!stand?.fertig,
+    transfers_ab: transferVollstaendig ? HISTORIE_AB : aeltesterTag,
+    transfers_vollstaendig: transferVollstaendig,
     mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
   };
 }

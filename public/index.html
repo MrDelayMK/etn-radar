@@ -1735,10 +1735,10 @@ let bekannteSnapshotId = null;
 const OHNE_MARKE = [
   "/api/stand", "/api/feedback", "/api/besuche",
   "/api/census/", "/api/clusters/", "/api/exchanges/", "/api/bridge/",
-  // Aus dem umgekehrten Grund: der Bridge-Verlauf aendert sich nur mit dem
-  // woechentlichen Durchgang. An der Snapshot-Nummer haengend wuerde er alle
-  // 30 Minuten neu gerechnet - fuer dieselben Zahlen.
-  "/api/bridge-verlauf",
+  // Der Bridge-Verlauf haengt bewusst DOCH an der Nummer. Ohne sie hielt der
+  // Cache nach dem Durchgang vom 10.09.2026 noch sechs Stunden lang die alte
+  // Antwort "unvollstaendig" fest. Alle 30 Minuten neu gerechnet kostet er
+  // rund 250 gelesene Zeilen - dafuer ist er nach jedem Lauf sofort aktuell.
 ];
 
 /** Die Snapshot-Nummer, einmal geholt und danach aus dem Gedaechtnis. */
@@ -2953,8 +2953,8 @@ async function ladeBilanz() {
 
   el("bzTransfersNote").textContent = d.transfers_ab
     ? d.transfers_vollstaendig
-      ? "Covers the whole history of the bridge, back to " +
-        new Date(d.transfers_ab).toLocaleDateString(LOC) + "."
+      ? "All migrations since " +
+        new Date(d.transfers_ab).toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric" }) + "."
       : "Checked back to " + new Date(d.transfers_ab).toLocaleDateString(LOC) +
         " so far — the scan works further back each week, so this ranking can still change."
     : "";
