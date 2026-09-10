@@ -305,6 +305,22 @@ input[type=text]:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
 .suchfeld.klein .leeren{right:3px;padding:2px 7px;font-size:17px}
 .suchfeld .leeren:hover{color:var(--tx);background:#ffffff0f}
 .suchfeld .leeren[hidden]{display:none}
+/* Vom Browser vorgeschlagene Eingaben faerbt er sonst hell ein - auf dem
+   dunklen Grund ein weisses Feld. Der innere Schatten uebermalt das. */
+input:-webkit-autofill,input:-webkit-autofill:hover{
+  -webkit-text-fill-color:var(--tx);caret-color:var(--tx);-webkit-box-shadow:0 0 0 40px #0a0f1b inset}
+input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 40px #0a0f1b inset,0 0 0 3px #5b9cff22}
+/* Leaderboard: Balance-Filter und Suche rechtsbuendig, unter den
+   Filterknoepfen der Kopfzeile - Feld und Knopf so hoch wie die Leiste. */
+.lbleiste{justify-content:flex-end}
+.lbsuche{display:flex;gap:9px;margin-left:10px}
+.lbsuche .suchfeld{width:260px}
+.lbsuche input[type=text]{padding-top:6px;padding-bottom:6px;font-size:13px;border-radius:9px}
+.lbsuche button.ghost{padding:6px 14px;font-size:13px;border-radius:9px}
+@media (max-width:640px){
+  .lbleiste{justify-content:flex-start}
+  .lbsuche{margin-left:0;width:100%}.lbsuche .suchfeld{flex:1;width:auto}
+}
 button{
   background:var(--acc);color:#04101f;border:0;border-radius:11px;padding:13px 22px;
   font:600 14px var(--sans);cursor:pointer;transition:.15s
@@ -989,7 +1005,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       </div>
       <div class="searchrow">
         <div class="suchfeld">
-          <input type="text" id="q" placeholder="0x… address, label or .etn name" spellcheck="false">
+          <input type="text" id="q" placeholder="0x… address, label or .etn name" spellcheck="false" autocomplete="off">
           <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
         </div>
         <button id="goBtn">Check</button>
@@ -1147,14 +1163,16 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <button class="ghost" id="exchangesBtn" style="display:none" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
       </div>
     </h2>
-    <div class="rangebar">
-      <div class="suchfeld klein" style="width:260px">
-        <input type="text" id="lbSearch" class="rangeinput" placeholder="0x… address, label or .etn name" spellcheck="false">
-        <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
-      </div>
-      <button class="ghost" id="lbSearchBtn">Go to wallet</button>
-      <span class="info" style="margin-left:6px">balance</span>
+    <div class="rangebar lbleiste">
+      <span class="info">balance</span>
       <div class="tabs" id="etnPresets"></div>
+      <div class="lbsuche">
+        <div class="suchfeld klein">
+          <input type="text" id="lbSearch" class="rangeinput" placeholder="0x… address, label or .etn name" spellcheck="false" autocomplete="off">
+          <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
+        </div>
+        <button class="ghost" id="lbSearchBtn">Go to wallet</button>
+      </div>
     </div>
     <div class="dim3" id="lbSearchMsg" style="font-size:12px;margin:-10px 0 14px;display:none"></div>
     <div class="tablewrap">
@@ -1282,7 +1300,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     <div class="card">
       <div class="searchrow">
         <div class="suchfeld">
-          <input type="text" id="invQ" placeholder="0x… address, label or .etn name" spellcheck="false">
+          <input type="text" id="invQ" placeholder="0x… address, label or .etn name" spellcheck="false" autocomplete="off">
           <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
         </div>
         <button id="invGoBtn">Check</button>
@@ -1776,8 +1794,8 @@ async function hole(pfad, bust) {
   return r.json();
 }
 
-function periodTabs(host, aktiv, onChange) {
-  host.innerHTML = PERIODEN.map((p) =>
+function periodTabs(host, aktiv, onChange, liste = PERIODEN) {
+  host.innerHTML = liste.map((p) =>
     '<button class="ghost' + (p.k === aktiv ? " on" : "") + '" data-p="' + p.k + '">' + p.t + "</button>"
   ).join("");
   host.onclick = (e) => {
@@ -4203,9 +4221,13 @@ async function ladeWalletFlows(adresse) {
       [d.outflow, "outflowSankey", "outflowMeta", "outflowTotal", false],
     ]) {
       el(totalId).textContent = (rein ? "+" : "−") + kurz(seite.gesamt_etn) + " ETN";
+      // Griff der Seitendeckel, reicht der Fluss nicht ueber den ganzen
+      // Zeitraum - dann steht dabei, ab wann er tatsaechlich zaehlt.
       el(metaId).textContent =
         nf(seite.tx_anzahl) + " tx" +
-        "";
+        (seite.gedeckelt && seite.ab
+          ? " · since " + new Date(seite.ab).toLocaleDateString(LOC, { month: "short", day: "numeric" })
+          : "");
       zeichneSankey(el(svgId), seite, rein, eigen);
     }
   } catch (e) {
@@ -4644,10 +4666,13 @@ periodTabs(el("flowPeriods"), "30d", (p) => {
   FLOW.zeitraum = p;
   ladeExchangeFlow().catch(console.error);
 });
+// Nur hier ein Jahr: der Geldfluss kostet pro Klick hoechstens 10 Seiten je
+// Richtung, egal wie lang der Zeitraum ist. Movers, Leaderboard und
+// Boersenfluss rechnen dagegen in der eigenen Datenbank.
 periodTabs(el("flowPeriodTabs"), "7d", (p) => {
   FLUSS.zeitraum = p;
   if (FLUSS.adresse) ladeWalletFlows(FLUSS.adresse).catch(console.error);
-});
+}, [...PERIODEN, { k: "1y", t: "1Y" }]);
 // Bei Groessenaenderung neu zeichnen - die Balken sind pixelgenau gesetzt.
 beobachte("invFlowWrap", () => {
   if (!FLUSS.daten) return;

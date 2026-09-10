@@ -1899,8 +1899,10 @@ async function wallet_flows(db, env, adresse, u) {
     const proPartei = new Map();
     let gesamt = 0n;
     let anzahl = 0;
+    let aeltestes = null;
     for (const t of res.transfers) {
       if (t.timestamp < abZeit) continue;      // ausserhalb des Fensters
+      if (!aeltestes || t.timestamp < aeltestes) aeltestes = t.timestamp;
       if (t.gegenpart === adr) continue;       // Selbstueberweisung
       const wei = BigInt(t.value_wei);
       if (wei === 0n) continue;                // reine Contract-Aufrufe
@@ -1932,6 +1934,8 @@ async function wallet_flows(db, env, adresse, u) {
       // Ehrlich bleiben: nur wenn der Seitendeckel griff, BEVOR das
       // Zeitfenster erreicht war, fehlen tatsaechlich Daten.
       gedeckelt: !res.vollstaendig,
+      // Ab wann der Fluss dann wirklich zaehlt - der aelteste gelesene Transfer.
+      ab: !res.vollstaendig ? aeltestes : null,
     };
   }
 
