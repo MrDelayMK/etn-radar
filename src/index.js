@@ -348,6 +348,12 @@ async function overview(db, env) {
     snapshot: snap,
     preis: snap.etn_price,
     telegram_bot: env.TELEGRAM_BOT_USERNAME ?? null,
+    // Optional wie der Telegram-Bot: ohne Variable bleibt der Spendenknopf
+    // unsichtbar. Geprueft, damit ein Tippfehler in der Konfiguration nie als
+    // Adresse erscheint, an die jemand tatsaechlich Geld schickt.
+    spenden_adresse: /^0x[0-9a-fA-F]{40}$/.test(String(env.DONATE_ADDRESS ?? ""))
+      ? env.DONATE_ADDRESS
+      : null,
     total_supply: supply,
     bridge_etn: bridgeEtn,
     bridge_anteil: supply ? bridgeEtn / supply : null,
@@ -433,10 +439,17 @@ async function leaderboardSchnell(db, env, u, { limit, offset, tage }) {
       )
       .bind(tagVor(tage), bridge, limit, offset)
       .all(),
-    db
-      .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
-      .bind(bridge)
-      .first(),
+    // Die Gesamtzahl steht im vorberechneten Kennzahlen-Block. Die Zaehlung
+    // selbst las bei jedem Aufruf alle rund 3.000 Zeilen - fuer eine einzige
+    // Zahl, die sich nur mit dem Snapshot aendert.
+    kennzahlen(db).then((kz) =>
+      kz?.holder_anzahl != null
+        ? { n: kz.holder_anzahl }
+        : db
+            .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
+            .bind(bridge)
+            .first()
+    ),
   ]);
 
   const jetzt = Date.now();
@@ -1171,7 +1184,12 @@ async function preisverlauf(db, env, u) {
           "  SELECT day, preis, 1 AS rang FROM price_history WHERE day >= ?1" +
           "  UNION ALL" +
           "  SELECT substr(taken_at,1,10) AS day, etn_price AS preis, 2 AS rang" +
-          "    FROM snapshots WHERE etn_price IS NOT NULL AND substr(taken_at,1,10) >= ?1" +
+          // Auf taken_at selbst gefiltert statt auf substr(...): nur so greift
+          // der Index der Spalte. Mit substr lief die Abfrage bei jedem Aufruf
+          // durch ALLE Snapshots, und es kommen 48 am Tag dazu. Fuer
+          // ISO-Zeitstempel ist beides gleichbedeutend - "2026-08-11T07:37"
+          // ist groesser als "2026-08-11", "2026-08-10T23:37" nicht.
+          "    FROM snapshots WHERE etn_price IS NOT NULL AND taken_at >= ?1" +
           "   GROUP BY substr(taken_at,1,10) HAVING taken_at = min(taken_at)" +
           ") GROUP BY day ORDER BY day ASC"
       )
@@ -2228,7 +2246,6 @@ export default {
       else if (pfad === "/api/events") antwort = json(await events(db, u));
       else if (pfad === "/api/watchlist") antwort = json(await watchlist(db, env, u), 200, 30);
       else if (pfad === "/api/exchange-flow") antwort = json(await exchange_flow(db, u));
-      else if (pfad === "/api/tiers") antwort = json({ tiers: TIERS });
       // Nur der Snapshot-Zeitstempel. Kurz gecacht, damit offene Seiten
       // haeufig nachfragen koennen, ohne die Datenbank zu belasten.
       else if (pfad === "/api/stand") antwort = json(await stand(db), 200, 20);

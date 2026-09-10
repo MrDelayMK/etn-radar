@@ -480,6 +480,9 @@ export async function runIngest(env, db, opts = {}) {
             anzahl: rows.length,
           },
           schlaefer: { anzahl: schlaeferAnzahl, etn: schlaeferEtn },
+          // Fuer die Gesamtzahl im Leaderboard - dieselbe Bedingung wie dort
+          // (in den Top N, ohne Bridge), nur ohne die Datenbank zu durchlaufen.
+          holder_anzahl: real.length,
           // Netzwerk-Kacheln: frueher holte sie jeder Cache-Miss selbst beim
           // Explorer. Der Cache liegt je Rechenzentrum getrennt, die Last waere
           // also mit der Besucherzahl mitgewachsen. Einmal je Snapshot abgelegt
@@ -562,7 +565,7 @@ export async function runIngest(env, db, opts = {}) {
           "  SELECT day, preis FROM price_history WHERE day >= ?1" +
           "  UNION ALL" +
           "  SELECT substr(taken_at,1,10) AS day, etn_price AS preis FROM snapshots" +
-          "   WHERE etn_price IS NOT NULL AND substr(taken_at,1,10) >= ?1" +
+          "   WHERE etn_price IS NOT NULL AND taken_at >= ?1" + // Index statt Vollscan
           ")"
       )
       .bind(abTag)

@@ -68,12 +68,6 @@ export const TIERS = [
 // Tiefste Stufe, die noch Teil des normalen 6h-Snapshots ist.
 export const FAST_TIER_MIN = TIERS.find((t) => !t.census).min ?? 0;
 
-const BY_KEY = Object.fromEntries(TIERS.map((t) => [t.key, t]));
-export const tierByKey = (k) => BY_KEY[k] ?? null;
-
-/** true, wenn diese Stufe nur ueber die woechentliche Tiefenzaehlung erfasst wird. */
-export const istCensusStufe = (key) => tierByKey(key)?.census ?? false;
-
 /** Tier zu einem ETN-Betrag. */
 export function tierFor(etn) {
   const v = Number(etn) || 0;
@@ -115,15 +109,4 @@ export function tierProgress(etn) {
     progress: span > 0 ? Math.min(1, Math.max(0, done / span)) : 0,
     isTop: false,
   };
-}
-
-/** Verteilung ueber alle Tiers, fuer die Uebersicht (nur fuer bereits geladene Zeilen). */
-export function tierDistribution(rows) {
-  const counts = Object.fromEntries(TIERS.map((t) => [t.key, { count: 0, etn: 0 }]));
-  for (const r of rows) {
-    const t = tierFor(r.etn);
-    counts[t.key].count++;
-    counts[t.key].etn += r.etn;
-  }
-  return TIERS.map((t) => ({ ...t, ...counts[t.key] }));
 }

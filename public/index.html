@@ -216,23 +216,11 @@ svg.chart{width:100%;display:block}
 }
 .burnsub{margin-top:9px;font-size:15.5px;color:var(--tx);line-height:1.5;max-width:62ch}
 .burnsub b{color:#ffb4ae}
-.burnfacts{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0 15px
-}
-.burnfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
-.burnfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
 .burnbar{margin-top:18px;height:13px;background:#0a0f1b;border:1px solid var(--line);border-radius:7px;overflow:hidden;display:flex}
 .burnbar i{display:block;height:100%}
 .burnbar #burnBarDone{background:linear-gradient(90deg,#22d3a7,#4ade80)}
 .burnbar .burn{background:repeating-linear-gradient(45deg,#f4635e,#f4635e 7px,#c93b36 7px,#c93b36 14px);flex:1}
 .burnverdict{margin-top:13px;font-size:14px;font-weight:600}
-
-.projbig{
-  margin-top:18px;background:linear-gradient(120deg,#f4635e1c,#fbbf2414);
-  border:1px solid #f4635e40;border-left:4px solid var(--down);border-radius:14px;
-  padding:18px 22px;font-size:16.5px;line-height:1.55;color:#ffe1df
-}
-.projbig b{color:#fff;font-weight:700}
 .migbar{height:10px;background:#0a0f1b;border-radius:6px;overflow:hidden;margin-top:14px;
         border:1px solid var(--line);display:flex;position:relative}
 /* Marke fuer den Stand vor 90 Tagen. Sie sitzt fast auf der Kante des
@@ -301,6 +289,18 @@ input[type=text]{
   padding:13px 15px;color:var(--tx);font:14px var(--mono);outline:none;transition:.15s
 }
 input[type=text]:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+/* Suchfeld mit X zum Leeren. Das X sitzt IM Feld statt daneben: daneben
+   stuende es neben dem Suchknopf und saehe aus wie ein zweiter Knopf. */
+.suchfeld{position:relative;flex:1;min-width:250px;display:flex}
+.suchfeld input[type=text]{flex:1;min-width:0;width:100%;padding-right:42px}
+.suchfeld.klein{flex:none;min-width:0}
+.suchfeld.klein input[type=text]{padding-right:32px}
+.suchfeld .leeren{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  background:none;border:0;border-radius:8px;padding:3px 9px;color:var(--tx3);
+  font:400 20px/1 var(--sans);cursor:pointer;min-width:0}
+.suchfeld.klein .leeren{right:3px;padding:2px 7px;font-size:17px}
+.suchfeld .leeren:hover{color:var(--tx);background:#ffffff0f}
+.suchfeld .leeren[hidden]{display:none}
 button{
   background:var(--acc);color:#04101f;border:0;border-radius:11px;padding:13px 22px;
   font:600 14px var(--sans);cursor:pointer;transition:.15s
@@ -338,6 +338,10 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
   word-break:break-word
 }
 .modalfoot{display:flex;gap:10px;flex-wrap:wrap}
+.spendetext{font-size:13.5px;color:var(--tx2);line-height:1.55}
+.spendeadr{margin:15px 0 17px;background:#0a0f1b;border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;font:13.5px var(--mono);color:var(--tx);word-break:break-all;user-select:all}
+[data-spende][hidden]{display:none!important}
 .modalfoot button{flex:1;min-width:170px;justify-content:center;font-size:13.5px}
 
 .result{margin-top:15px;display:none}
@@ -844,6 +848,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
   <button data-p="about"><span class="ic">📡</span>About</button>
   <button data-feedback class="navrechts"><span class="ic">💬</span>Feedback</button>
+  <button data-spende hidden><span class="ic">💛</span>Donate</button>
 </nav>
 
 <!-- ================= OVERVIEW ================= -->
@@ -964,7 +969,10 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         🔍 Look up a wallet &mdash; tier, rank and distance to the next level
       </div>
       <div class="searchrow">
-        <input type="text" id="q" placeholder="0x… address, label or .etn name" spellcheck="false">
+        <div class="suchfeld">
+          <input type="text" id="q" placeholder="0x… address, label or .etn name" spellcheck="false">
+          <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
+        </div>
         <button id="goBtn">Check</button>
       </div>
       <div class="result" id="searchResult"></div>
@@ -1034,7 +1042,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       </div>
       <div class="burnbig num" id="burnEtn">&mdash;</div>
       <div class="burnsub" id="burnSub">&mdash;</div>
-      <div class="burnbar"><i id="burnBarDone"></i><i class="burn" id="burnBarBurn"></i></div>
+      <div class="burnbar"><i id="burnBarDone"></i><i class="burn"></i></div>
       <div class="burnverdict" id="burnVerdict">&mdash;</div>
     </div>
   </section>
@@ -1121,7 +1129,10 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       </div>
     </h2>
     <div class="rangebar">
-      <input type="text" id="lbSearch" class="rangeinput" style="width:260px" placeholder="0x… address, label or .etn name" spellcheck="false">
+      <div class="suchfeld klein" style="width:260px">
+        <input type="text" id="lbSearch" class="rangeinput" placeholder="0x… address, label or .etn name" spellcheck="false">
+        <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
+      </div>
       <button class="ghost" id="lbSearchBtn">Go to wallet</button>
       <span class="info" style="margin-left:6px">balance</span>
       <div class="tabs" id="etnPresets"></div>
@@ -1224,7 +1235,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <!-- ================= CLUSTERS (experimental) ================= -->
 <div class="page" id="page-clusters">
   <section style="margin-top:22px">
-    <div class="warnbar" style="margin-top:0" id="clustersWarn">
+    <div class="warnbar" style="margin-top:0">
       <b>⚠ Guesses, not proof.</b> Wallets below share a detectable funding
       source — that <em>can</em> mean the same person or team, but often
       doesn't (e.g. payouts to several real employees from one treasury
@@ -1251,7 +1262,10 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     <h2>Investigate a wallet</h2>
     <div class="card">
       <div class="searchrow">
-        <input type="text" id="invQ" placeholder="0x… address, label or .etn name" spellcheck="false">
+        <div class="suchfeld">
+          <input type="text" id="invQ" placeholder="0x… address, label or .etn name" spellcheck="false">
+          <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
+        </div>
         <button id="invGoBtn">Check</button>
       </div>
       <div class="watchchips" style="display:none"></div>
@@ -1265,7 +1279,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     <div class="card">
       <div class="chartholder" id="invChartHolder">
         <svg class="chart" id="invChart"></svg>
-        <div class="tip" id="invChartTip"></div>
+        <div class="tip"></div>
       </div>
     </div>
   </section>
@@ -1415,6 +1429,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <a href="#investigate">Investigate</a>
       <a href="#about">About</a>
       <a href="#" data-feedback>Feedback</a>
+      <a href="#" data-spende hidden>Donate</a>
     </div>
     <div>
       <h4>Community</h4>
@@ -1463,6 +1478,28 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <h4>Inbox</h4>
       <div id="fbListe" class="fbliste"></div>
     </div>
+  </div>
+</div>
+
+<!-- ================= DONATE =================
+     Bewusst OHNE Wallet-Verbindung. Die Seite zeigt nur die Adresse und bietet
+     sie zum Kopieren an; bezahlt wird im eigenen Wallet. Eine Seite, die zum
+     Verbinden auffordert, ist genau das Muster, vor dem man in Krypto-Kreisen
+     zu Recht warnt - und fuer eine Spende braucht es das nicht. -->
+<div class="modalbg" id="spendeModal">
+  <div class="modal">
+    <div class="mhead">
+      <b>💛 Support ETN Radar</b>
+      <button class="x" id="spendeClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="spendetext">ETN Radar is free and ad-free. If it is useful to you, send any amount of
+      ETN to this address from your own wallet — there is nothing to connect or sign here.</div>
+    <div class="spendeadr" id="spendeAdr"></div>
+    <div class="modalfoot">
+      <button id="spendeCopy">📋 Copy address</button>
+      <button class="ghost" id="spendeLink">🔎 View on block explorer</button>
+    </div>
+    <div class="fbstatus" id="spendeStatus"></div>
   </div>
 </div>
 
@@ -2227,12 +2264,12 @@ async function ladeOverview() {
   const d = await hole("/api/overview");
   if (d.leer) {
     el("bridgeEtn").textContent = "no data";
-    el("projection").textContent = "No snapshot yet.";
     return;
   }
   setSnapTime(d.snapshot.taken_at);
   setzePreis(d.preis, false);
   TELEGRAM_BOT = d.telegram_bot || null;
+  spendeEinblenden(d.spenden_adresse);
 
   el("bridgeEtn").innerHTML = kurz(d.bridge_etn) +
     ' <span style="font-size:.4em;color:var(--tx2);font-weight:500">ETN</span>';
@@ -3747,32 +3784,56 @@ let TELEGRAM_BOT = null; // Bot-Benutzername aus /api/overview, null = Feature n
  *                Leaderboard nachschlagen, damit waere das Verstecken sinnlos.
  *   sichtbar  -> Adresse, Rang, Stufe und der Weg zur naechsten Stufe.
  */
+/**
+ * Share-Texte je Stufe.
+ *
+ * Vorher sagte jede Stufe denselben Satz - auch Staub war "proud of it". Jetzt
+ * passt der Satz zum Tier: der Wal taucht auf, der Krebs laesst nicht los, der
+ * Staub faengt gerade erst an. Die Fakten darunter (Rang, Bestand, Abstand zur
+ * naechsten Stufe) bleiben fuer alle gleich.
+ *
+ * Bewusst ohne Kursversprechen und ohne "to the moon": der Text geht unter dem
+ * Namen der Person hinaus, und eine Prognose, die sie nie abgegeben hat,
+ * gehoert nicht hinein.
+ */
+const SHARE_SAETZE = {
+  humpback: "I'm a Humpback Whale on the Electroneum Smart Chain — one of the very few giants in the deep water.",
+  whale:    "I'm a Whale on the Electroneum Smart Chain — when I surface, the chain notices.",
+  shark:    "I'm a Shark on the Electroneum Smart Chain — patient, circling, never far from the action.",
+  dolphin:  "I'm a Dolphin on the Electroneum Smart Chain — quick, smart, and swimming with the big ones.",
+  fish:     "I'm a Fish on the Electroneum Smart Chain — seven figures of ETN and still growing.",
+  octopus:  "I'm an Octopus on the Electroneum Smart Chain — eight arms, and every one of them is holding on.",
+  crab:     "I'm a Crab on the Electroneum Smart Chain — hard shell, strong grip, not letting go.",
+  shrimp:   "I'm a Shrimp on the Electroneum Smart Chain — small on my own, but the ocean runs on us.",
+  plankton: "I'm Plankton on the Electroneum Smart Chain — the base the whole food chain is built on.",
+  microbe:  "I'm a Microbe on the Electroneum Smart Chain — everyone starts somewhere.",
+  dust:     "I'm Dust on the Electroneum Smart Chain — for now. Every whale started as a speck.",
+};
+
 function buildShareText(d, zeigeAdresse) {
+  const satz = d.tier_emoji + " " +
+    (SHARE_SAETZE[d.tier] ?? "I'm a " + d.tier_name + " on the Electroneum Smart Chain.");
   if (!zeigeAdresse) {
-    return d.tier_emoji + " I'm a " + d.tier_name + " on the Electroneum Smart Chain — and proud of it! 💪\n\n" +
-      "What are you? Find your tier on ETN Radar:";
+    return satz + "\n\nWhat are you? Find your tier on ETN Radar:";
   }
-  const teile = [d.tier_emoji + " I'm a " + d.tier_name + " on the Electroneum Smart Chain — and proud of it! 💪"];
   const fakten = [];
   if (d.in_top_n && d.rank_pos) fakten.push("Rank #" + nf(d.rank_pos) + " of all ETN holders");
   fakten.push("Holding " + kurz(d.etn) + " ETN");
   if (d.bis_naechster_tier != null) {
-    fakten.push("Only " + nf(d.bis_naechster_tier) + " ETN to go until " + d.naechster_tier + " " + naechsterEmoji(d) + " — I'll make it!");
+    fakten.push("Only " + nf(d.bis_naechster_tier) + " ETN to go until " + d.naechster_tier +
+      " " + (TIER_EMOJI[d.naechster_tier] ?? "") + " — I'll make it!");
   } else {
     fakten.push("Top tier reached — nowhere left to climb 🎉");
   }
   fakten.push("Wallet: " + d.address);
-  teile.push("", fakten.join("\n"), "", "Where do you stand? Check yours on ETN Radar:");
-  return teile.join("\n");
+  return [satz, "", fakten.join("\n"), "", "Where do you stand? Check yours on ETN Radar:"].join("\n");
 }
 
-/** Emoji der naechsthoeheren Stufe - rein kosmetisch fuer den Share-Text. */
-function naechsterEmoji(d) {
-  const t = (TIER_EMOJI_NAME[d.naechster_tier] ?? "");
-  return t;
-}
-const TIER_EMOJI_NAME = {
-  Humpback: "🐋", Whale: "🐳", Shark: "🦈", Dolphin: "🐬", Fish: "🐟",
+// Nach dem vollen Namen der Stufe, so wie ihn der Server schickt. Vorher stand
+// hier "Humpback" statt "Humpback Whale" - wer als Whale teilte, bekam an der
+// Stelle des naechsten Emojis eine Luecke.
+const TIER_EMOJI = {
+  "Humpback Whale": "🐋", Whale: "🐳", Shark: "🦈", Dolphin: "🐬", Fish: "🐟",
   Octopus: "🐙", Crab: "🦀", Shrimp: "🦐", Plankton: "🦠", Microbe: "🧫", Dust: "💨",
 };
 
@@ -4110,6 +4171,7 @@ function renderWalletDetail(d) {
     des rechten Mausklicks "Investigate" ueberall im Dashboard. */
 function investigateAddress(addr) {
   el("invQ").value = addr;
+  el("invQ").dispatchEvent(new Event("input"));
   location.hash = "investigate";
   zeigeSeite("investigate");
   ladeWalletDetail(addr).catch((e) => console.error("investigate:", e));
@@ -4122,7 +4184,7 @@ el("invGoBtn").onclick = () => {
 el("invQ").addEventListener("keydown", (e) => { if (e.key === "Enter") el("invGoBtn").click(); });
 el("invHead").addEventListener("click", (e) => {
   const a = e.target.closest("a[data-addr]");
-  if (a) { el("invQ").value = a.dataset.addr; ladeWalletDetail(a.dataset.addr).catch(console.error); return; }
+  if (a) { el("invQ").value = a.dataset.addr; el("invQ").dispatchEvent(new Event("input")); ladeWalletDetail(a.dataset.addr).catch(console.error); return; }
   if (e.target.closest("#shareOpen")) { shareDialogOeffnen(); return; }
 });
 
@@ -4577,6 +4639,52 @@ async function lbSpringeZuRang(rang, addr, msg) {
 el("lbSearchBtn").onclick = lbSpringeZuWallet;
 el("lbSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") lbSpringeZuWallet(); });
 
+/* ---------- Suchfelder leeren ---------------------------------------------
+ *
+ * Das X erscheint erst, wenn etwas im Feld steht - ein Knopf, der nichts tun
+ * kann, ist nur Unruhe. Escape tut dasselbe. Danach bleibt der Cursor im Feld,
+ * sonst muesste man fuer die naechste Suche erst wieder hineinklicken, und das
+ * X haette nichts gespart.
+ *
+ * Mit dem Feld verschwindet auch, was die Suche angezeigt hat: ein leeres
+ * Suchfeld ueber einem stehengebliebenen Ergebnis widerspricht sich.
+ */
+function leerenVerdrahten(id, zuruecksetzen) {
+  const feld = el(id);
+  const knopf = feld.parentElement.querySelector(".leeren");
+  const zeigen = () => { knopf.hidden = !feld.value; };
+  const leeren = () => {
+    feld.value = "";
+    zeigen();
+    zuruecksetzen();
+    feld.focus();
+  };
+  feld.addEventListener("input", zeigen);
+  feld.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && feld.value) {
+      e.preventDefault();
+      leeren();
+    }
+  });
+  knopf.onclick = leeren;
+  zeigen();
+}
+
+leerenVerdrahten("q", () => {
+  el("searchResult").className = "result";
+  el("searchResult").innerHTML = "";
+});
+leerenVerdrahten("invQ", () => {
+  ["invResultWrap", "invChartWrap", "invClusterWrap", "invEventsWrap", "invFlowWrap"]
+    .forEach((id) => { if (el(id)) el(id).style.display = "none"; });
+  el("invHead").innerHTML = "";
+  CUR_WALLET = null;
+});
+leerenVerdrahten("lbSearch", () => {
+  el("lbSearchMsg").style.display = "none";
+  el("lbSearchMsg").textContent = "";
+});
+
 const start = location.hash.slice(1);
 /* ---------- Willkommen -----------------------------------------------------
  *
@@ -4784,6 +4892,49 @@ document.addEventListener("keydown", (e) => {
 document.querySelectorAll("[data-feedback]").forEach((a) => {
   a.onclick = (e) => { e.preventDefault(); fbOeffnen(); };
 });
+
+/* ---------- Spenden ---------------------------------------------------------
+ *
+ * Unsichtbar, solange im Worker keine Adresse hinterlegt ist (DONATE_ADDRESS
+ * in wrangler.toml). Die Adresse kommt mit der Uebersicht, wie der Name des
+ * Telegram-Bots - so aendert sie sich an einer Stelle, nicht in zwei Dateien.
+ */
+let SPENDE_ADRESSE = null;
+
+function spendeEinblenden(adr) {
+  SPENDE_ADRESSE = /^0x[0-9a-fA-F]{40}$/.test(String(adr ?? "")) ? adr : null;
+  document.querySelectorAll("[data-spende]").forEach((b) => { b.hidden = !SPENDE_ADRESSE; });
+}
+function spendeOeffnen() {
+  if (!SPENDE_ADRESSE) return;
+  el("spendeAdr").textContent = SPENDE_ADRESSE;
+  el("spendeStatus").textContent = "";
+  el("spendeModal").classList.add("on");
+}
+const spendeSchliessen = () => el("spendeModal").classList.remove("on");
+
+document.querySelectorAll("[data-spende]").forEach((a) => {
+  a.onclick = (e) => { e.preventDefault(); spendeOeffnen(); };
+});
+el("spendeClose").onclick = spendeSchliessen;
+el("spendeModal").addEventListener("click", (e) => {
+  if (e.target === el("spendeModal")) spendeSchliessen();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && el("spendeModal").classList.contains("on")) spendeSchliessen();
+});
+el("spendeCopy").onclick = async () => {
+  const st = el("spendeStatus");
+  try {
+    await navigator.clipboard.writeText(SPENDE_ADRESSE);
+    st.textContent = "Copied — thank you! 💛";
+    st.style.color = "var(--acc2)";
+  } catch {
+    st.textContent = "Copying is blocked in this browser — select the address above instead.";
+    st.style.color = "var(--warn)";
+  }
+};
+el("spendeLink").onclick = () => window.open(EXPLORER + SPENDE_ADRESSE, "_blank", "noopener");
 
 el("welcomeClose").onclick = () => {
   el("welcome").hidden = true;

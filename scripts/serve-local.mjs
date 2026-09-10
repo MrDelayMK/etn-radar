@@ -69,6 +69,7 @@ const env = {
   EXPLORER_API: process.env.EXPLORER_API ?? "https://blockexplorer.electroneum.com/api/v2",
   TRACK_TOP_N: process.env.TRACK_TOP_N ?? "3000",
   MIGRATION_DEADLINE: process.env.MIGRATION_DEADLINE ?? "2027-01-31",
+  DONATE_ADDRESS: process.env.DONATE_ADDRESS ?? "",
   BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS ?? "0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62",
   ADMIN_TOKEN: process.env.ADMIN_TOKEN,
   TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME,

@@ -20,10 +20,6 @@ const DROSSEL = {
   gedrosselt: 0,
 };
 
-/** Setzt die Rate. 0 schaltet die Bremse ab (nur fuer Tests sinnvoll). */
-export function setRate(anfragenProSekunde) {
-  DROSSEL.minAbstandMs = anfragenProSekunde > 0 ? Math.ceil(1000 / anfragenProSekunde) : 0;
-}
 export const drosselStatus = () => ({ gedrosselt: DROSSEL.gedrosselt });
 
 /** Reiht die naechste Anfrage ein und wartet, bis sie an der Reihe ist. */

@@ -68,6 +68,11 @@ GITHUB_BRANCH  = "main"
 #        https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<deine-domain>/api/telegram/webhook&secret_token=<dasselbe Secret aus Schritt 3>
 TELEGRAM_BOT_USERNAME = ""
 
+# Spendenadresse fuer den "Donate"-Knopf. Leer = Knopf unsichtbar. Die Seite
+# zeigt nur diese Adresse an und bietet sie zum Kopieren an - sie verbindet sich
+# nie mit einem Wallet und fordert nie eine Signatur an.
+DONATE_ADDRESS = ""
+
 [[d1_databases]]
 binding = "DB"
 database_name = "etn-tracker"
