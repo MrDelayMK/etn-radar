@@ -2,7 +2,7 @@
 //
 // Beantwortet nur "verhaelt sich das wie eine Boerse", NICHT "welche Boerse
 // ist das". Fuer Letzteres gibt es keine automatisierbare Quelle: selbst die
-// drei bereits bekannten Boersen (KuCoin, HTX, Biconomy) tragen im Explorer
+// vier bereits bekannten Boersen (KuCoin, MEXC, HTX, Biconomy) tragen im Explorer
 // keinerlei Namens-Tag (gegengeprueft), und CoinMarketCap listet nur, WO ETN
 // gehandelt wird - nicht die Wallet-Adressen dahinter. Der echte Name bleibt
 // darum immer Handarbeit ueber labels.json.

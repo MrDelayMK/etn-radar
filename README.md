@@ -174,7 +174,7 @@ Liest [`labels.json`](labels.json) und schreibt Börsen-, Bridge- und
 Team-Markierungen. Nach jeder Ergänzung erneut ausführen — idempotent, es
 werden nur die Label-Felder überschrieben, nie Messdaten.
 
-Bereits eingetragen: ETN Bridge, HTX, KuCoin, Biconomy. Als `exchange` oder
+Bereits eingetragen: ETN Bridge, KuCoin, MEXC, HTX, Biconomy. Als `exchange` oder
 `bridge` markierte Adressen verschwinden im Dashboard hinter dem Schalter
 **„Real wallets only"**.
 
@@ -388,7 +388,7 @@ API-Kosten, siehe [`src/clusters.js`](src/clusters.js) für den Ansatzpunkt.
 
 Beantwortet nur **„verhält sich das wie eine Börse?"**, nicht **„welche Börse
 ist das?"** — für Letzteres gibt es keine automatisierbare Quelle. Selbst die
-drei bereits bekannten Adressen (KuCoin, HTX, Biconomy) tragen im Explorer
+vier bereits bekannten Adressen (KuCoin, MEXC, HTX, Biconomy) tragen im Explorer
 **kein einziges Namens-Tag** (gegengeprüft über `public_tags`/`private_tags`),
 und CoinMarketCap listet nur, *wo* ETN gehandelt wird — nicht die
 Wallet-Adressen der Börsen auf der Electroneum Smart Chain. Der echte Name
@@ -515,7 +515,7 @@ Adresse gebildet (Lücke = keine Bewegung) — und über `balance_wei`/BigInt,
 nie über die gerundete REAL-Spalte.
 
 **Zur Abdeckung — der wichtigste Vorbehalt:** gezählt werden kann nur, was
-gelabelt ist. Aktuell sind das drei bestätigte Börsen (KuCoin, HTX,
+gelabelt ist. Aktuell sind das vier bestätigte Börsen (KuCoin, MEXC, HTX,
 Biconomy); unbekannte Börsen-Wallets fehlen in den Zahlen zwangsläufig. Das
 Dashboard schreibt die gezählte Anzahl darum immer dazu. Ein Schalter nimmt
 zusätzlich die per Verhalten erkannten Kandidaten dazu (siehe
