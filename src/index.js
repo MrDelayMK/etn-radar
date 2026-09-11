@@ -414,64 +414,96 @@ async function overview(db, env) {
   };
 }
 
-/**
- * Rangliste ohne Filter - der Weg, den fast jeder Aufruf nimmt.
+/*
+ * Das Leaderboard zeigt drei Zeitraeume nebeneinander statt einen per Tab.
+ * Worum es in der Tabelle geht - welche grossen Wallets sich zuletzt bewegt
+ * haben -, sieht man so auf einen Blick, ohne erst umzuschalten.
  *
- * Liest nur die angezeigte Seite plus deren Vergangenheit, statt die ganze
- * Liste durchzurechnen. Was dabei entfaellt, ist die Rangaenderung: sie
- * verlangt den Bestand ALLER Wallets von damals. Die Δ-Spalte in ETN und
- * Prozent bleibt, sie braucht nur die Vergangenheit der gezeigten Zeilen.
+ * Die Vergangenheit wird nur fuer die Zeilen der angezeigten Seite
+ * nachgeschlagen: fuenf kleine Indexzugriffe je Zeile.
  */
-async function leaderboardSchnell(db, env, u, { limit, offset, tage }) {
+const LB_SPALTEN = [["d24h", 1], ["d7d", 7], ["d6m", 182]];
+const LB_VERGANGENHEIT =
+  LB_SPALTEN.map(([k]) =>
+    ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
+    "   ORDER BY d.day DESC LIMIT 1) AS vorher_" + k
+  ).join("") +
+  ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address" +
+  "   ORDER BY d.day ASC LIMIT 1) AS etn_erster" +
+  ", (SELECT d.day FROM daily_balances d WHERE d.address = c.address" +
+  "   ORDER BY d.day ASC LIMIT 1) AS tag_erster";
+const lbStichtage = () => LB_SPALTEN.map(([, tage]) => tagVor(tage));
+
+function lbZeile(r, platz, jetzt) {
+  const z = { ...schmuecken(r, jetzt), platz };
+  for (const [k, tage] of LB_SPALTEN) {
+    z[k] = delta({ ...r, etn_vorher: r["vorher_" + k] }, tage, jetzt);
+    delete z["vorher_" + k];
+  }
+  return z;
+}
+
+/**
+ * Rangliste ohne Filter oder nur mit Balance-Bereich - der Weg, den fast
+ * jeder Aufruf nimmt. Liest ueber den Index auf etn nur die angezeigte Seite.
+ *
+ * Der Rang im Bereich braucht keine Rangberechnung ueber alle Wallets: die
+ * erste Wallet im Bereich steht auf Platz "Wallets ueber der Obergrenze + 1".
+ * Das ist eine Zaehlung ueber denselben Index. Den gespeicherten rank_pos zu
+ * nehmen ging nicht - er kommt vom Explorer und weicht bei fast allen Wallets
+ * um bis zu vier Plaetze von der Reihenfolge dieser Tabelle ab.
+ */
+async function leaderboardSchnell(db, env, { limit, offset, minEtn = null, maxEtn = null }) {
   const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
-  const [res, gesamt] = await Promise.all([
+  const bereich = (minEtn != null ? " AND c.etn >= ?" : "") + (maxEtn != null ? " AND c.etn <= ?" : "");
+  const bereichArgs = [minEtn, maxEtn].filter((v) => v != null);
+  const [res, gesamt, darueber] = await Promise.all([
     db
       .prepare(
-        "SELECT " + WALLET_FELDER +
-          ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
-          "   ORDER BY d.day DESC LIMIT 1) AS etn_vorher" +
-          ", (SELECT d.etn FROM daily_balances d WHERE d.address = c.address" +
-          "   ORDER BY d.day ASC LIMIT 1) AS etn_erster" +
-          ", (SELECT d.day FROM daily_balances d WHERE d.address = c.address" +
-          "   ORDER BY d.day ASC LIMIT 1) AS tag_erster" +
+        "SELECT " + WALLET_FELDER + LB_VERGANGENHEIT +
           " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
-          " WHERE c.in_top_n = 1 AND c.address != ?" +
+          " WHERE c.in_top_n = 1 AND c.address != ?" + bereich +
           " ORDER BY c.etn DESC LIMIT ? OFFSET ?"
       )
-      .bind(tagVor(tage), bridge, limit, offset)
+      .bind(...lbStichtage(), bridge, ...bereichArgs, limit, offset)
       .all(),
-    // Die Gesamtzahl steht im vorberechneten Kennzahlen-Block. Die Zaehlung
-    // selbst las bei jedem Aufruf alle rund 3.000 Zeilen - fuer eine einzige
-    // Zahl, die sich nur mit dem Snapshot aendert.
-    kennzahlen(db).then((kz) =>
-      kz?.holder_anzahl != null
-        ? { n: kz.holder_anzahl }
-        : db
-            .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
-            .bind(bridge)
-            .first()
-    ),
+    bereichArgs.length
+      ? db
+          .prepare("SELECT COUNT(*) n FROM current_balances c WHERE c.in_top_n = 1 AND c.address != ?" + bereich)
+          .bind(bridge, ...bereichArgs)
+          .first()
+      : // Die Gesamtzahl steht im vorberechneten Kennzahlen-Block. Die Zaehlung
+        // selbst las bei jedem Aufruf alle rund 3.000 Zeilen - fuer eine
+        // einzige Zahl, die sich nur mit dem Snapshot aendert.
+        kennzahlen(db).then((kz) =>
+          kz?.holder_anzahl != null
+            ? { n: kz.holder_anzahl }
+            : db
+                .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
+                .bind(bridge)
+                .first()
+        ),
+    maxEtn != null
+      ? db
+          .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ? AND etn > ?")
+          .bind(bridge, maxEtn)
+          .first()
+      : null,
   ]);
 
   const jetzt = Date.now();
+  const vorher = darueber?.n ?? 0;
   return {
-    zeitraum: u.searchParams.get("period") ?? STD_ZEITRAUM,
     gesamt: gesamt?.n ?? 0,
     offset,
     limit,
-    eintraege: res.results.map((r, i) => ({
-      ...schmuecken(r, jetzt),
-      platz: offset + i + 1,
-      rang_delta: null, // siehe oben: braeuchte den Bestand aller Wallets von damals
-      ...delta(r, tage, jetzt),
-    })),
+    eintraege: res.results.map((r, i) => lbZeile(r, vorher + offset + i + 1, jetzt)),
   };
 }
 
 async function leaderboard(db, env, u) {
   const limit = zahlParam(u, "limit", 50, 10, 250);
   const offset = zahlParam(u, "offset", 0, 0, 100000);
-  const tage = ZEITRAUM[u.searchParams.get("period") ?? STD_ZEITRAUM] ?? 7;
   const tier = u.searchParams.get("tier");
   // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
   // was tatsaechlich einer Person oder Gruppe gehoert.
@@ -484,11 +516,12 @@ async function leaderboard(db, env, u) {
   const minEtn = u.searchParams.has("min_etn") ? zahlParam(u, "min_etn", NaN) : null;
   const maxEtn = u.searchParams.has("max_etn") ? zahlParam(u, "max_etn", NaN) : null;
 
-  const filter =
+  // Zwei Arten Filter. Die BASIS legt fest, wer ueberhaupt mitzaehlt - dort
+  // beginnt der Rang wieder bei 1. Der BEREICH (Tier, Balance) schneidet nur
+  // einen Ausschnitt aus dieser Rangliste heraus: im Bereich 500K-2M steht die
+  // erste Wallet auf ihrem echten Rang, nicht auf Platz 1.
+  const basis =
     " WHERE c.in_top_n = 1 AND c.address != ?" +
-    (tier ? " AND c.tier = ?" : "") +
-    (minEtn != null ? " AND c.etn >= ?" : "") +
-    (maxEtn != null ? " AND c.etn <= ?" : "") +
     (nurEcht
       ? " AND COALESCE(a.is_excluded,0) = 0" +
         " AND COALESCE(a.label_type,'') NOT IN ('exchange','bridge','service')" +
@@ -504,6 +537,15 @@ async function leaderboard(db, env, u) {
         " AND c.address IN (SELECT hash FROM addresses" +
         "   WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1)"
       : "");
+  const bereich =
+    (tier ? " AND tier = ?" : "") +
+    (minEtn != null ? " AND etn >= ?" : "") +
+    (maxEtn != null ? " AND etn <= ?" : "");
+  const filter =
+    basis +
+    (tier ? " AND c.tier = ?" : "") +
+    (minEtn != null ? " AND c.etn >= ?" : "") +
+    (maxEtn != null ? " AND c.etn <= ?" : "");
 
   const filterArgs = [String(env.BRIDGE_ADDRESS).toLowerCase()];
   if (tier) filterArgs.push(tier);
@@ -522,39 +564,37 @@ async function leaderboard(db, env, u) {
   // so 50 statt 15.014 Zeilen. Genau dieser Weg wird beim Aufruf der Seite
   // genommen; die teure Fassung bleibt fuer die Filter, die selten und dann
   // bewusst benutzt werden.
-  const ohneFilter = !tier && minEtn == null && maxEtn == null && !nurEcht && !nurDienste;
-  if (ohneFilter) return leaderboardSchnell(db, env, u, { limit, offset, tage });
-
-  // Rangberechnung ueber die GEFILTERTE Menge: wer Boersen ausblendet, will
-  // auch, dass das erste echte Wallet auf Platz 1 steht - nicht auf Platz 3
-  // mit zwei Luecken davor.
   //
-  // platz_vorher nutzt als Rueckfall die heutige Balance. Ein Wallet ohne
-  // bekannte Historie erscheint dadurch als unveraendert statt zufaellig ganz
-  // oben oder unten; delta_sicher zeigt an, wie belastbar das ist.
+  // Ein reiner Balance-Bereich nimmt denselben Weg (siehe leaderboardSchnell).
+  const nurBereich = !tier && !nurEcht && !nurDienste;
+  if (nurBereich) return leaderboardSchnell(db, env, { limit, offset, minEtn, maxEtn });
+
+  // Rangberechnung ueber die BASIS: wer Boersen ausblendet, will auch, dass
+  // das erste echte Wallet auf Platz 1 steht - nicht auf Platz 3 mit zwei
+  // Luecken davor. Dafuer reicht der heutige Bestand; die Vergangenheit wird
+  // erst fuer die Zeilen der angezeigten Seite nachgeschlagen.
+  //
+  // Die Adresse als zweites Sortierkriterium: bei gleichem Bestand ist die
+  // Reihenfolge sonst nicht festgelegt, und zwei Wallets mit demselben Betrag
+  // koennten zwischen zwei Aufrufen die Plaetze tauschen.
+  //
+  // CROSS JOIN legt die Reihenfolge fest: erst die fuenfzig Zeilen der Seite,
+  // dann je Zeile ein Zugriff ueber den Primaerschluessel.
   const sql =
-    "WITH stand AS (" +
-    "  SELECT " + WALLET_FELDER +
-    "  , (SELECT d.etn FROM daily_balances d WHERE d.address = c.address AND d.day <= ?" +
-    "     ORDER BY d.day DESC LIMIT 1) AS etn_vorher" +
-    "  , (SELECT d.etn FROM daily_balances d WHERE d.address = c.address" +
-    "     ORDER BY d.day ASC LIMIT 1) AS etn_erster" +
-    "  , (SELECT d.day FROM daily_balances d WHERE d.address = c.address" +
-    "     ORDER BY d.day ASC LIMIT 1) AS tag_erster" +
+    "WITH gereiht AS (" +
+    "  SELECT c.address, c.etn, c.tier, ROW_NUMBER() OVER (ORDER BY c.etn DESC, c.address) AS platz" +
     "  FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
-    filter +
-    "), gereiht AS (" +
-    // Die Adresse als zweites Sortierkriterium: bei gleichem Bestand ist die
-    // Reihenfolge sonst nicht festgelegt, und zwei Wallets mit demselben
-    // Betrag koennten zwischen zwei Aufrufen die Plaetze tauschen - im
-    // Leaderboard als erfundene Rangaenderung sichtbar.
-    "  SELECT *, ROW_NUMBER() OVER (ORDER BY etn DESC, address) AS platz," +
-    "         ROW_NUMBER() OVER (ORDER BY COALESCE(etn_vorher, etn) DESC, address) AS platz_vorher" +
-    "  FROM stand" +
-    ") SELECT * FROM gereiht WHERE platz > ? AND platz <= ? ORDER BY platz";
+    basis +
+    "), ausschnitt AS (" +
+    "  SELECT address, platz, ROW_NUMBER() OVER (ORDER BY platz) AS zeile" +
+    "  FROM gereiht WHERE 1 = 1" + bereich +
+    ") SELECT " + WALLET_FELDER + ", s.platz" + LB_VERGANGENHEIT +
+    " FROM ausschnitt s CROSS JOIN current_balances c ON c.address = s.address" +
+    " LEFT JOIN addresses a ON a.hash = c.address" +
+    " WHERE s.zeile > ? AND s.zeile <= ? ORDER BY s.zeile";
 
   const [res, gesamt] = await Promise.all([
-    db.prepare(sql).bind(tagVor(tage), ...filterArgs, offset, offset + limit).all(),
+    db.prepare(sql).bind(...filterArgs, ...lbStichtage(), offset, offset + limit).all(),
     db
       .prepare(
         "SELECT COUNT(*) n FROM current_balances c" +
@@ -566,17 +606,10 @@ async function leaderboard(db, env, u) {
 
   const jetzt = Date.now();
   return {
-    zeitraum: u.searchParams.get("period") ?? STD_ZEITRAUM,
     offset,
     limit,
     gesamt: gesamt?.n ?? 0,
-    eintraege: res.results.map((r) => ({
-      ...schmuecken(r, jetzt),
-      platz: r.platz,
-      // Positiv = aufgestiegen (kleinere Platzzahl)
-      rang_delta: r.platz_vorher != null ? r.platz_vorher - r.platz : null,
-      ...delta(r, tage, jetzt),
-    })),
+    eintraege: res.results.map((r) => lbZeile(r, r.platz, jetzt)),
   };
 }
 

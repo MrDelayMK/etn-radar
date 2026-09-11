@@ -310,9 +310,13 @@ input[type=text]:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
 input:-webkit-autofill,input:-webkit-autofill:hover{
   -webkit-text-fill-color:var(--tx);caret-color:var(--tx);-webkit-box-shadow:0 0 0 40px #0a0f1b inset}
 input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 40px #0a0f1b inset,0 0 0 3px #5b9cff22}
-/* Leaderboard: Balance-Filter und Suche rechtsbuendig, unter den
+/* Leaderboard: Balance-Filter und Suche rechtsbuendig unter den
    Filterknoepfen der Kopfzeile - Feld und Knopf so hoch wie die Leiste. */
 .lbleiste{justify-content:flex-end}
+/* Enger als die anderen Tabellen: drei Zeitraeume nebeneinander. */
+.lbtab td{padding:9px 12px}
+.lbtab td.dz{font-size:13px}
+.lbtab td.unsicher{opacity:.55}
 .lbsuche{display:flex;gap:9px;margin-left:10px}
 .lbsuche .suchfeld{width:260px}
 .lbsuche input[type=text]{padding-top:6px;padding-bottom:6px;font-size:13px;border-radius:9px}
@@ -447,8 +451,10 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
   padding:8px 11px;color:var(--tx);font:13px var(--mono);outline:none
 }
 .rangeinput:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
-.pagejump{
-  width:56px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
+/* Mit input davor: seit das Feld type="text" ist, gewann sonst die allgemeine
+   Textfeld-Regel - und das Feld wurde 592 px breit. */
+input.pagejump{
+  flex:none;min-width:0;width:56px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
   padding:7px 9px;color:var(--tx);font:13px var(--mono);outline:none;text-align:center
 }
 .pagejump:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
@@ -1156,7 +1162,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <section style="margin-top:22px">
     <h2>Leaderboard
       <button class="infoBtn" data-info="Left-click any wallet to open it in the block explorer. Right-click anywhere in its row to investigate it here instead — balance history, money flow in and out, and everything known about it.">ⓘ</button>
-      <div class="tabs" id="lbPeriods"></div>
       <div class="tabs" style="margin-left:auto">
         <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
         <button class="ghost" id="onlyEx" title="Only exchanges, bridges, services and contracts">Services only</button>
@@ -1176,11 +1181,10 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     </div>
     <div class="dim3" id="lbSearchMsg" style="font-size:12px;margin:-10px 0 14px;display:none"></div>
     <div class="tablewrap">
-      <table>
+      <table class="lbtab">
         <thead><tr>
-          <th style="width:56px">#</th><th style="width:70px">Rank Δ</th><th>Wallet</th><th>Tier</th>
-          <th class="r">Balance</th><th class="r" id="thDelta">Δ 7D</th><th class="r">Δ %</th>
-          <th class="r">Last moved</th>
+          <th style="width:56px">#</th><th>Wallet</th><th>Tier</th><th class="r">Balance</th>
+          <th class="r">24H</th><th class="r">7D</th><th class="r">6M</th><th class="r">Last moved</th>
         </tr></thead>
         <tbody id="lbBody"></tbody>
       </table>
@@ -3504,15 +3508,31 @@ async function ladeMovers(p, bust) {
 }
 
 // ---------- Leaderboard ----------
-const LB = { limit: 50, offset: 0, period: "7d", nurEcht: false, nurDienste: false,
+const LB = { limit: 50, offset: 0, nurEcht: false, nurDienste: false,
              gesamt: 0, minEtn: null, maxEtn: null };
 
+/**
+ * Eine Veraenderungs-Zelle im Leaderboard. "±0" heisst nachweislich
+ * unveraendert, "—" unbekannt. Reicht die Historie einer Wallet nicht ueber
+ * den ganzen Zeitraum, steht der Wert blass da, und der Hinweis beim
+ * Darueberfahren nennt, ab wann gezaehlt ist. Die Prozentangabe steht
+ * ebenfalls dort - drei Spalten Prozent daneben waeren wieder zu viel.
+ */
+function deltaZelle(dl, etn) {
+  const d = dl?.delta_etn;
+  if (d == null) return '<td class="r num dz dim3">—</td>';
+  const ab = dl.delta_sicher || !dl.delta_ab ? "" : " · since " +
+    new Date(dl.delta_ab).toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric" });
+  const klasse = "r num dz " + (d > 0 ? "up" : d < 0 ? "down" : "dim3") + (dl.delta_sicher ? "" : " unsicher");
+  const titel = (d === 0 ? "±0%" : pctSafe(dl.delta_pct, etn - d)) + ab;
+  return '<td class="' + klasse + '" title="' + esc(titel) + '">' + (d === 0 ? "±0" : kurz(d, true)) + "</td>";
+}
+
 async function ladeLeaderboard() {
-  el("thDelta").textContent = "Δ " + (PERIODEN.find((p) => p.k === LB.period)?.t ?? LB.period);
   el("lbBody").innerHTML = '<tr><td colspan="8"><div class="skel"></div></td></tr>';
 
   let url = "/api/leaderboard?limit=" + LB.limit + "&offset=" + LB.offset +
-    "&period=" + LB.period + (LB.nurEcht ? "&nur_wallets=1" : "") +
+    (LB.nurEcht ? "&nur_wallets=1" : "") +
     (LB.nurDienste ? "&nur_dienste=1" : "");
   if (LB.minEtn != null) url += "&min_etn=" + LB.minEtn;
   if (LB.maxEtn != null) url += "&max_etn=" + LB.maxEtn;
@@ -3523,27 +3543,14 @@ async function ladeLeaderboard() {
   el("lbBody").innerHTML = d.eintraege.map((e) => {
     const tags = walletTags(e);
 
-    const dEtn = e.delta_etn;
-    // "±0" means provably unchanged, "—" means unknown. Worth distinguishing.
-    const dTxt = !e.delta_sicher ? "—" : dEtn === 0 ? "±0" : kurz(dEtn, true);
-    const dPct = !e.delta_sicher ? "—" : dEtn === 0 ? "±0%" : pctSafe(e.delta_pct, e.etn - dEtn);
-
-    // Positive rang_delta = climbed (smaller rank number)
-    const rd = e.rang_delta;
-    const rTxt = rd == null || rd === 0
-      ? '<span class="dim3">—</span>'
-      : '<span class="' + (rd > 0 ? "up" : "down") + '">' + (rd > 0 ? "▲" : "▼") + Math.abs(rd) + "</span>";
-
     return "<tr>" +
       '<td class="num dim3">' + e.platz + "</td>" +
-      '<td class="rk">' + rTxt + "</td>" +
       '<td><a class="addr" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
         (e.anzeige ? "<b style='color:var(--tx)'>" + esc(e.anzeige) + "</b>" : kurzAdr(e.address)) +
       "</a>" + watchStern(e.address) + tags + "</td>" +
       '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
       '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
-      '<td class="r num ' + (dEtn > 0 ? "up" : dEtn < 0 ? "down" : "dim3") + '">' + dTxt + "</td>" +
-      '<td class="r num ' + (e.delta_pct > 0 ? "up" : e.delta_pct < 0 ? "down" : "dim3") + '">' + dPct + "</td>" +
+      deltaZelle(e.d24h, e.etn) + deltaZelle(e.d7d, e.etn) + deltaZelle(e.d6m, e.etn) +
       '<td class="r dim" style="font-size:12px">' + ruheText(e.ruhetage) + "</td>" +
       "</tr>";
   }).join("");
@@ -4661,7 +4668,6 @@ el("searchResult").addEventListener("click", (e) => {
 });
 
 periodTabs(el("moverTabs"), "7d", (p) => ladeMovers(p).catch(console.error));
-periodTabs(el("lbPeriods"), "7d", (p) => { LB.period = p; LB.offset = 0; ladeLeaderboard(); });
 periodTabs(el("flowPeriods"), "30d", (p) => {
   FLOW.zeitraum = p;
   ladeExchangeFlow().catch(console.error);
