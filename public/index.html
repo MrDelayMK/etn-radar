@@ -3518,9 +3518,16 @@ const LB = { limit: 50, offset: 0, nurEcht: false, nurDienste: false,
  * Darueberfahren nennt, ab wann gezaehlt ist. Die Prozentangabe steht
  * ebenfalls dort - drei Spalten Prozent daneben waeren wieder zu viel.
  */
-function deltaZelle(dl, etn) {
+function deltaZelle(dl, etn, tage) {
   const d = dl?.delta_etn;
-  if (d == null) return '<td class="r num dz dim3">—</td>';
+  // Ein Ersatzwert zaehlt ab dem ersten bekannten Tag. Deckt der nicht einmal
+  // die Haelfte des Zeitraums ab, stuende bei einer Wallet, die heute neu in
+  // der Liste ist, "±0" in allen drei Spalten - obwohl sie gerade 514 Mio.
+  // bekommen hat. Dann lieber ehrlich "—".
+  const heute = new Date().toISOString().slice(0, 10);
+  const bekannt = dl?.delta_ab ? Math.round((Date.parse(heute) - Date.parse(dl.delta_ab)) / 86400000) : 0;
+  const zuKurz = !dl?.delta_sicher && bekannt < Math.max(1, Math.ceil(tage / 2));
+  if (d == null || zuKurz) return '<td class="r num dz dim3">—</td>';
   const ab = dl.delta_sicher || !dl.delta_ab ? "" : " · since " +
     new Date(dl.delta_ab).toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric" });
   const klasse = "r num dz " + (d > 0 ? "up" : d < 0 ? "down" : "dim3") + (dl.delta_sicher ? "" : " unsicher");
@@ -3550,7 +3557,7 @@ async function ladeLeaderboard() {
       "</a>" + watchStern(e.address) + tags + "</td>" +
       '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
       '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
-      deltaZelle(e.d24h, e.etn) + deltaZelle(e.d7d, e.etn) + deltaZelle(e.d6m, e.etn) +
+      deltaZelle(e.d24h, e.etn, 1) + deltaZelle(e.d7d, e.etn, 7) + deltaZelle(e.d6m, e.etn, 182) +
       '<td class="r dim" style="font-size:12px">' + ruheText(e.ruhetage) + "</td>" +
       "</tr>";
   }).join("");
