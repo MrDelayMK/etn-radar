@@ -106,6 +106,54 @@ async function liveBestand(db, env, adr, bekannt) {
   }
 }
 
+/* ---------- Minutenbudget fuer Explorer-Abrufe von Besuchern ---------------
+ *
+ * Die Suche nach einer unbekannten Adresse und der Money Flow fragen live beim
+ * Explorer an - der Money Flow bis zu zwanzig Seiten je Klick. Ohne Deckel
+ * koennte ein Skript ueber diese Seite tausende Anfragen ausloesen, und beim
+ * Explorer saehe es aus, als spammten wir. Darum ein gemeinsames Budget je
+ * Minute fuer die ganze Seite, in D1 gezaehlt (siehe liveBestand, warum nicht
+ * im Cache). Ist es aufgebraucht, bekommt der Besucher "in einer Minute
+ * nochmal" statt einer Anfrage mehr beim Explorer.
+ */
+const LIVE_BUDGET_PRO_MINUTE = 60;
+
+/**
+ * Reserviert `kosten` Explorer-Anfragen. Gibt die Buchungsnummer zurueck oder
+ * null, wenn das Budget der letzten Minute aufgebraucht ist.
+ */
+async function liveBudget(db, art, kosten) {
+  const jetzt = Date.now();
+  try {
+    const bisher = await db
+      .prepare("SELECT COALESCE(sum(kosten), 0) n FROM live_budget WHERE ts >= ?")
+      .bind(new Date(jetzt - 60000).toISOString())
+      .first();
+    if ((bisher?.n ?? 0) + kosten > LIVE_BUDGET_PRO_MINUTE) return null;
+    const [eingefuegt] = await db.batch([
+      db.prepare("INSERT INTO live_budget (ts, art, kosten) VALUES (?,?,?)")
+        .bind(new Date(jetzt).toISOString(), art, kosten),
+      // Gebraucht wird nur die letzte Minute; ueber den Index liest das kaum Zeilen.
+      db.prepare("DELETE FROM live_budget WHERE ts < ?").bind(new Date(jetzt - 3600000).toISOString()),
+    ]);
+    return eingefuegt?.meta?.last_row_id ?? -1;
+  } catch {
+    // Budget nicht lesbar (Tabelle fehlt, D1 stumm): nicht deswegen die Seite
+    // brechen. Ist D1 wirklich weg, scheitert der Abruf ohnehin.
+    return -1;
+  }
+}
+
+/** Reservierung auf die tatsaechlich gelesenen Seiten korrigieren. */
+async function liveBudgetKorrigieren(db, buchung, kosten) {
+  if (!(buchung > 0)) return;
+  try {
+    await db.prepare("UPDATE live_budget SET kosten = ? WHERE id = ?").bind(kosten, buchung).run();
+  } catch {
+    /* die Reservierung bleibt dann eben stehen */
+  }
+}
+
 /**
  * Nur der Zeitstempel des letzten Snapshots - fuer das Nachladen im Browser.
  *
@@ -128,6 +176,7 @@ const json = (data, status = 200, cache = CACHE_SEKUNDEN) =>
       "content-type": "application/json; charset=utf-8",
       "cache-control": `public, max-age=${cache}`,
       "access-control-allow-origin": "*",
+      "x-content-type-options": "nosniff",
     },
   });
 
@@ -443,173 +492,122 @@ function lbZeile(r, platz, jetzt) {
   return z;
 }
 
-/**
- * Rangliste ohne Filter oder nur mit Balance-Bereich - der Weg, den fast
- * jeder Aufruf nimmt. Liest ueber den Index auf etn nur die angezeigte Seite.
+/*
+ * Rangliste - fuer alle Filter derselbe Weg ueber den Index auf etn.
  *
- * Der Rang im Bereich braucht keine Rangberechnung ueber alle Wallets: die
- * erste Wallet im Bereich steht auf Platz "Wallets ueber der Obergrenze + 1".
- * Das ist eine Zaehlung ueber denselben Index. Den gespeicherten rank_pos zu
- * nehmen ging nicht - er kommt vom Explorer und weicht bei fast allen Wallets
- * um bis zu vier Plaetze von der Reihenfolge dieser Tabelle ab.
+ * Gelesen wird nur die angezeigte Seite. Den Rang muss keine Abfrage ueber
+ * alle Wallets berechnen: Tier und Balance-Bereich schneiden einen
+ * zusammenhaengenden Ausschnitt aus der Rangliste heraus, dessen erste Wallet
+ * auf Platz "Wallets darueber + 1" steht - eine Zaehlung ueber denselben Index.
+ * "Real wallets only" und "Services only" gehen ueber den Teilindex
+ * idx_addresses_markiert, der nur die rund zwanzig markierten Adressen haelt.
+ *
+ * Bis 11.09.2026 rechnete eine Fensterfunktion den Rang ueber alle 3.000
+ * Wallets: "Real wallets only" las so rund 36.000 Zeilen je Aufruf. Wer das
+ * gezielt wiederholte, konnte das Tageskontingent von D1 leerlesen. Den
+ * gespeicherten rank_pos zu nehmen ging nicht - er kommt vom Explorer und
+ * weicht bei fast allen Wallets um bis zu vier Plaetze von dieser Reihenfolge ab.
  */
-async function leaderboardSchnell(db, env, { limit, offset, minEtn = null, maxEtn = null }) {
+// Die Bedingung des Teilindex - woertlich so, sonst benutzt SQLite ihn nicht.
+const MARKIERT = "(label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1)";
+// Was "Real wallets only" ausblendet: Boersen, Bridges, Dienste, Contracts und
+// ausdruecklich Ausgeschlossene - eine Teilmenge der markierten Adressen.
+const NICHT_ECHT_SQL =
+  "SELECT hash FROM addresses WHERE " + MARKIERT +
+  " AND (is_excluded = 1 OR label_type IN ('exchange','bridge','service') OR is_contract = 1)";
+const DIENSTE_SQL = "SELECT hash FROM addresses WHERE " + MARKIERT;
+
+// Die Gesamtzahl ohne Filter steht im vorberechneten Kennzahlen-Block. Die
+// Zaehlung selbst las bei jedem Aufruf alle rund 3.000 Zeilen - fuer eine
+// einzige Zahl, die sich nur mit dem Snapshot aendert.
+const kennzahlGesamt = (db, bridge) =>
+  kennzahlen(db).then((kz) =>
+    kz?.holder_anzahl != null
+      ? { n: kz.holder_anzahl }
+      : db
+          .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
+          .bind(bridge)
+          .first()
+  );
+
+async function leaderboard(db, env, u) {
+  const limit = zahlParam(u, "limit", 50, 10, 250);
+  const offset = zahlParam(u, "offset", 0, 0, 100000);
   const bridge = String(env.BRIDGE_ADDRESS).toLowerCase();
-  const bereich = (minEtn != null ? " AND c.etn >= ?" : "") + (maxEtn != null ? " AND c.etn <= ?" : "");
-  const bereichArgs = [minEtn, maxEtn].filter((v) => v != null);
-  const [res, gesamt, darueber] = await Promise.all([
+  const tier = TIERS.find((t) => t.key === u.searchParams.get("tier")) ?? null;
+  // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
+  // was tatsaechlich einer Person oder Gruppe gehoert.
+  const nurEcht = u.searchParams.get("nur_wallets") === "1";
+  // Das genaue Gegenteil davon: Boersen, Bridges, Dienste und Contracts.
+  const nurDienste = !nurEcht && u.searchParams.get("nur_dienste") === "1";
+  // Balance-Bereich, z.B. "zeig mir nur 100k-500k ETN".
+  const minEtn = u.searchParams.has("min_etn") ? zahlParam(u, "min_etn", null) : null;
+  const maxEtn = u.searchParams.has("max_etn") ? zahlParam(u, "max_etn", null) : null;
+
+  // BASIS: wer ueberhaupt mitzaehlt - dort beginnt der Rang bei 1.
+  // BEREICH: der Ausschnitt daraus, der Rang laeuft weiter.
+  const basis =
+    " WHERE c.in_top_n = 1 AND c.address != ?" +
+    (nurEcht ? " AND c.address NOT IN (" + NICHT_ECHT_SQL + ")" : "") +
+    (nurDienste ? " AND c.address IN (" + DIENSTE_SQL + ")" : "");
+  const bereich =
+    (tier ? " AND c.tier = ?" : "") +
+    (minEtn != null ? " AND c.etn >= ?" : "") +
+    (maxEtn != null ? " AND c.etn <= ?" : "");
+  const bereichArgs = [tier?.key, minEtn, maxEtn].filter((v) => v != null);
+
+  const zaehlen = (bedingung, args) =>
+    db
+      .prepare("SELECT COUNT(*) n FROM current_balances c" + basis + bedingung)
+      .bind(bridge, ...args)
+      .first();
+
+  // Wer steht ueber dem Ausschnitt? Die engere der beiden Obergrenzen:
+  // Balance (etn <= max) oder Tier (etn unter der Untergrenze der naechsten Stufe).
+  const tierDecke = tier ? tierMax(tier.key) : null;
+  let darueber = null;
+  if (tierDecke != null && (maxEtn == null || tierDecke <= maxEtn)) darueber = [" AND c.etn >= ?", tierDecke];
+  else if (maxEtn != null) darueber = [" AND c.etn > ?", maxEtn];
+
+  const gesamtAbfrage = bereich
+    ? zaehlen(bereich, bereichArgs)
+    : nurEcht
+      ? // Alle minus die ausgeblendeten - beides ohne Durchlauf durch die Liste.
+        Promise.all([
+          kennzahlGesamt(db, bridge),
+          db
+            .prepare(
+              "SELECT COUNT(*) n FROM current_balances c WHERE c.in_top_n = 1 AND c.address != ?" +
+                " AND c.address IN (" + NICHT_ECHT_SQL + ")"
+            )
+            .bind(bridge)
+            .first(),
+        ]).then(([alle, weg]) => ({ n: (alle?.n ?? 0) - (weg?.n ?? 0) }))
+      : nurDienste
+        ? zaehlen("", [])
+        : kennzahlGesamt(db, bridge);
+
+  const [res, gesamt, ueber] = await Promise.all([
     db
       .prepare(
         "SELECT " + WALLET_FELDER + LB_VERGANGENHEIT +
           " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
-          " WHERE c.in_top_n = 1 AND c.address != ?" + bereich +
+          basis + bereich +
           " ORDER BY c.etn DESC LIMIT ? OFFSET ?"
       )
       .bind(...lbStichtage(), bridge, ...bereichArgs, limit, offset)
       .all(),
-    bereichArgs.length
-      ? db
-          .prepare("SELECT COUNT(*) n FROM current_balances c WHERE c.in_top_n = 1 AND c.address != ?" + bereich)
-          .bind(bridge, ...bereichArgs)
-          .first()
-      : // Die Gesamtzahl steht im vorberechneten Kennzahlen-Block. Die Zaehlung
-        // selbst las bei jedem Aufruf alle rund 3.000 Zeilen - fuer eine
-        // einzige Zahl, die sich nur mit dem Snapshot aendert.
-        kennzahlen(db).then((kz) =>
-          kz?.holder_anzahl != null
-            ? { n: kz.holder_anzahl }
-            : db
-                .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ?")
-                .bind(bridge)
-                .first()
-        ),
-    maxEtn != null
-      ? db
-          .prepare("SELECT COUNT(*) n FROM current_balances WHERE in_top_n = 1 AND address != ? AND etn > ?")
-          .bind(bridge, maxEtn)
-          .first()
-      : null,
+    gesamtAbfrage,
+    darueber ? zaehlen(darueber[0], [darueber[1]]) : null,
   ]);
 
   const jetzt = Date.now();
-  const vorher = darueber?.n ?? 0;
+  const vorher = ueber?.n ?? 0;
   return {
     gesamt: gesamt?.n ?? 0,
     offset,
     limit,
     eintraege: res.results.map((r, i) => lbZeile(r, vorher + offset + i + 1, jetzt)),
-  };
-}
-
-async function leaderboard(db, env, u) {
-  const limit = zahlParam(u, "limit", 50, 10, 250);
-  const offset = zahlParam(u, "offset", 0, 0, 100000);
-  const tier = u.searchParams.get("tier");
-  // "Nur echte Wallets": Bridge, Boersen UND Contracts raus. Uebrig bleibt,
-  // was tatsaechlich einer Person oder Gruppe gehoert.
-  const nurEcht = u.searchParams.get("nur_wallets") === "1";
-  // Das genaue Gegenteil davon: Boersen, Bridges, Dienste und Contracts.
-  // In den Top 3.000 sind das 17 Adressen - handlich genug, um sie am Stueck
-  // anzusehen.
-  const nurDienste = u.searchParams.get("nur_dienste") === "1";
-  // Balance-Bereich, z.B. "zeig mir nur 100k-500k ETN".
-  const minEtn = u.searchParams.has("min_etn") ? zahlParam(u, "min_etn", NaN) : null;
-  const maxEtn = u.searchParams.has("max_etn") ? zahlParam(u, "max_etn", NaN) : null;
-
-  // Zwei Arten Filter. Die BASIS legt fest, wer ueberhaupt mitzaehlt - dort
-  // beginnt der Rang wieder bei 1. Der BEREICH (Tier, Balance) schneidet nur
-  // einen Ausschnitt aus dieser Rangliste heraus: im Bereich 500K-2M steht die
-  // erste Wallet auf ihrem echten Rang, nicht auf Platz 1.
-  const basis =
-    " WHERE c.in_top_n = 1 AND c.address != ?" +
-    (nurEcht
-      ? " AND COALESCE(a.is_excluded,0) = 0" +
-        " AND COALESCE(a.label_type,'') NOT IN ('exchange','bridge','service')" +
-        " AND COALESCE(a.is_contract,0) = 0"
-      : "") +
-    (nurDienste
-      ? // Als Vorauswahl und nicht als Bedingung auf dem JOIN: So kann die
-        // Datenbank den Teilindex idx_addresses_markiert benutzen, der genau
-        // diese rund zwanzig Adressen enthaelt. Gemessen 71 gelesene Zeilen
-        // statt 6.012 - als OR-Bedingung auf a.* half kein Index, weil das
-        // ORDER BY die ganze Liste durchgehen liess, um siebzehn Treffer zu
-        // finden.
-        " AND c.address IN (SELECT hash FROM addresses" +
-        "   WHERE label_type IS NOT NULL OR is_excluded = 1 OR is_contract = 1)"
-      : "");
-  const bereich =
-    (tier ? " AND tier = ?" : "") +
-    (minEtn != null ? " AND etn >= ?" : "") +
-    (maxEtn != null ? " AND etn <= ?" : "");
-  const filter =
-    basis +
-    (tier ? " AND c.tier = ?" : "") +
-    (minEtn != null ? " AND c.etn >= ?" : "") +
-    (maxEtn != null ? " AND c.etn <= ?" : "");
-
-  const filterArgs = [String(env.BRIDGE_ADDRESS).toLowerCase()];
-  if (tier) filterArgs.push(tier);
-  if (minEtn != null) filterArgs.push(minEtn);
-  if (maxEtn != null) filterArgs.push(maxEtn);
-
-  // ---- Schneller Weg: ohne Filter braucht es keine Rangberechnung -------
-  //
-  // Gemessen an der echten Datenbank: die Abfrage unten liest 15.014 Zeilen,
-  // weil sie fuer ALLE 3.000 Wallets den Bestand von damals nachschlaegt - nur
-  // um daraus die Rangaenderung zu bilden. Das Gratis-Limit von D1 sind fuenf
-  // Millionen gelesene Zeilen am Tag; damit waeren rund 330 Aufrufe moeglich.
-  //
-  // Ohne Filter ist der Rang aber schlicht die Position in der nach Bestand
-  // sortierten Liste - und dafuer gibt es einen Index. Dieselbe Seite kostet
-  // so 50 statt 15.014 Zeilen. Genau dieser Weg wird beim Aufruf der Seite
-  // genommen; die teure Fassung bleibt fuer die Filter, die selten und dann
-  // bewusst benutzt werden.
-  //
-  // Ein reiner Balance-Bereich nimmt denselben Weg (siehe leaderboardSchnell).
-  const nurBereich = !tier && !nurEcht && !nurDienste;
-  if (nurBereich) return leaderboardSchnell(db, env, { limit, offset, minEtn, maxEtn });
-
-  // Rangberechnung ueber die BASIS: wer Boersen ausblendet, will auch, dass
-  // das erste echte Wallet auf Platz 1 steht - nicht auf Platz 3 mit zwei
-  // Luecken davor. Dafuer reicht der heutige Bestand; die Vergangenheit wird
-  // erst fuer die Zeilen der angezeigten Seite nachgeschlagen.
-  //
-  // Die Adresse als zweites Sortierkriterium: bei gleichem Bestand ist die
-  // Reihenfolge sonst nicht festgelegt, und zwei Wallets mit demselben Betrag
-  // koennten zwischen zwei Aufrufen die Plaetze tauschen.
-  //
-  // CROSS JOIN legt die Reihenfolge fest: erst die fuenfzig Zeilen der Seite,
-  // dann je Zeile ein Zugriff ueber den Primaerschluessel.
-  const sql =
-    "WITH gereiht AS (" +
-    "  SELECT c.address, c.etn, c.tier, ROW_NUMBER() OVER (ORDER BY c.etn DESC, c.address) AS platz" +
-    "  FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
-    basis +
-    "), ausschnitt AS (" +
-    "  SELECT address, platz, ROW_NUMBER() OVER (ORDER BY platz) AS zeile" +
-    "  FROM gereiht WHERE 1 = 1" + bereich +
-    ") SELECT " + WALLET_FELDER + ", s.platz" + LB_VERGANGENHEIT +
-    " FROM ausschnitt s CROSS JOIN current_balances c ON c.address = s.address" +
-    " LEFT JOIN addresses a ON a.hash = c.address" +
-    " WHERE s.zeile > ? AND s.zeile <= ? ORDER BY s.zeile";
-
-  const [res, gesamt] = await Promise.all([
-    db.prepare(sql).bind(...filterArgs, ...lbStichtage(), offset, offset + limit).all(),
-    db
-      .prepare(
-        "SELECT COUNT(*) n FROM current_balances c" +
-          " LEFT JOIN addresses a ON a.hash = c.address" + filter
-      )
-      .bind(...filterArgs)
-      .first(),
-  ]);
-
-  const jetzt = Date.now();
-  return {
-    offset,
-    limit,
-    gesamt: gesamt?.n ?? 0,
-    eintraege: res.results.map((r) => lbZeile(r, r.platz, jetzt)),
   };
 }
 
@@ -1918,6 +1916,10 @@ async function wallet_flows(db, env, adresse, u) {
   const abZeit = new Date(Date.now() - tage * 86400000).toISOString();
   const topN = zahlParam(u, "top", 12, 3, 20);
 
+  // Bis zu zehn Seiten je Richtung: vorab das Maximum aus dem Minutenbudget
+  // reservieren, danach auf die tatsaechlich gelesenen Seiten korrigieren.
+  const buchung = await liveBudget(db, "fluss", 20);
+  if (!buchung) return { beschaeftigt: true };
   const { fetchInboundTransactions, fetchOutboundTransactions } = await import("./blockscout.js");
   const api = env.EXPLORER_API;
   const [rein, raus] = await Promise.all([
@@ -1972,6 +1974,7 @@ async function wallet_flows(db, env, adresse, u) {
 
   const inflow = buendeln(rein);
   const outflow = buendeln(raus);
+  await liveBudgetKorrigieren(db, buchung, (rein.seiten ?? 10) + (raus.seiten ?? 10));
 
   // Bekannte Namen ergaenzen, damit im Diagramm "KuCoin" statt Hex steht.
   const alle = [...inflow.parteien, ...outflow.parteien].map((p) => p.address);
@@ -2009,7 +2012,8 @@ async function suche(db, env, q) {
     if (lokal) return { quelle: "db", ...lokal };
     // Nicht in den Top N - live beim Explorer holen, damit jedes Wallet
     // seinen Tier sehen kann. Genau das macht das Tier-Feature nutzbar.
-    const { fetchAddress } = await import("./blockscout.js");
+    // Eine Anfrage beim Explorer - aus dem gemeinsamen Minutenbudget.
+    if (!(await liveBudget(db, "suche", 1))) return { beschaeftigt: true };
     const live = await fetchAddress(env.EXPLORER_API, adr);
     const p = tierProgress(live.etn);
     return {
@@ -2147,6 +2151,40 @@ async function network(db, env) {
  * Standort, der noch nie eine gute Antwort gesehen hat, hat auch keine
  * Zweitschrift. Dafuer kostet er nichts und braucht keinen weiteren Dienst.
  */
+/**
+ * Schluessel fuer den Zwischenspeicher: Pfad plus die Parameter, die der
+ * Worker ueberhaupt liest, in fester Reihenfolge. Alles andere faellt weg -
+ * auch die Snapshot-Nummer s und der Cache-Buster _ des Browsers.
+ *
+ * Vorher war die volle URL der Schluessel. Ein angehaengtes "&x=zufall"
+ * umging damit den Speicher bei jedem Aufruf, und eine teure Abfrage liesse
+ * sich beliebig oft direkt gegen die Datenbank schicken - genug, um ihr
+ * Tageskontingent leerzulesen. Die Nummer s braucht nur der Browser, um SEINEN
+ * Zwischenspeicher zu umgehen; hier haelt ein Eintrag ohnehin nur Sekunden bis
+ * Minuten.
+ */
+const CACHE_PARAMETER = [
+  "period", "limit", "offset", "tier", "nur_wallets", "nur_dienste", "min_etn", "max_etn",
+  "type", "incl_auto", "addrs", "q", "top", "min_tage", "tage", "min_severity",
+];
+
+function cacheSchluessel(u) {
+  const k = new URL(u.origin + u.pathname);
+  for (const name of CACHE_PARAMETER) {
+    const wert = u.searchParams.get(name);
+    if (wert != null && wert !== "") k.searchParams.set(name, wert.slice(0, 400));
+  }
+  return new Request(k.toString());
+}
+
+/** Besucher-Abruf beim Explorer: Budget aufgebraucht -> 429, sonst normal. */
+const liveAntwort = (d) =>
+  d instanceof Response
+    ? d
+    : d?.beschaeftigt
+      ? json({ error: "The explorer is busy right now - try again in a minute.", beschaeftigt: true }, 429, 0)
+      : json(d);
+
 const NOTLAUF_TAGE = 7;
 
 /** Schluessel der Zweitschrift: dieselbe URL, aber ohne Cache-Buster - sonst
@@ -2261,7 +2299,9 @@ export default {
 
     // Antworten kurz zwischenspeichern - die Daten aendern sich nur alle 30 Min.
     const cache = caches.default;
-    const treffer = await cache.match(request);
+    const schluessel = cacheSchluessel(u);
+    const schluesselUrl = new URL(schluessel.url);
+    const treffer = await cache.match(schluessel);
     if (treffer) return treffer;
 
     let antwort;
@@ -2274,9 +2314,10 @@ export default {
       // Laenger gecacht als der Rest: die Bilanz besteht aus eingefrorenen
       // Werten und einer Wochen-Historie - nichts davon aendert sich in Minuten.
       else if (pfad === "/api/bilanz") antwort = json(await bilanz(db, env), 200, 600);
-      // Aendert sich nur, wenn der woechentliche Bridge-Durchgang laeuft - sechs
-      // Stunden Zwischenspeicher kosten also nichts an Aktualitaet.
-      else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db), 200, 21600);
+      // Aendert sich nur mit dem taeglichen Bridge-Durchgang. Eine halbe Stunde,
+      // weil die Snapshot-Nummer nicht mehr im Schluessel steckt (cacheSchluessel)
+      // - mit sechs Stunden hinge der Chart nach einem Lauf wieder so lange zurueck.
+      else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
       else if (pfad === "/api/movers") antwort = json(await movers(db, env, u));
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));
@@ -2288,18 +2329,16 @@ export default {
       else if (pfad === "/api/stand") antwort = json(await stand(db), 200, 20);
       else if (pfad === "/api/search") {
         const q = u.searchParams.get("q");
-        antwort = q
-          ? json(await suche(db, env, q.slice(0, 200)))
-          : fehler("Parameter q fehlt");
+        antwort = q ? liveAntwort(await suche(db, env, q.slice(0, 200))) : fehler("Parameter q fehlt");
       } else if (pfad.startsWith("/api/wallet-flows/")) {
-        antwort = json(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
+        antwort = liveAntwort(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
       } else if (pfad.startsWith("/api/wallet/")) {
         const w = await wallet(db, env, pfad.slice("/api/wallet/".length));
         antwort = w ? json(w) : fehler("Wallet nicht gefunden", 404);
       } else antwort = fehler("Unbekannter Endpoint", 404);
     } catch (e) {
       // Lieber alte Zahlen mit Datum als eine leere Seite - siehe "Notlauf".
-      const ersatz = await notlaufLesen(cache, u);
+      const ersatz = await notlaufLesen(cache, schluesselUrl);
       if (ersatz) return ersatz;
       antwort = json(
         {
@@ -2312,8 +2351,8 @@ export default {
     }
 
     if (antwort.status === 200) {
-      ctx.waitUntil(cache.put(request, antwort.clone()));
-      ctx.waitUntil(notlaufSchreiben(cache, u, antwort.clone()));
+      ctx.waitUntil(cache.put(schluessel, antwort.clone()));
+      ctx.waitUntil(notlaufSchreiben(cache, schluesselUrl, antwort.clone()));
     }
     return antwort;
   },

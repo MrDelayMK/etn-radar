@@ -1802,9 +1802,17 @@ async function hole(pfad, bust) {
     url = pfad + (pfad.includes("?") ? "&" : "?") + "s=" + SNAPSHOT_MARKE;
   }
   const r = await fetch(url, { headers: adminKopf() });
+  if (r.status === 429) {
+    // Das Minutenbudget fuer Explorer-Abrufe ist aufgebraucht - kein Fehler,
+    // sondern ein "gleich nochmal".
+    const e = new Error("The explorer is busy right now — try again in a minute.");
+    e.beschaeftigt = true;
+    throw e;
+  }
   if (!r.ok) throw new Error(pfad + " → HTTP " + r.status);
   return r.json();
 }
+const fehlerText = (e) => (e.beschaeftigt ? e.message : "Error: " + e.message);
 
 function periodTabs(host, aktiv, onChange, liste = PERIODEN) {
   host.innerHTML = liste.map((p) =>
@@ -3899,7 +3907,7 @@ async function ladeWalletDetail(q) {
   try {
     d = await hole("/api/search?q=" + encodeURIComponent(q));
   } catch (e) {
-    el("invHead").innerHTML = '<div class="empty">Error: ' + esc(e.message) + "</div>";
+    el("invHead").innerHTML = '<div class="empty">' + esc(fehlerText(e)) + "</div>";
     return;
   }
 
@@ -4308,7 +4316,7 @@ async function ladeWalletFlows(adresse) {
       zeichneSankey(el(svgId), seite, rein, eigen);
     }
   } catch (e) {
-    el("inflowMeta").textContent = el("outflowMeta").textContent = "Error: " + e.message;
+    el("inflowMeta").textContent = el("outflowMeta").textContent = fehlerText(e);
   }
 }
 
@@ -4563,7 +4571,7 @@ async function suchen() {
       '<div class="sharebar"><button id="zurProfilseite" data-addr="' + esc(d.address) + '">' +
       "🔎 Full profile &amp; share</button></div>";
   } catch (e) {
-    box.innerHTML = '<div class="empty">Error: ' + esc(e.message) + "</div>";
+    box.innerHTML = '<div class="empty">' + esc(fehlerText(e)) + "</div>";
   }
 }
 
@@ -4865,7 +4873,7 @@ async function lbSpringeZuWallet() {
     }
     return lbSpringeZuRang(d.rank_pos, d.address, msg);
   } catch (e) {
-    msg.textContent = "Error: " + e.message;
+    msg.textContent = fehlerText(e);
   }
 }
 async function lbSpringeZuRang(rang, addr, msg) {

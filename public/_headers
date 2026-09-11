@@ -1,0 +1,12 @@
+# Sicherheits-Header fuer die ausgelieferten Seiten (Workers Static Assets).
+#
+# frame-ancestors: die Seite darf nur von sich selbst und von galacticsl.com
+#   eingebettet werden - sonst koennte eine fremde Seite sie unsichtbar
+#   ueberlagern und Klicks abgreifen.
+# nosniff: der Browser haelt sich an den angegebenen Dateityp.
+# Permissions-Policy: die Seite braucht weder Kamera noch Mikrofon noch Standort.
+/*
+  Content-Security-Policy: frame-ancestors 'self' https://galacticsl.com https://*.galacticsl.com
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

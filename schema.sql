@@ -426,6 +426,17 @@ CREATE TABLE IF NOT EXISTS live_abrufe (
 );
 CREATE INDEX IF NOT EXISTS idx_live_abrufe_zeit ON live_abrufe(geholt_am);
 
+-- Minutenbudget fuer Explorer-Abrufe, die Besucher ausloesen (Suche nach
+-- unbekannten Adressen, Money Flow). Eine Zeile je Abruf mit den Anfragen, die
+-- er gekostet hat. Siehe liveBudget in src/index.js.
+CREATE TABLE IF NOT EXISTS live_budget (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts      TEXT NOT NULL,
+  art     TEXT NOT NULL,             -- suche | fluss
+  kosten  INTEGER NOT NULL           -- Explorer-Anfragen dieses Abrufs
+);
+CREATE INDEX IF NOT EXISTS idx_live_budget_ts ON live_budget(ts);
+
 -- Teilindex fuer den "Services only"-Filter: enthaelt nur die markierten
 -- Adressen (rund zwanzig), nicht alle dreitausend. Ohne ihn muss die
 -- Datenbank die nach Bestand sortierte Liste komplett durchgehen, um eine

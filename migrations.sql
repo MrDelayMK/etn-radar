@@ -156,3 +156,14 @@ CREATE TABLE IF NOT EXISTS bridge_tage (
 ALTER TABLE bridge_scan ADD COLUMN uebertrag TEXT;
 ALTER TABLE bridge_scan ADD COLUMN anker_wei TEXT;
 ALTER TABLE bridge_scan ADD COLUMN anker_zeit TEXT;
+
+-- Minutenbudget fuer Explorer-Abrufe, die Besucher ausloesen (Suche nach
+-- unbekannten Adressen, Money Flow). Eine Zeile je Abruf mit den Anfragen, die
+-- er gekostet hat. Siehe liveBudget in src/index.js.
+CREATE TABLE IF NOT EXISTS live_budget (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts      TEXT NOT NULL,
+  art     TEXT NOT NULL,             -- suche | fluss
+  kosten  INTEGER NOT NULL           -- Explorer-Anfragen dieses Abrufs
+);
+CREATE INDEX IF NOT EXISTS idx_live_budget_ts ON live_budget(ts);
