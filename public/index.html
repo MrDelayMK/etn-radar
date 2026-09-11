@@ -136,9 +136,20 @@ h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);
 .fact .v{font-size:23px;font-weight:650;margin-top:5px;letter-spacing:-.025em}
 .chartcard{background:#0a0f1bee;border:1px solid var(--line);border-radius:14px;padding:16px 16px 8px}
 .chartcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px}
-.conc-legend{display:flex;gap:16px;flex-wrap:wrap}
-.conc-legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)}
-.conc-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+/* Wallets je Stufe ueber die Zeit: eine kleine Karte je Stufe (small multiples). */
+.tierverlauf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+@media (max-width:900px){.tierverlauf{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.tierverlauf{grid-template-columns:1fr}}
+.tvkarte{background:#0a0f1bee;border:1px solid var(--line);border-radius:12px;padding:12px 14px 6px}
+.tvkarte .kopf{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.tvkarte .kopf .nm{font-size:13.5px;font-weight:600;color:var(--tx)}
+.tvkarte .kopf .wert{font-size:17px;font-weight:660;color:var(--tx)}
+.tvkarte .unter{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--tx3);margin-top:1px}
+.tvkarte .unter .up,.tvkarte .unter .down{font-weight:600}
+.tvkarte .chartholder{height:92px;margin-top:6px}
+.tvkarte svg{width:100%;height:92px;display:block}
+.tvkarte .tip{top:-2px;padding:5px 10px}
+.tvkarte .tip b{font-size:13.5px;color:var(--tx)}
 .chartholder{position:relative;cursor:crosshair}
 svg.chart{width:100%;display:block}
 .tip{
@@ -1147,24 +1158,8 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   </section>
 
   <section>
-    <div class="chartcard">
-      <div class="top">
-        <div>
-          <div style="font-size:13.5px;color:var(--tx2);font-weight:560">Concentration over time</div>
-          <div style="font-size:12px;color:var(--tx3)" id="concRange">&mdash;</div>
-        </div>
-        <div class="conc-legend">
-          <span><i style="background:#f4635e"></i>Top 10</span>
-          <span><i style="background:#fbbf24"></i>Top 100</span>
-          <span><i style="background:#5b9cff"></i>Top 1000</span>
-        </div>
-      </div>
-      <div class="chartholder" id="concHolder">
-        <svg class="chart" id="concChart"></svg>
-        <div class="tip" id="concTip"></div>
-      </div>
-      <div class="dim3" style="font-size:11px;margin-top:8px" id="concNote"></div>
-    </div>
+    <h2>📈 Wallets per tier over time <span class="hint" id="tierVerlaufRange"></span></h2>
+    <div class="tierverlauf" id="tierVerlauf"></div>
   </section>
 </div>
 
@@ -2124,114 +2119,146 @@ function zeichneChart(svg, punkte, totalSupply) {
   holder.ontouchend = verstecke;
 }
 
-// Wie viel der zirkulierenden Supply die groessten N Wallets halten, ueber
-// die Zeit - drei Linien (Top 10/100/1000) statt der einen Bridge-Kurve
-// oben, sonst dieselbe Achsen-/Tooltip-Logik wie zeichneChart.
-const KONZ_CHART = { punkte: null };
-const KONZ_SERIEN = [
-  { feld: "top10_share", farbe: "#f4635e", label: "Top 10" },
-  { feld: "top100_share", farbe: "#fbbf24", label: "Top 100" },
-  { feld: "top1000_share", farbe: "#5b9cff", label: "Top 1000" },
-];
+// Wallets je schneller Stufe ueber die Zeit - eine kleine Karte je Stufe statt
+// einer gemeinsamen Grafik. 26 Humpbacks und 915 Octopus auf einer Achse waeren
+// eine Linie am Boden und eine oben, und sechs Stufenfarben in einem Chart sind
+// nicht auseinanderzuhalten (Farbpruefung 11.09.2026: Violett/Blau bei
+// Farbschwaeche kaum, die beiden Gruentoene selbst bei normalem Sehen kaum).
+//
+// Ersetzt "Concentration over time": den Anteil der Top 10/100/1000 an der
+// zirkulierenden Menge hat kaum jemand verstanden.
+const TIER_VERLAUF = { tage: null, tiers: null };
+const TIER_VERLAUF_STUFEN = ["humpback", "whale", "shark", "dolphin", "fish", "octopus"];
 
-function zeichneKonzChart(svg, punkte) {
-  if (punkte) KONZ_CHART.punkte = punkte;
-  const alleTage = KONZ_CHART.punkte ?? [];
-  // Nur Tage mit mindestens einem belastbaren Anteil zeichnen (fruehe Tage vor
-  // dem ersten Snapshot waeren sonst eine Null-Linie am Boden).
-  const daten = alleTage.filter((p) => KONZ_SERIEN.some((s) => p[s.feld] != null));
-  const holder = svg.parentElement;
-  const tip = el("concTip");
-  if (holder.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
-  const W = Math.max(320, Math.round(holder.clientWidth));
-  const H = W < 640 ? 240 : 320;
+async function ladeTierVerlauf() {
+  try {
+    TIER_VERLAUF.tage = (await hole("/api/tier-verlauf")).tage ?? [];
+  } catch {
+    TIER_VERLAUF.tage = [];
+  }
+  zeichneTierVerlauf();
+}
+
+function zeichneTierVerlauf() {
+  const box = el("tierVerlauf");
+  if (!box || !TIER_VERLAUF.tage || !TIER_VERLAUF.tiers) return;
+  if (box.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
+
+  // Der letzte Punkt ist der Stand von JETZT, wie in den Tier-Zeilen darueber -
+  // sonst stuende unten eine andere Zahl als oben.
+  const heute = new Date().toISOString().slice(0, 10);
+  const jetzt = Object.fromEntries(TIER_VERLAUF.tiers.map((t) => [t.key, t.anzahl]));
+  const tage = TIER_VERLAUF.tage.filter((t) => t.day < heute).concat([{ day: heute, ...jetzt }]);
+  const datum = (tag) =>
+    new Date(tag + "T00:00:00Z").toLocaleDateString(LOC, { month: "short", day: "numeric", timeZone: "UTC" });
+  el("tierVerlaufRange").textContent = tage.length > 1 ? "since " + datum(tage[0].day) : "";
+
+  box.innerHTML = TIER_VERLAUF_STUFEN.map((key) => {
+    const t = TIER_VERLAUF.tiers.find((x) => x.key === key);
+    if (!t) return "";
+    const reihe = tage.filter((p) => p[key] != null);
+    const erst = reihe[0]?.[key];
+    const letzt = reihe[reihe.length - 1]?.[key];
+    const diff = reihe.length > 1 ? letzt - erst : null;
+    const prozent = diff && erst > 0 ? Math.abs(diff / erst) * 100 : null;
+    const diffText = diff == null ? ""
+      : (diff > 0 ? "+" : diff < 0 ? "−" : "±") + nf(Math.abs(diff)) +
+        (prozent != null ? " (" + (diff > 0 ? "+" : "−") + nf(prozent, prozent < 10 ? 1 : 0) + "%)" : "");
+    const klasse = diff > 0 ? "up" : diff < 0 ? "down" : "";
+    return '<div class="tvkarte" data-tier="' + key + '">' +
+      '<div class="kopf"><span class="nm">' + t.emoji + " " + esc(t.name) + "</span>" +
+      '<span class="wert num">' + nf(letzt) + "</span></div>" +
+      '<div class="unter"><span class="' + klasse + '">' + diffText + "</span><span>wallets</span></div>" +
+      '<div class="chartholder"><svg></svg><div class="tip"></div></div></div>';
+  }).join("");
+
+  box.querySelectorAll(".tvkarte").forEach((karte) => {
+    const key = karte.dataset.tier;
+    tierMiniChart(
+      karte.querySelector(".chartholder"),
+      tage.filter((p) => p[key] != null).map((p) => ({ day: p.day, n: p[key] })),
+      TIERFARBEN[key] ?? "#5b9cff",
+      datum
+    );
+  });
+}
+
+function tierMiniChart(holder, reihe, farbe, datum) {
+  const svg = holder.querySelector("svg");
+  const tip = holder.querySelector(".tip");
+  const W = Math.max(200, Math.round(holder.clientWidth));
+  const H = 92;
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
-  svg.style.height = H + "px";
-
-  if (daten.length < 2) {
-    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="14" ' +
+  if (reihe.length < 2) {
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" fill="#5b6b83" font-size="12" ' +
       'text-anchor="middle">not enough history yet</text>';
     return;
   }
 
-  const PT = 18, PB = 34, PL = 50, PR = 14;
-  const werte = daten.flatMap((p) => KONZ_SERIEN.map((s) => p[s.feld]).filter((v) => v != null));
+  const PT = 8, PB = 18, PL = 38, PR = 8;
+  const werte = reihe.map((p) => p.n);
   const min = Math.min(...werte), max = Math.max(...werte);
-  const spanne = max - min || 0.02;
-  const lo = Math.max(0, min - spanne * 0.15), hi = Math.min(1, max + spanne * 0.15);
+  // Mindestspanne: sonst liefe aus 912 -> 915 eine Linie quer ueber die ganze
+  // Karte, und ein Plus von 0,3 % saehe aus wie ein Ausbruch.
+  const spanne = Math.max(max - min, 4, max * 0.08);
+  const lo = Math.max(0, Math.floor((max + min) / 2 - spanne / 2));
+  const hi = Math.ceil(lo + spanne);
+  const letzte = reihe.length - 1;
+  const X = (i) => PL + (i / letzte) * (W - PL - PR);
+  const Y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
+  const achse = (v) =>
+    '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) +
+    '" stroke="#1e293b" stroke-width="1"/>' +
+    '<text x="' + (PL - 6) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" fill="#7d8ba3" font-size="10.5" ' +
+    'text-anchor="end" font-family="ui-monospace,monospace">' + nf(v) + "</text>";
 
-  const X = (i) => PL + (i / (daten.length - 1)) * (W - PL - PR);
-  const Y = (v) => H - PB - ((v - lo) / (hi - lo || 1)) * (H - PT - PB);
+  let linie = "";
+  reihe.forEach((p, i) => { linie += (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.n).toFixed(1); });
+  const flaeche = linie + "L" + X(letzte).toFixed(1) + " " + (H - PB) + "L" + PL + " " + (H - PB) + "Z";
 
-  const linien = [0, .25, .5, .75, 1].map((f) => {
-    const y = PT + f * (H - PT - PB);
-    return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
-      '" stroke="#1e293b" stroke-width="1"/>' +
-      '<text x="' + (PL - 8) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12" ' +
-      'text-anchor="end" font-family="ui-monospace,monospace">' + nf((hi - f * (hi - lo)) * 100, 0) + "%</text>";
-  }).join("");
+  svg.innerHTML = achse(hi) + achse(lo) +
+    '<text x="' + PL + '" y="' + (H - 4) + '" fill="#7d8ba3" font-size="10.5" ' +
+      'font-family="ui-monospace,monospace">' + datum(reihe[0].day) + "</text>" +
+    '<text x="' + (W - PR) + '" y="' + (H - 4) + '" fill="#7d8ba3" font-size="10.5" text-anchor="end" ' +
+      'font-family="ui-monospace,monospace">now</text>' +
+    '<path d="' + flaeche + '" fill="' + farbe + '" opacity=".1"/>' +
+    '<path d="' + linie + '" fill="none" stroke="' + farbe + '" stroke-width="2" ' +
+      'stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<line class="kreuz" y1="' + PT + '" y2="' + (H - PB) + '" stroke="#7d8ba3" stroke-width="1" opacity="0"/>' +
+    '<circle class="punkt" r="4" fill="' + farbe + '" stroke="#0a0f1b" stroke-width="2" cx="' +
+      X(letzte).toFixed(1) + '" cy="' + Y(reihe[letzte].n).toFixed(1) + '"/>';
 
-  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
-  const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
-    const i = Math.round((n / marken) * (daten.length - 1));
-    const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
-    return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
-      'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
-      new Date(daten[i].day).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>";
-  }).join("");
-
-  const pfade = KONZ_SERIEN.map((s) => {
-    let d = "", begonnen = false;
-    daten.forEach((p, i) => {
-      const v = p[s.feld];
-      if (v == null) { begonnen = false; return; } // Luecke statt falsch interpolierter Linie
-      d += (begonnen ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1);
-      begonnen = true;
-    });
-    return '<path d="' + d + '" fill="none" stroke="' + s.farbe + '" stroke-width="2.2" ' +
-      'stroke-linejoin="round" stroke-linecap="round"/>';
-  }).join("");
-
-  const punkteEnde = KONZ_SERIEN.map((s) => {
-    for (let i = daten.length - 1; i >= 0; i--) {
-      if (daten[i][s.feld] != null) {
-        return '<circle cx="' + X(i) + '" cy="' + Y(daten[i][s.feld]) + '" r="4" fill="' + s.farbe + '"/>';
-      }
-    }
-    return "";
-  }).join("");
-
-  svg.innerHTML = linien + datumTexte + pfade + punkteEnde +
-    '<g id="konzCross" style="display:none">' +
-    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#7d8ba3" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>' +
-    "</g>";
-
-  const cross = svg.querySelector("#konzCross");
-  const linie = cross.querySelector("line");
-
-  function zeige(ev) {
+  const kreuz = svg.querySelector(".kreuz");
+  const punkt = svg.querySelector(".punkt");
+  const setzePunkt = (i) => {
+    punkt.setAttribute("cx", X(i).toFixed(1));
+    punkt.setAttribute("cy", Y(reihe[i].n).toFixed(1));
+  };
+  const zeige = (ev) => {
     const r = holder.getBoundingClientRect();
-    const x = ev.clientX - r.left;
-    const i = Math.max(0, Math.min(daten.length - 1,
-      Math.round(((x - PL) / (W - PL - PR)) * (daten.length - 1))));
-    const p = daten[i];
-
-    cross.style.display = "";
-    linie.setAttribute("x1", X(i)); linie.setAttribute("x2", X(i));
-
-    tip.innerHTML =
-      "<span>" + new Date(p.day).toLocaleDateString(LOC,
-        { year: "numeric", month: "short", day: "numeric" }) + "</span>" +
-      KONZ_SERIEN.map((s) => p[s.feld] != null
-        ? '<b class="num" style="color:' + s.farbe + '">' + s.label + ": " + nf(p[s.feld] * 100, 1) + "%</b>"
-        : ""
-      ).join("");
+    const x = ((ev.clientX - r.left) / r.width) * W;
+    const i = Math.max(0, Math.min(letzte, Math.round(((x - PL) / (W - PL - PR)) * letzte)));
+    kreuz.setAttribute("x1", X(i));
+    kreuz.setAttribute("x2", X(i));
+    kreuz.setAttribute("opacity", ".7");
+    setzePunkt(i);
+    // Werte zuerst, Datum darunter - und per textContent, nicht als HTML.
+    const wert = document.createElement("b");
+    wert.textContent = nf(reihe[i].n) + " wallets";
+    const wann = document.createElement("span");
+    wann.textContent = i === letzte ? "now" : datum(reihe[i].day);
+    tip.replaceChildren(wert, wann);
     tip.classList.add("on");
-    const links = X(i) > W * 0.6;
-    tip.style.left = links ? "auto" : X(i) + 14 + "px";
-    tip.style.right = links ? W - X(i) + 14 + "px" : "auto";
-  }
-  const verstecke = () => { cross.style.display = "none"; tip.classList.remove("on"); };
+    const px = (X(i) / W) * r.width;
+    const rechts = px > r.width / 2;
+    tip.style.left = rechts ? "auto" : px + 10 + "px";
+    tip.style.right = rechts ? r.width - px + 10 + "px" : "auto";
+  };
+  const verstecke = () => {
+    kreuz.setAttribute("opacity", "0");
+    tip.classList.remove("on");
+    setzePunkt(letzte);
+  };
   holder.onmousemove = zeige;
   holder.onmouseleave = verstecke;
   holder.ontouchmove = (e) => { if (e.touches[0]) zeige(e.touches[0]); };
@@ -2310,7 +2337,7 @@ function alleChartsNachziehen() {
   if (el("prChart")._punkte) zeichnePreisChart();
   if (MIG.punkte.length) zeichneMigration();
   if (el("invChart")._punkte) zeichneChart(el("invChart"));
-  if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart"));
+  if (TIER_VERLAUF.tage) zeichneTierVerlauf();
   if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
 function beobachte(holderId, zeichnen) {
@@ -2321,7 +2348,7 @@ function beobachte(holderId, zeichnen) {
   }).observe(el(holderId));
 }
 beobachte("prHolder", () => { if (el("prChart")._punkte) zeichnePreisChart(); });
-beobachte("concHolder", () => { if (KONZ_CHART.punkte) zeichneKonzChart(el("concChart")); });
+beobachte("tierVerlauf", () => { if (TIER_VERLAUF.tage) zeichneTierVerlauf(); });
 beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
 beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
@@ -2388,19 +2415,9 @@ async function ladeOverview() {
   el("kAddr").textContent = nf(d.snapshot.addr_count);
   el("kAddrS").textContent = "in the latest snapshot";
 
-  const kz = (d.verlauf ?? []).filter((p) => p.top10_share != null || p.top100_share != null || p.top1000_share != null);
-  zeichneKonzChart(el("concChart"), d.verlauf ?? []);
-  if (kz.length >= 2) {
-    el("concRange").textContent =
-      new Date(kz[0].day).toLocaleDateString(LOC) + " – " +
-      new Date(kz[kz.length - 1].day).toLocaleDateString(LOC);
-  }
-  // Diese Reihe waechst erst ab dem ersten eigenen Snapshot - der Backfill
-  // liefert sie nicht rueckwirkend. Lieber dazuschreiben, als eine Linie aus
-  // drei Punkten wie eine Aussage aussehen zu lassen.
-  el("concNote").textContent = kz.length < 8
-    ? "Only " + kz.length + " day(s) of history so far — this line gets meaningful after a couple of weeks of snapshots."
-    : "";
+  // Stand von jetzt als letzter Punkt der Tier-Verlaeufe.
+  TIER_VERLAUF.tiers = d.tiers;
+  zeichneTierVerlauf();
 
   zeichneTiers(d.tiers, d.zirkulierend, d.tier_info);
 }
@@ -4617,7 +4634,7 @@ const LADER = {
     await uebersicht();
     await Promise.all([ladeBilanz(), ladeBridgeVerlauf(), ladeJobStatus("bridge", "bridgeBtn")]);
   },
-  tiers: () => uebersicht(),
+  tiers: () => Promise.all([uebersicht(), ladeTierVerlauf()]),
   about: () => Promise.resolve(),
   board: () => ladeLeaderboard(),
   activity: () =>

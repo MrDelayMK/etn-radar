@@ -1602,6 +1602,30 @@ const BRIDGE_MIN_TRANSFER_ETN = 500000;
  * Historie saehe im Chart aus wie eine ganze - bis dahin bleibt die Seite bei
  * den 120 Tagen aus der Uebersicht.
  */
+/**
+ * Wallets je schneller Stufe ueber die Zeit - fuer die kleinen Verlaufs-Charts
+ * unter den Tier-Zeilen. Ein Punkt je Tag, hoechstens ein Jahr.
+ *
+ * Beginnt am 02.09.2026: eigene Snapshots gibt es seit dem 06.09., die Tage
+ * davor sind aus daily_balances nachgerechnet. Weiter zurueck waere es
+ * geschoent - die aelteren Tagesbestaende kennen nur Wallets, die heute noch
+ * gross sind, und taeuschten so Wachstum vor.
+ */
+async function tierVerlauf(db) {
+  const zeilen = await db
+    .prepare("SELECT day, tier, count FROM tier_tage WHERE day >= ? ORDER BY day")
+    .bind(tagVor(365))
+    .all()
+    .then((r) => r.results ?? [])
+    .catch(() => []);
+  const tage = new Map();
+  for (const z of zeilen) {
+    if (!tage.has(z.day)) tage.set(z.day, { day: z.day });
+    tage.get(z.day)[z.tier] = z.count;
+  }
+  return { tage: [...tage.values()] };
+}
+
 async function bridgeVerlauf(db) {
   const stand = await db
     .prepare("SELECT fertig, aeltestes_bekannt, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
@@ -2364,6 +2388,8 @@ export default {
       // weil die Snapshot-Nummer nicht mehr im Schluessel steckt (cacheSchluessel)
       // - mit sechs Stunden hinge der Chart nach einem Lauf wieder so lange zurueck.
       else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db), 200, 1800);
+      // Neue Zeilen kommen einmal am Tag mit dem ersten Snapshot.
+      else if (pfad === "/api/tier-verlauf") antwort = json(await tierVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
       else if (pfad === "/api/movers") antwort = json(await movers(db, env, u));
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));
