@@ -6,16 +6,18 @@ name: ETN Bridge Events
 # darum eine einzige, durchgehende Seitenkette und filtert daraus.
 #
 # Die Historie reicht bis zum 03.03.2024 zurueck und ist nur von der neuesten
-# Seite aus rueckwaerts erreichbar: einmal komplett sind das rund zwei Stunden.
-# Der Lauf merkt sich, wie weit er gekommen ist, und setzt beim naechsten Mal
-# genau dort fort (Tabelle bridge_scan). Die ersten Laeufe sind lang, spaetere
-# kosten nur noch die paar Seiten seit dem letzten Mal - daher das grosszuegige
-# Zeitlimit unten.
+# Seite aus rueckwaerts erreichbar: einmal komplett sind das mehrere Laeufe zu
+# je 100 Minuten. Der Lauf merkt sich, wie weit er gekommen ist, und setzt beim
+# naechsten Mal genau dort fort (Tabelle bridge_scan). Die ersten Laeufe sind
+# lang, spaetere kosten nur noch die paar Seiten seit dem letzten Mal - daher
+# das grosszuegige Zeitlimit unten.
 #
-# Woechentlich automatisch, jederzeit auch per Knopf.
+# Taeglich automatisch, jederzeit auch per Knopf. Taeglich, damit die Historie
+# ohne Knopfdruck in wenigen Tagen komplett ist; danach liest ein Lauf nur
+# noch die Seiten des letzten Tages.
 on:
   schedule:
-    - cron: "30 3 * * 1" # jeden Montag 03:30 UTC
+    - cron: "30 1 * * *" # taeglich 01:30 UTC
   workflow_dispatch:
     inputs:
       minuten:

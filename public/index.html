@@ -705,6 +705,14 @@ nav .navrechts button:hover{color:var(--tx);border-color:var(--acc)}
 .wlnote:hover{border-left-color:var(--acc);color:var(--tx)}
 .wlnote input{width:100%;background:#0a0f1b;border:1px solid var(--acc);border-radius:8px;
               padding:6px 9px;color:var(--tx);font:12.5px var(--sans);outline:none}
+/* Notiz-Stift neben dem Stern: jede Wallet kann eine Notiz tragen, auch ohne
+   gemerkt zu sein. Kraeftig, sobald eine Notiz existiert. */
+.notizstift{background:none;border:0;cursor:pointer;padding:0 2px 0 6px;font-size:13px;
+            line-height:1;opacity:.3;transition:.13s;min-width:0;vertical-align:0}
+.notizstift:hover{opacity:1;transform:scale(1.15)}
+.notizstift.on{opacity:.95}
+.lbtab .wlnote{margin-top:4px;font-size:12px;max-width:420px}
+#invHead .wlnote{max-width:520px}
 
 /* Leerer Zustand als Einladung statt als Nichts. */
 .watchempty{border:1px dashed var(--line2);border-radius:13px;padding:17px 19px;
@@ -2978,7 +2986,7 @@ async function ladeBilanz() {
       ? "All migrations since " +
         new Date(d.transfers_ab).toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric" }) + "."
       : "Checked back to " + new Date(d.transfers_ab).toLocaleDateString(LOC) +
-        " so far — the scan works further back each week, so this ranking can still change."
+        " so far — the scan works further back with every run, so this ranking can still change."
     : "";
 
   // --- Wallets, die es vorher nicht gab ---
@@ -3218,10 +3226,13 @@ document.addEventListener("click", (e) => {
   if (b) investigateAddress(b.dataset.watchGo);
 });
 
-/* ---------- Notizen zu gemerkten Wallets ---------------------------------
+/* ---------- Notizen zu Wallets --------------------------------------------
  *
- * Liegen wie die Merkliste selbst nur im Browser. Wer ein Wallet beobachtet,
- * weiss nach zwei Wochen nicht mehr, warum - genau dafuer ist das Feld da.
+ * Liegen wie die Merkliste nur im Browser, haengen aber NICHT an ihr: jede
+ * Wallet kann eine Notiz tragen - im Leaderboard ueber den Stift, auf der
+ * Wallet-Seite direkt unter der Adresse, in der Merkliste wie bisher. Wer ein
+ * Wallet beobachtet, weiss nach zwei Wochen nicht mehr, warum; und wer eines
+ * nur einmal auffaellig fand, will das nicht erst merken muessen.
  */
 const NOTIZ_KEY = "etnr_notizen";
 
@@ -3244,6 +3255,41 @@ function notizSetzen(adr, text) {
   } catch {
     /* privates Fenster - gilt dann nur fuer diese Sitzung */
   }
+}
+
+/**
+ * Die Notizzeile einer Wallet. Ohne Notiz gibt es sie nur dort, wo zum
+ * Schreiben eingeladen wird (Merkliste, Wallet-Seite) - im Leaderboard waere
+ * eine leere Zeile unter jeder Wallet nur Unruhe.
+ */
+function notizBox(adr, einladung) {
+  const a = String(adr).toLowerCase();
+  const n = notizen()[a];
+  if (!n && !einladung) return "";
+  return '<div class="wlnote' + (n ? "" : " leer") + '" data-notiz="' + a + '"' +
+    (einladung ? ' data-einladung="' + esc(einladung) + '"' : "") + ">" + esc(n ?? einladung) + "</div>";
+}
+
+function notizStift(adr) {
+  const a = String(adr).toLowerCase();
+  const n = notizen()[a];
+  return '<button class="notizstift' + (n ? " on" : "") + '" data-notiz-stift="' + a +
+    '" title="' + esc(n ?? "Add a note") + '">📝</button>';
+}
+
+/** Nach dem Speichern jede Stelle nachziehen, an der die Wallet gerade steht. */
+function notizUeberall(adr) {
+  const n = notizen()[adr];
+  document.querySelectorAll('[data-notiz="' + adr + '"]').forEach((box) => {
+    const einladung = box.dataset.einladung;
+    if (!n && !einladung) return box.remove();
+    box.className = "wlnote" + (n ? "" : " leer");
+    box.textContent = n ?? einladung;
+  });
+  document.querySelectorAll('[data-notiz-stift="' + adr + '"]').forEach((s) => {
+    s.classList.toggle("on", !!n);
+    s.title = n ?? "Add a note";
+  });
 }
 
 /* ---------- Was hat sich seit dem letzten Besuch getan? -------------------
@@ -3309,7 +3355,6 @@ function zeileMerkliste(e, vergleich) {
   const d = e.delta_etn;
   const klasse = d > 0 ? "up" : d < 0 ? "down" : "dim3";
   const betrag = d == null ? "—" : d === 0 ? "±0" : kurz(d, true);
-  const notiz = notizen()[e.address];
   const seit = vergleich?.diffs?.[e.address];
 
   return '<div class="wlrow">' +
@@ -3325,9 +3370,7 @@ function zeileMerkliste(e, vergleich) {
       "</div>" +
       '<div class="sub">rank ' + (e.rank_pos ?? "—") + " · " +
         (d == null ? kurz(e.etn) : kurz(e.etn - d) + " → " + kurz(e.etn)) + " ETN</div>" +
-      '<div class="wlnote' + (notiz ? "" : " leer") + '" data-notiz="' + e.address + '">' +
-        (notiz ? esc(notiz) : "+ add a note — why are you watching this one?") +
-      "</div>" +
+      notizBox(e.address, "+ add a note — why are you watching this one?") +
     "</div>" +
     '<div class="val"><b class="num ' + klasse + '">' + betrag + "</b>" +
       '<span class="num">' + (d == null ? "" : pctSafe(e.delta_pct, e.etn - d)) + "</span></div>" +
@@ -3335,27 +3378,47 @@ function zeileMerkliste(e, vergleich) {
 }
 
 // Notiz anklicken -> Eingabefeld. Enter oder Verlassen speichert, Escape
-// verwirft.
-document.addEventListener("click", (e) => {
-  const box = e.target.closest("[data-notiz]");
-  if (!box || box.querySelector("input")) return;
+// verwirft. Nur einmal abschliessen: das Ersetzen des Felds loest selbst noch
+// ein Verlassen aus - vorher speicherte dadurch auch Escape.
+function notizBearbeiten(box) {
+  if (box.querySelector("input")) return;
   const adr = box.dataset.notiz;
-  const vorher = notizen()[adr] ?? "";
   box.classList.remove("leer");
   box.innerHTML = '<input type="text" maxlength="140" placeholder="e.g. suspected exchange hot wallet">';
   const feld = box.querySelector("input");
-  feld.value = vorher;
+  feld.value = notizen()[adr] ?? "";
   feld.focus();
   feld.select();
+  let erledigt = false;
   const fertig = (speichern) => {
+    if (erledigt) return;
+    erledigt = true;
     if (speichern) notizSetzen(adr, feld.value);
-    ladeWatchlist();
+    notizUeberall(adr);
   };
   feld.onkeydown = (ev) => {
     if (ev.key === "Enter") fertig(true);
     if (ev.key === "Escape") fertig(false);
   };
   feld.onblur = () => fertig(true);
+}
+
+document.addEventListener("click", (e) => {
+  const stift = e.target.closest("[data-notiz-stift]");
+  if (stift) {
+    e.preventDefault();
+    e.stopPropagation();
+    const adr = stift.dataset.notizStift;
+    const zelle = stift.parentElement;
+    let box = zelle.querySelector('[data-notiz="' + adr + '"]');
+    if (!box) {
+      zelle.insertAdjacentHTML("beforeend", '<div class="wlnote leer" data-notiz="' + adr + '"></div>');
+      box = zelle.lastElementChild;
+    }
+    return notizBearbeiten(box);
+  }
+  const box = e.target.closest("[data-notiz]");
+  if (box) notizBearbeiten(box);
 });
 
 /* ---------- Was ist mit den gemerkten Wallets passiert? --------------------
@@ -3554,7 +3617,7 @@ async function ladeLeaderboard() {
       '<td class="num dim3">' + e.platz + "</td>" +
       '<td><a class="addr" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
         (e.anzeige ? "<b style='color:var(--tx)'>" + esc(e.anzeige) + "</b>" : kurzAdr(e.address)) +
-      "</a>" + watchStern(e.address) + tags + "</td>" +
+      "</a>" + watchStern(e.address) + notizStift(e.address) + tags + notizBox(e.address) + "</td>" +
       '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
       '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
       deltaZelle(e.d24h, e.etn, 1) + deltaZelle(e.d7d, e.etn, 7) + deltaZelle(e.d6m, e.etn, 182) +
@@ -4270,7 +4333,7 @@ function renderWalletDetail(d) {
       '<span style="font-size:11px;font-weight:400">' + walletTags(d) + "</span></div>" +
     (d.anzeige ? '<div class="dim" style="font-size:12.5px">' + esc(d.tier_name) + "</div>" : "") +
     '<a class="addr" href="' + EXPLORER + d.address + '" target="_blank" rel="noopener" style="margin-top:3px;display:inline-block">' +
-      kurzAdr(d.address) + " ↗</a></div>" +
+      kurzAdr(d.address) + " ↗</a>" + notizBox(d.address, "+ add a note about this wallet") + "</div>" +
     '<div style="text-align:right"><div class="num" style="font-size:25px;font-weight:660">' +
     kurz(d.etn) + ' <span style="font-size:.5em;color:var(--tx2)">ETN</span></div>' +
     '<div class="dim3" style="font-size:12px">' +

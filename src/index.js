@@ -1719,29 +1719,27 @@ async function bilanz(db, env) {
       ? endspurt.letzte_30 / endspurt.davor_30
       : null;
 
-  // Die groessten Einzelbetraege seit HISTORIE_AB, direkt aus dem Rohbestand.
+  // Die groessten Einzelbetraege, die je die Bridge verlassen haben - direkt
+  // aus dem Rohbestand, soweit der Durchgang die Historie schon gelesen hat.
   //
   // Vorher aus bridge_events. Die Tabelle wird aber erst im letzten Schritt
   // eines Laufs neu aufgebaut - nach dem abgebrochenen Lauf vom 10.09.2026
   // zeigte die Liste darum noch den Stand vom 07.09., ohne den groessten
   // Transfer des Jahres (189,7 Mio. am 06.05.). Der Rohbestand dagegen ist nach
-  // jedem Haeppchen aktuell - und klein: live unter hundert gelesene Zeilen.
+  // jedem Haeppchen aktuell, und ueber den Index auf etn liest das kaum Zeilen.
   const [roh, stand] = await Promise.all([
     db
-      .prepare(
-        "SELECT day, to_address, etn FROM bridge_transfers WHERE day >= ?" +
-          " ORDER BY etn DESC LIMIT 10"
-      )
-      .bind(HISTORIE_AB)
+      .prepare("SELECT day, to_address, etn FROM bridge_transfers ORDER BY etn DESC LIMIT 10")
       .all(),
     db
-      .prepare("SELECT aeltestes_bekannt, fertig FROM bridge_scan WHERE id = 1")
+      .prepare("SELECT aeltestes_bekannt, fertig, cursor IS NOT NULL AS hat_cursor FROM bridge_scan WHERE id = 1")
       .first()
       .catch(() => null),
   ]);
   const top = roh.results ?? [];
   const aeltesterTag = stand?.aeltestes_bekannt?.slice(0, 10) ?? null;
-  const transferVollstaendig = !!stand?.fertig || (aeltesterTag != null && aeltesterTag < HISTORIE_AB);
+  // Vollstaendig erst am Anfang der Bridge: fertig UND kein Cursor mehr.
+  const transferVollstaendig = !!stand?.fertig && !stand?.hat_cursor;
 
   // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
   const adressen = [...new Set(top.map((r) => r.to_address))];
@@ -1805,11 +1803,11 @@ async function bilanz(db, env) {
       tag: r.day,
       etn: r.etn,
     })),
-    // Wie weit die Transfer-Historie reicht. Solange der Durchgang nicht bis
-    // HISTORIE_AB zurueckgelesen hat, sind "Top 10" die Top 10 des bisher
-    // geprueften Fensters - und das gehoert dazugeschrieben, sonst liest sich
-    // eine Teilmenge wie eine Bestenliste.
-    transfers_ab: transferVollstaendig ? HISTORIE_AB : aeltesterTag,
+    // Wie weit die Transfer-Historie reicht. Solange der Durchgang nicht am
+    // Anfang der Bridge ist, sind "Top 10" die Top 10 des bisher gepruefen
+    // Fensters - und das gehoert dazugeschrieben, sonst liest sich eine
+    // Teilmenge wie eine Bestenliste.
+    transfers_ab: aeltesterTag,
     transfers_vollstaendig: transferVollstaendig,
     mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
   };

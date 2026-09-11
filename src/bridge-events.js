@@ -21,10 +21,10 @@
 // Frage "was waren die groessten Migrationen ueberhaupt" unbeantwortet blieb.
 //
 // WIE ES JETZT LAEUFT:
-// Gebraucht wird der Verkehr seit HISTORIE_AB (Anfang 2026), und die
-// Transferliste der Bridge ist nur von der neuesten Seite aus rueckwaerts
-// durchblaetterbar. Ein Durchgang bis dorthin dauert rund eine Stunde - jede
-// Woche von vorn waere Unfug und gegenueber dem Explorer unhoeflich. Darum:
+// Die Bridge existiert seit dem 03.03.2024, und ihre Transferliste ist nur
+// von der neuesten Seite aus rueckwaerts durchblaetterbar. Ein Durchgang ueber
+// die ganze Historie braucht mehrere Laeufe - jede Woche von vorn waere Unfug
+// und gegenueber dem Explorer unhoeflich. Darum:
 //
 //   1. Die grossen Transfers landen roh in `bridge_transfers`. Der Schluessel
 //      ist aus Transaktion, Empfaenger und Betrag gebaut, also ist ein
@@ -38,9 +38,7 @@
 //      Summe der Transfers, die darunter stehen.
 
 import { fetchInternalTransactions, fetchAddress } from "./blockscout.js";
-import {
-  HISTORIE_AB, haeppchenFalten, obenFalten, tagVon, uebertragLesen, uebertragText,
-} from "./bridge-tage.js";
+import { haeppchenFalten, obenFalten, tagVon, uebertragLesen, uebertragText } from "./bridge-tage.js";
 
 // Ab welchem Einzelbetrag ein Transfer ueberhaupt interessant ist. Darunter
 // ist es Alltagsverkehr: an einem beliebigen Tag laufen hunderte kleine
@@ -53,8 +51,8 @@ const MIN_TRANSFER_ETN = 500000;
 const MAX_TAGE = 40;
 
 // Zeitbudget fuer den Weg zurueck in die Historie, in Minuten. Bei rund
-// 1,5 Seiten pro Sekunde sind 100 Minuten etwa 9.000 Seiten - genug, um bis
-// HISTORIE_AB in einem Lauf zu kommen. Danach kostet ein Lauf nur noch die
+// 1,5 Seiten pro Sekunde sind 100 Minuten etwa 9.000 Seiten. Die ganze
+// Historie braucht mehrere solcher Laeufe; danach kostet ein Lauf nur noch die
 // paar Seiten seit dem letzten Mal.
 const STD_BUDGET_MINUTEN = 100;
 
@@ -210,12 +208,12 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
 
   // --- 2. Weiter zurueck in die Historie --------------------------------
   //
-  // Fertig, sobald ein Tag vor HISTORIE_AB gelesen ist: erst dann ist der
-  // erste Tag des Zeitraums vollstaendig (der aelteste Tag eines Haeppchens
-  // bleibt ja als Uebertrag offen). Auch ein Stand, der schon vorher weiter
-  // zurueckgelesen hat, gilt damit als fertig - ohne eine einzige Seite.
-  const zurueckGenug = () => !!aeltestes && tagVon(aeltestes) < HISTORIE_AB;
-  let fertig = stand.fertig || (zurueckGenug() ? 1 : 0);
+  // Fertig ist der Durchgang erst, wenn der Explorer keine weitere Seite mehr
+  // hat - dann steht auch kein Cursor mehr da. Vom 10. bis 11.09.2026 hoerte
+  // der Durchgang schon beim 01.01.2026 auf und markierte sich dabei als
+  // fertig, behielt aber den Cursor. Ein solcher Stand ist eine Pause, kein
+  // Ende, und setzt hier genau dort fort.
+  let fertig = stand.fertig && !stand.cursor ? 1 : 0;
   let cursor = stand.cursor ? JSON.parse(stand.cursor) : null;
 
   const zustandSchreiben = () =>
@@ -286,7 +284,7 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
       await tageSchreiben(gefaltet.fertig);
       uebertrag = gefaltet.uebertrag;
       cursor = r.cursor;
-      fertig = !r.cursor || zurueckGenug() ? 1 : 0;
+      fertig = r.cursor ? 0 : 1;
       await zustandSchreiben();
       rest -= Date.now() - t0;
       log(
@@ -297,7 +295,7 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
     }
     log(
       fertig
-        ? "  " + HISTORIE_AB + " erreicht - die Historie ist vollstaendig."
+        ? "  Anfang der Bridge erreicht - die Historie ist vollstaendig."
         : "  Budget aufgebraucht, der Rest kommt beim naechsten Lauf."
     );
   } else {
