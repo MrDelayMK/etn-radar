@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       minuten:
-        description: "Zeitbudget fuer den Weg zurueck in die Historie (leer = 100 Minuten)"
+        description: "Zeitbudget fuer den Weg zurueck in die Historie (leer = 130 Minuten)"
         required: false
         default: ""
 

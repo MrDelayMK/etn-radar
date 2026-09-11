@@ -51,10 +51,12 @@ const MIN_TRANSFER_ETN = 500000;
 const MAX_TAGE = 40;
 
 // Zeitbudget fuer den Weg zurueck in die Historie, in Minuten. Bei rund
-// 1,5 Seiten pro Sekunde sind 100 Minuten etwa 9.000 Seiten. Die ganze
-// Historie braucht mehrere solcher Laeufe; danach kostet ein Lauf nur noch die
-// paar Seiten seit dem letzten Mal.
-const STD_BUDGET_MINUTEN = 100;
+// 2,7 Seiten pro Sekunde (Drossel siehe src/blockscout.js) sind 130 Minuten
+// etwa 21.000 Seiten. Die ganze Historie braucht wenige solcher Laeufe;
+// danach kostet ein Lauf nur noch die paar Seiten seit dem letzten Mal.
+// Obergrenze ist das Zeitlimit des Workflows (150 Minuten): dazu kommen noch
+// der Blick nach oben und das Neuaufbauen der Ereignisse.
+const STD_BUDGET_MINUTEN = 130;
 
 // Deckel fuer den Blick nach oben (was ist seit dem letzten Lauf neu). Eine
 // Woche Bridge-Verkehr sind je nach Andrang 15 bis 100 Seiten.

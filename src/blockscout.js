@@ -13,11 +13,18 @@ const schlaf = (ms) => new Promise((r) => setTimeout(r, ms));
 // Worker parallel arbeiten. Parallelitaet erhoeht dann nur noch die
 // Auslastung der Wartezeit, nicht die Anfragerate.
 // ---------------------------------------------------------------------------
+//
+// Der Abstand zaehlt von Anfragestart zu Anfragestart. Bis 11.09.2026 wurden
+// die 300 ms nach jeder Antwort ZUSAETZLICH gewartet: bei rund 370 ms
+// Antwortzeit des Explorers kamen so nur 1,5 Anfragen pro Sekunde zustande,
+// bei sofortiger Antwort dagegen bis zu 3,3. Jetzt liegt die Grenze fest bei
+// knapp 3 pro Sekunde - schneller im Alltag, strenger im Extremfall.
 const DROSSEL = {
-  minAbstandMs: 300, // ca. 3 Anfragen pro Sekunde
+  minAbstandMs: 340, // hoechstens ~2,9 Anfragen pro Sekunde
   kette: Promise.resolve(),
   pauseBis: 0,
   gedrosselt: 0,
+  letzterStart: 0,
 };
 
 export const drosselStatus = () => ({ gedrosselt: DROSSEL.gedrosselt });
@@ -28,7 +35,9 @@ function anstellen() {
     // Nach einem 429 pausieren ALLE Anfragen, nicht nur die betroffene.
     const rest = DROSSEL.pauseBis - Date.now();
     if (rest > 0) await schlaf(rest);
-    if (DROSSEL.minAbstandMs) await schlaf(DROSSEL.minAbstandMs);
+    const abstand = DROSSEL.letzterStart + DROSSEL.minAbstandMs - Date.now();
+    if (abstand > 0) await schlaf(abstand);
+    DROSSEL.letzterStart = Date.now();
   });
   DROSSEL.kette = naechste.catch(() => {});
   return naechste;
