@@ -24,11 +24,11 @@
     },
     {
       "address": "0x6f3bAB37B8812a0343AbEb3490E6aBE68bBFBF5d",
-      "label": "HTX",
+      "label": "MEXC",
       "label_type": "exchange",
       "is_excluded": 1,
-      "confidence": "confirmed",
-      "notes": "Boersen-Wallet. Quelle: ETN-Community, 2026-09."
+      "confidence": "likely",
+      "notes": "Boersen-Wallet. Zuerst als HTX eingetragen (ETN-Community, 2026-09); laut MrDelayMK am 11.09.2026 MEXC. Der Explorer fuehrt keinen oeffentlichen Tag."
     },
     {
       "address": "0x203529b532d96Aa792Edd7F6db6b7c1376Da8131",
