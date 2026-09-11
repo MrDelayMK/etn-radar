@@ -167,3 +167,13 @@ CREATE TABLE IF NOT EXISTS live_budget (
   kosten  INTEGER NOT NULL           -- Explorer-Anfragen dieses Abrufs
 );
 CREATE INDEX IF NOT EXISTS idx_live_budget_ts ON live_budget(ts);
+
+-- Wallets je schneller Stufe (Humpback bis Octopus), einmal am Tag beim
+-- ersten Snapshot geschrieben. Grundlage fuer die 7-Tage-Veraenderung auf der
+-- Tiers-Seite; die Census-Stufen vergleichen stattdessen zwei tier_census-Tage.
+CREATE TABLE IF NOT EXISTS tier_tage (
+  day    TEXT NOT NULL,                  -- YYYY-MM-DD
+  tier   TEXT NOT NULL,                  -- humpback|whale|shark|dolphin|fish|octopus
+  count  INTEGER NOT NULL,
+  PRIMARY KEY (day, tier)
+);

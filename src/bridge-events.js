@@ -37,7 +37,7 @@
 //      aufgebaut. Damit ist die Kopfzahl eines Tages per Konstruktion die
 //      Summe der Transfers, die darunter stehen.
 
-import { fetchInternalTransactions, fetchAddress } from "./blockscout.js";
+import { fetchInternalTransactions, fetchAddress, drosselStatus } from "./blockscout.js";
 import { haeppchenFalten, obenFalten, tagVon, uebertragLesen, uebertragText } from "./bridge-tage.js";
 
 // Ab welchem Einzelbetrag ein Transfer ueberhaupt interessant ist. Darunter
@@ -253,26 +253,38 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
         " (Budget " + Math.round(budgetMs / 60000) + " Minuten, " +
         HAEPPCHEN_SEITEN + " Seiten je Haeppchen) ..."
     );
-    let rest = budgetMs;
-    while (!fertig && rest > 0) {
-      const t0 = Date.now();
+    const frist = Date.now() + budgetMs;
 
-      // Ein Fehler im Haeppchen beendet den Durchgang, ohne ihn scheitern zu
-      // lassen: der Stand bis hierher ist gespeichert, der naechste Lauf
-      // setzt dort fort. Vorher schlug ein Aussetzer beim Explorer bis nach
-      // oben durch - genau daran ist der erste grosse Durchgang nach 68
-      // Minuten gestorben, und weil damals erst am Ende geschrieben wurde,
-      // war die ganze Zeit verloren.
+    // Ein Aussetzer beim Explorer - meist "zu viele Anfragen" - beendet den
+    // Lauf nicht mehr sofort. Bis 11.09.2026 brach er ab; der Lauf nach dem
+    // Lockern der Drossel hielt so nur acht Minuten. Jetzt: das Gelesene ist
+    // gesichert, drei Minuten Pause, dann mit der inzwischen langsameren
+    // Drossel weiter. Erst nach drei Fehlschlaegen in Folge ist Schluss.
+    const pauseMs = opts.fehlerPauseMs ?? 180000;
+    let fehlschlaege = 0;
+    const nachFehler = async (grund) => {
+      fehlschlaege++;
+      if (fehlschlaege >= 3 || frist - Date.now() < pauseMs + 60000) {
+        log("  Abbruch nach " + fehlschlaege + " Fehlschlag/Fehlschlaegen: " + grund);
+        log("  Der Stand ist gesichert - der naechste Lauf macht dort weiter.");
+        return false;
+      }
+      log("  Explorer: " + grund + " - " + Math.round(pauseMs / 1000) + " s Pause, dann weiter" +
+        " (Abstand jetzt " + drosselStatus().abstand_ms + " ms)");
+      await new Promise((r) => setTimeout(r, pauseMs));
+      return true;
+    };
+
+    while (!fertig && frist - Date.now() > 0) {
       let r;
       try {
         r = await fetchInternalTransactions(api, bridge, {
           maxPages: HAEPPCHEN_SEITEN,
           startCursor: cursor,
-          fristMs: rest,
+          fristMs: frist - Date.now(),
         });
       } catch (e) {
-        log("  Abbruch beim Blaettern: " + e.message);
-        log("  Der Stand ist gesichert - der naechste Lauf macht dort weiter.");
+        if (await nachFehler(e.message)) continue;
         break;
       }
       if (!r.seiten) break;
@@ -288,12 +300,20 @@ export async function runBridgeEventAnalysis(env, db, opts = {}) {
       cursor = r.cursor;
       fertig = r.cursor ? 0 : 1;
       await zustandSchreiben();
-      rest -= Date.now() - t0;
+      const drossel = drosselStatus();
       log(
         "  " + seiten + " Seiten gesamt, zurueck bis " +
           (aeltestes ? aeltestes.slice(0, 10) : "—") +
-          ", noch " + Math.max(0, Math.round(rest / 60000)) + " Minuten Budget"
+          ", noch " + Math.max(0, Math.round((frist - Date.now()) / 60000)) + " Minuten Budget" +
+          (drossel.gedrosselt
+            ? " (Explorer bremste " + drossel.gedrosselt + "x, Abstand " + drossel.abstand_ms + " ms)"
+            : "")
       );
+      if (r.abbruch) {
+        if (!(await nachFehler(r.abbruch))) break;
+      } else {
+        fehlschlaege = 0;
+      }
     }
     log(
       fertig

@@ -367,6 +367,50 @@ async function overview(db, env) {
   const proCensus = Object.fromEntries(census.map((c) => [c.tier, c]));
   const censusTag = census[0]?.day ?? null; // fuer die Anzeige "Stand vom ..."
 
+  // 7-Tage-Veraenderung je Stufe.
+  //   Schnelle Stufen: heutiger Stand gegen den Tagesstand von vor sieben Tagen
+  //   (tier_tage, beim ersten Snapshot des Tages geschrieben).
+  //   Census-Stufen: neueste gegen die vorige Zaehlung - aber nur, wenn die
+  //   fuenf bis neun Tage davor lag. Sonst waere es keine Woche, und eine Zahl
+  //   ueber drei Wochen neben "7 days" waere schlicht falsch.
+  const vergleichTier = await db
+    .prepare(
+      "SELECT tier, count, day FROM tier_tage" +
+        " WHERE day = (SELECT max(day) FROM tier_tage WHERE day <= ?) AND day >= ?"
+    )
+    .bind(tagVor(7), tagVor(9))
+    .all()
+    .then((r) => Object.fromEntries(r.results.map((z) => [z.tier, z])))
+    .catch(() => ({}));
+  const vergleichCensus = censusTag
+    ? await db
+        .prepare(
+          "SELECT tier, count, day FROM tier_census" +
+            " WHERE day = (SELECT max(day) FROM tier_census WHERE day < ?)"
+        )
+        .bind(censusTag)
+        .all()
+        .then((r) =>
+          Object.fromEntries(
+            r.results
+              .filter((z) => {
+                const abstand = (Date.parse(censusTag) - Date.parse(z.day)) / 86400000;
+                return abstand >= 5 && abstand <= 9;
+              })
+              .map((z) => [z.tier, z])
+          )
+        )
+        .catch(() => ({}))
+    : {};
+  const aenderung = (jetzt, vorher) =>
+    vorher?.count > 0 && jetzt != null
+      ? {
+          aenderung_7d: ((jetzt - vorher.count) / vorher.count) * 100,
+          anzahl_vorher: vorher.count,
+          vergleich_tag: vorher.day,
+        }
+      : {};
+
   // Dust = alle Adressen der Chain minus die, die NACHWEISLICH darueber liegen
   // (schnelle Tiers + Census-Tiers). Genau dieselbe Rest-Rechnung, die zuvor
   // schon Plankton genutzt hat, jetzt eine Stufe tiefer angesetzt.
@@ -448,6 +492,7 @@ async function overview(db, env) {
           etn: c?.etn_sum ?? null,
           geschaetzt: false,
           census_stand: c?.day ?? null,
+          ...aenderung(c?.count ?? null, vergleichCensus[t.key]),
         };
       }
       return {
@@ -456,6 +501,7 @@ async function overview(db, env) {
         anzahl: proTier["n_" + t.key] ?? 0,
         etn: proTier["e_" + t.key] ?? 0,
         geschaetzt: false,
+        ...aenderung(proTier["n_" + t.key] ?? 0, vergleichTier[t.key]),
       };
     }),
     verlauf: reihe,

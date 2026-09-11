@@ -147,6 +147,16 @@ CREATE TABLE IF NOT EXISTS tier_census (
   PRIMARY KEY (day, tier)
 );
 
+-- Wallets je schneller Stufe (Humpback bis Octopus), einmal am Tag beim
+-- ersten Snapshot geschrieben. Grundlage fuer die 7-Tage-Veraenderung auf der
+-- Tiers-Seite; die Census-Stufen vergleichen stattdessen zwei tier_census-Tage.
+CREATE TABLE IF NOT EXISTS tier_tage (
+  day    TEXT NOT NULL,                  -- YYYY-MM-DD
+  tier   TEXT NOT NULL,                  -- humpback|whale|shark|dolphin|fish|octopus
+  count  INTEGER NOT NULL,
+  PRIMARY KEY (day, tier)
+);
+
 -- Sperr-Zustand fuer manuelle "Jetzt ausfuehren"-Knoepfe (Census,
 -- Cluster-Analyse, ...). Getrennt von den jeweiligen *_runs-Tabellen (die
 -- erst beim FERTIGEN Lauf geschrieben werden): ohne eigene Sperre koennte man

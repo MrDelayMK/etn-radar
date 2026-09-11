@@ -518,6 +518,24 @@ export async function runIngest(env, db, opts = {}) {
     log("  Rang-Historie fuer " + day + " wird angelegt");
   }
 
+  // Wallets je schneller Stufe, einmal am Tag - Grundlage fuer die
+  // 7-Tage-Veraenderung auf der Tiers-Seite. Sechs Zeilen je Tag, aus
+  // denselben Zahlen wie pro_tier oben. Fehlt die Tabelle noch (Migration
+  // nicht gelaufen), wird still uebersprungen: eine Einfuegung in eine
+  // fehlende Tabelle liesse sonst den ganzen Snapshot-Batch scheitern.
+  let tierHeuteDa = true;
+  try {
+    tierHeuteDa = !!(await db.prepare("SELECT 1 FROM tier_tage WHERE day = ? LIMIT 1").bind(day).first());
+  } catch {
+    /* Tabelle fehlt - dann eben beim naechsten Lauf */
+  }
+  if (!tierHeuteDa) {
+    const insTier = db.prepare(
+      "INSERT INTO tier_tage (day, tier, count) VALUES (?,?,?) ON CONFLICT(day, tier) DO NOTHING"
+    );
+    for (const t of schnelleTiers) stmts.push(insTier.bind(day, t.key, proTier["n_" + t.key] ?? 0));
+  }
+
   // --- 7d. Kursmarken fortschreiben --------------------------------------
   //
   // Allzeithoch und -tief kamen einmalig von CoinGecko, weil keine kostenlose

@@ -14,20 +14,39 @@ const schlaf = (ms) => new Promise((r) => setTimeout(r, ms));
 // Auslastung der Wartezeit, nicht die Anfragerate.
 // ---------------------------------------------------------------------------
 //
-// Der Abstand zaehlt von Anfragestart zu Anfragestart. Bis 11.09.2026 wurden
-// die 300 ms nach jeder Antwort ZUSAETZLICH gewartet: bei rund 370 ms
-// Antwortzeit des Explorers kamen so nur 1,5 Anfragen pro Sekunde zustande,
-// bei sofortiger Antwort dagegen bis zu 3,3. Jetzt liegt die Grenze fest bei
-// knapp 3 pro Sekunde - schneller im Alltag, strenger im Extremfall.
+// Der Abstand zaehlt von Anfragestart zu Anfragestart, im Grundzustand 670 ms
+// - hoechstens 1,5 Anfragen pro Sekunde, egal wie schnell der Explorer
+// antwortet. Am 11.09.2026 lief die Drossel kurz mit 340 ms (2,9/s): der
+// Bridge-Durchgang hielt damit nur acht Minuten, dann bremste der Explorer.
+//
+// Bremst er (HTTP 429), wird der Abstand fuer alle folgenden Anfragen um die
+// Haelfte laenger, bis hoechstens vier Sekunden. Erst nach hundert Anfragen
+// ohne Bremse geht es schrittweise wieder zurueck Richtung Grundabstand.
 const DROSSEL = {
-  minAbstandMs: 340, // hoechstens ~2,9 Anfragen pro Sekunde
+  grundAbstandMs: 670,
+  maxAbstandMs: 4000,
+  abstandMs: 670,
+  ohneBremse: 0,
   kette: Promise.resolve(),
   pauseBis: 0,
   gedrosselt: 0,
   letzterStart: 0,
 };
 
-export const drosselStatus = () => ({ gedrosselt: DROSSEL.gedrosselt });
+export const drosselStatus = () => ({ gedrosselt: DROSSEL.gedrosselt, abstand_ms: DROSSEL.abstandMs });
+
+function gebremst() {
+  DROSSEL.gedrosselt++;
+  DROSSEL.ohneBremse = 0;
+  DROSSEL.abstandMs = Math.min(DROSSEL.maxAbstandMs, Math.round(DROSSEL.abstandMs * 1.5));
+}
+
+function ungebremst() {
+  if (DROSSEL.abstandMs <= DROSSEL.grundAbstandMs) return;
+  if (++DROSSEL.ohneBremse < 100) return;
+  DROSSEL.ohneBremse = 0;
+  DROSSEL.abstandMs = Math.max(DROSSEL.grundAbstandMs, Math.round(DROSSEL.abstandMs / 1.2));
+}
 
 /** Reiht die naechste Anfrage ein und wartet, bis sie an der Reihe ist. */
 function anstellen() {
@@ -35,7 +54,7 @@ function anstellen() {
     // Nach einem 429 pausieren ALLE Anfragen, nicht nur die betroffene.
     const rest = DROSSEL.pauseBis - Date.now();
     if (rest > 0) await schlaf(rest);
-    const abstand = DROSSEL.letzterStart + DROSSEL.minAbstandMs - Date.now();
+    const abstand = DROSSEL.letzterStart + DROSSEL.abstandMs - Date.now();
     if (abstand > 0) await schlaf(abstand);
     DROSSEL.letzterStart = Date.now();
   });
@@ -63,12 +82,14 @@ async function getJson(url, { retries = 4, timeoutMs = 25000 } = {}) {
             ? retryAfter * 1000
             : 5000 * Math.pow(3, attempt);
           DROSSEL.pauseBis = Math.max(DROSSEL.pauseBis, Date.now() + warten);
-          DROSSEL.gedrosselt++;
+          gebremst();
           lastErr = new Error("HTTP 429 (zu viele Anfragen), Pause " + Math.round(warten / 1000) + "s");
           continue;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status} bei ${url}`);
-        return await res.json();
+        const daten = await res.json();
+        ungebremst();
+        return daten;
       } finally {
         clearTimeout(t);
       }
@@ -368,7 +389,16 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
     const qs = next
       ? "?" + new URLSearchParams(Object.entries(next).map(([k, v]) => [k, String(v)]))
       : "";
-    const d = await getJson(`${apiBase}/addresses/${hash}/internal-transactions${qs}`);
+    let d;
+    try {
+      d = await getJson(`${apiBase}/addresses/${hash}/internal-transactions${qs}`);
+    } catch (e) {
+      // Schon Seiten gelesen? Dann die behalten statt sie mit dem Fehler zu
+      // verlieren. `next` zeigt genau auf die gescheiterte Seite; der Aufrufer
+      // entscheidet, ob er pausiert und dort fortsetzt.
+      if (seite === 0) throw e;
+      return { transfers: out, seiten: seite, gedeckelt: true, cursor: next, abbruch: e.message };
+    }
     const items = (d.items ?? []).filter(
       (i) => i.value != null && BigInt(i.value) > 0n && i.to?.hash && i.success !== false
     );

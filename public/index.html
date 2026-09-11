@@ -262,6 +262,9 @@ svg.chart{width:100%;display:block}
 .tierrow .cnt{text-align:right;flex-shrink:0;min-width:96px}
 .tierrow .cnt b{font-size:17px;font-weight:660;display:block}
 .tierrow .cnt span{font-size:11px;color:var(--tx2)}
+.tierrow .cnt span.aend{display:block;margin-top:2px;font-weight:600;cursor:help}
+.tierrow .cnt span.aend.up{color:var(--up)}
+.tierrow .cnt span.aend.down{color:var(--down)}
 .tiersfoot{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;flex-wrap:wrap}
 .tiersfoot button{padding:9px 16px;font-size:12.5px}
 .activitybar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
@@ -3026,6 +3029,22 @@ const TIERFARBEN = {
  * waere ein unsichtbarer Strich. Der Supply-Anteil dreht das Bild um und ist die
  * eigentliche Aussage — wenige Wallets halten fast alles.
  */
+/**
+ * Veraenderung der Wallet-Zahl gegenueber vor einer Woche. Fehlt der
+ * Vergleichswert - erste Woche, noch keine zweite Zaehlung -, steht nichts da
+ * statt einer erfundenen Zahl. Der Hinweis nennt, wogegen verglichen wurde.
+ */
+function tierAenderung(t) {
+  const p = t.aenderung_7d;
+  if (p == null || !isFinite(p)) return "";
+  const gerundet = Math.abs(p) < 10 ? Math.round(p * 10) / 10 : Math.round(p);
+  const klasse = gerundet > 0 ? "up" : gerundet < 0 ? "down" : "dim3";
+  const text = gerundet === 0 ? "0%" : (gerundet > 0 ? "↑ +" : "↓ ") + nf(gerundet, Math.abs(gerundet) < 10 ? 1 : 0) + "%";
+  const titel = "7 days: " + nf(t.anzahl_vorher) + " → " + nf(t.anzahl) +
+    (t.vergleich_tag ? " (vs " + new Date(t.vergleich_tag).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + ")" : "");
+  return '<span class="aend num ' + klasse + '" title="' + esc(titel) + '">' + text + "</span>";
+}
+
 function zeichneTiers(tiers, zirkulierend, tierInfo) {
   // Genau eine Stufe (Dust) hat keine eigene ETN-Summe - sie waere nur ueber
   // eine Zaehlung bis auf 0 ETN zu bekommen, was niemand braucht. Ihr Anteil
@@ -3072,15 +3091,16 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
         '%;background:' + f + '"></i></div>' +
       '<div class="barlbl">' + nf(supplyAnteil, 1) + "% of circulating supply</div></div>" +
       '<div class="cnt"><b style="color:' + f + '">' + nf(t.anzahl) + "</b>" +
-      "<span>" + nf(walletAnteil, walletAnteil < 1 ? 2 : 1) + "% of wallets</span></div></div>";
+      "<span>" + nf(walletAnteil, walletAnteil < 1 ? 2 : 1) + "% of wallets</span>" +
+      tierAenderung(t) + "</div></div>";
   }).join("");
 
   const note = el("tiersNote");
   if (note) {
     note.textContent = tierInfo?.census_vorhanden
-      ? "Humpback–Octopus updated every 6h · Crab–Dust from the weekly census (" +
+      ? "Humpback–Octopus updated every 30 min · Crab–Dust from the weekly census (" +
         new Date(tierInfo.census_stand).toLocaleDateString(LOC) + ")"
-      : "Humpback–Octopus updated every 6h · Crab–Dust need the first census to run (weekly, or via the button below)";
+      : "Humpback–Octopus updated every 30 min · Crab–Dust need the first census to run (weekly, or via the button below)";
   }
 }
 
