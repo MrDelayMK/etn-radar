@@ -659,26 +659,29 @@ nav .navrechts button.fbneu{animation:fbpuls 2.6s ease-in-out infinite}
    Dialog sonst laenger als der Bildschirm. */
 .fbliste{max-height:300px;overflow-y:auto;padding-right:4px}
 
-/* Besucherzahlen im selben Dialog - sie gehoeren derselben Person wie der
-   Posteingang und sollen nicht einen eigenen Knopf brauchen. */
-.statcard .stathead{display:flex;justify-content:space-between;align-items:baseline;
-                    gap:10px;margin-bottom:12px;font-size:13.5px;color:var(--tx2)}
-.statcard .stathead .dim3{font-size:11.5px}
-.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;
-        margin-bottom:12px}
-.stkachel{background:var(--card2);border:1px solid var(--line);border-radius:9px;
-          padding:8px 10px}
-.stkachel .k{display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;
-             color:var(--tx3);font-weight:700;margin-bottom:3px}
-.stkachel .w{font-family:var(--mono);font-size:16px;color:var(--tx);font-weight:640}
-.sttage{max-height:172px;overflow-y:auto;font-size:11.5px}
-.sttag{display:flex;justify-content:space-between;gap:10px;padding:4px 0;
-       border-top:1px solid var(--line);font-family:var(--mono);color:var(--tx2)}
-.sttag:first-child{border-top:0}
-.sttag .d{color:var(--tx3)}
-.stliste{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
-.stmarke{background:var(--card2);border:1px solid var(--line);border-radius:6px;
-         padding:2px 7px;font-size:11px;color:var(--tx3);font-family:var(--mono)}
+/* Besucherzahlen auf der Uebersicht - nur fuer den Betreiber sichtbar. */
+.statcard .stathead{display:flex;justify-content:space-between;align-items:center;
+                    gap:10px;margin-bottom:14px;font-size:13.5px;color:var(--tx2)}
+
+/* Besucher (nur Betreiber). Die beiden Chart-Farben sind am 15.09.2026 gegen
+   --card (#111827) geprueft: Helligkeitsband, Farbschwaeche, Kontrast - alles
+   bestanden. Das Blau der Seite (#5b9cff) ist dafuer zu hell. */
+.vistiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:18px}
+@media (max-width:640px){.vistiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vistile{background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.vistile .k{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);font-weight:700}
+.vistile .w{display:block;font-size:21px;font-weight:650;color:var(--tx);margin-top:4px;letter-spacing:-.01em}
+.vistile .s{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.vislegende{display:flex;gap:14px;justify-content:flex-end;font-size:11.5px;color:var(--tx2);margin-bottom:2px}
+.vislegende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.vislisten{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px;margin-top:18px}
+@media (max-width:640px){.vislisten{grid-template-columns:1fr}}
+.vislisten .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-bottom:5px}
+.visbar{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:3px 10px;padding:5px 0}
+.visbar .nm{font-size:13px;color:var(--tx2)}
+.visbar .n{font-size:12.5px;color:var(--tx);font-weight:600}
+.visbar i{grid-column:1 / -1;height:6px;border-radius:3px;background:#4a8df2;min-width:3px}
+.vistipkey{display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle}
 .fbeintrag{position:relative;padding-right:26px}
 .fbdel{position:absolute;top:8px;right:0;width:20px;height:20px;line-height:1;
        border:0;background:transparent;color:var(--tx3);cursor:pointer;
@@ -1067,9 +1070,18 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     <div class="card statcard" id="visStats" hidden>
       <div class="stathead">
         <b>👥 Visitors</b>
-        <span class="dim3" id="visZeit">last 14 days</span>
+        <div class="tabs" id="visTabs"></div>
       </div>
-      <div id="visBody"></div>
+      <div class="vistiles" id="visTiles"></div>
+      <div class="vislegende"><span><i style="background:#4a8df2"></i>New</span><span><i style="background:#d9752a"></i>Returning</span></div>
+      <div class="chartholder" id="visHolder">
+        <svg class="chart" id="visChart"></svg>
+        <div class="tip" id="visTip"></div>
+      </div>
+      <div class="vislisten">
+        <div><div class="k">Pages viewed</div><div id="visSeiten"></div></div>
+        <div><div class="k">Came from</div><div id="visHerkunft"></div></div>
+      </div>
     </div>
   </section>
   <section>
@@ -2444,6 +2456,7 @@ function alleChartsNachziehen() {
   if (el("invChart")._punkte) zeichneChart(el("invChart"));
   if (TIER_VERLAUF.tage) zeichneTierVerlauf();
   if (CHAIN.daten) zeichneChainKacheln();
+  if (VIS.daten) zeichneBesucherChart();
   if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
 function beobachte(holderId, zeichnen) {
@@ -2456,6 +2469,7 @@ function beobachte(holderId, zeichnen) {
 beobachte("prHolder", () => { if (el("prChart")._punkte) zeichnePreisChart(); });
 beobachte("tierVerlauf", () => { if (TIER_VERLAUF.tage) zeichneTierVerlauf(); });
 beobachte("chainKacheln", () => { if (CHAIN.daten) zeichneChainKacheln(); });
+beobachte("visHolder", () => { if (VIS.daten) zeichneBesucherChart(); });
 beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
 beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
@@ -5488,62 +5502,209 @@ function fbSchliessen() {
  * Tag vorbeischaut, zaehlt einmal. Die Dauer ist AKTIVE Zeit - ein Tab, der
  * im Hintergrund liegt, laeuft nicht mit.
  */
+/* Besucher - nur fuer den Betreiber.
+ *
+ * Vier Kacheln, ein Chart, zwei Ranglisten. Klicks und "Regulars" sind raus:
+ * die Klickzahl sagte nichts, und "Regulars" (seit sieben Tagen dabei) stand
+ * wochenlang auf 0 %. */
+const VIS = { tage: "14", daten: null };
+const VIS_ZEITRAEUME = [{ k: "7", t: "7D" }, { k: "14", t: "14D" }, { k: "30", t: "30D" }];
+const VIS_FARBE = { neu: "#4a8df2", wieder: "#d9752a" };
+const VIS_SEITEN = {
+  overview: "Overview", migration: "Migration", tiers: "Tiers", board: "Leaderboard",
+  activity: "Activity", chain: "Chain", investigate: "Investigate", about: "About", clusters: "Clusters",
+};
+
+const visDauer = (s) => {
+  const n = Math.round(Number(s) || 0);
+  return n >= 60 ? Math.floor(n / 60) + "m " + (n % 60) + "s" : n + "s";
+};
+
+// Dieselbe Quelle unter verschiedenen Namen zusammenfassen: t.co ist X,
+// l./lm./m.facebook.com sind alle Facebook. Die eigene Seite ist keine Herkunft.
+function visHerkunftName(h) {
+  const x = String(h).toLowerCase();
+  if (x === "t.co" || x === "x.com" || x.endsWith("twitter.com")) return "X";
+  if (x.endsWith("facebook.com")) return "Facebook";
+  if (/(^|\.)google\./.test(x)) return "Google";
+  if (x === "t.me" || x.endsWith("telegram.org")) return "Telegram";
+  if (x.endsWith("reddit.com")) return "Reddit";
+  if (x === location.hostname) return null;
+  return h;
+}
+
+function visBalken(eintraege) {
+  if (!eintraege.length) return '<div class="dim3" style="font-size:12px">No data yet.</div>';
+  const max = Math.max(1, ...eintraege.map((e) => e.n));
+  return eintraege.map((e) =>
+    '<div class="visbar"><span class="nm">' + esc(e.name) + '</span><span class="n num">' + nf(e.n) +
+    '</span><i style="width:' + ((e.n / max) * 100).toFixed(1) + '%"></i></div>'
+  ).join("");
+}
+
 async function fbBesucher() {
   if (!ADMIN.token) return;
+  let d;
   try {
-    const d = await hole("/api/besuche?tage=14");
-    const g = d.gesamt ?? {};
-    const box = el("visStats");
-    if (!box) return;
-    box.hidden = false;
-    el("visZeit").textContent = "last " + (d.zeitraum_tage ?? 14) + " days";
-
-    const dauer = (s) => {
-      const n = Math.round(Number(s) || 0);
-      return n >= 60 ? Math.floor(n / 60) + "m " + (n % 60) + "s" : n + "s";
-    };
-    const kachel = (k, w) =>
-      '<div class="stkachel"><span class="k">' + k + '</span><span class="w">' + w + "</span></div>";
-    const anteil = (teil, ganz) =>
-      !ganz || teil == null ? "—" : nf((teil / ganz) * 100, 0) + "%";
-
-    const tage = (d.pro_tag ?? [])
-      .map((t) =>
-        '<div class="sttag"><span class="d">' + t.tag + "</span>" +
-        "<span>" + nf(t.leute) + " people" +
-        (t.wieder ? " (" + nf(t.wieder) + " returning)" : "") +
-        " · " + nf(t.besuche) + " visits · " +
-        nf(t.klicks ?? 0) + " clicks · " + dauer(t.dauer) + "</span></div>"
-      )
-      .join("");
-
-    const bereiche = (d.bereiche ?? [])
-      .slice(0, 8)
-      .map((b) => '<span class="stmarke">' + esc(b.name) + " " + nf(b.n) + "</span>")
-      .join("");
-    const herkunft = (d.herkunft ?? [])
-      .map((h) => '<span class="stmarke">' + esc(h.herkunft) + " " + nf(h.n) + "</span>")
-      .join("");
-
-    el("visBody").innerHTML =
-      '<div class="stgrid">' +
-      kachel("People", nf(g.leute ?? 0)) +
-      kachel("Visits", nf(g.besuche ?? 0)) +
-      kachel("Clicks", nf(g.klicks ?? 0)) +
-      kachel("Avg. time", dauer(g.dauer)) +
-      kachel("Mobile", nf(g.mobil ?? 0)) +
-      // Anteil an den Personen je Tag, nicht an den Besuchen: "57 %" sagt,
-      // ob die Seite benutzt oder nur angeklickt wird. Beide Zahlen stehen in
-      // der Tagesliste darunter und lassen sich dort nachzaehlen.
-      kachel("Returning", anteil(g.wieder, g.leute_tage)) +
-      kachel("Regulars", anteil(g.stamm, g.leute_tage)) +
-      "</div>" +
-      (tage ? '<div class="sttage">' + tage + "</div>" : '<div class="dim3" style="font-size:12px">No visits recorded yet.</div>') +
-      (bereiche ? '<div class="stliste">' + bereiche + "</div>" : "") +
-      (herkunft ? '<div class="stliste">' + herkunft + "</div>" : "");
+    d = await hole("/api/besuche?tage=" + VIS.tage);
   } catch {
-    /* kein Zugriff - dann bleiben die Zahlen eben zu */
+    return; /* kein Zugriff - dann bleiben die Zahlen eben zu */
   }
+  VIS.daten = d;
+  el("visStats").hidden = false;
+  periodTabs(el("visTabs"), VIS.tage, (k) => { VIS.tage = k; fbBesucher(); }, VIS_ZEITRAEUME);
+
+  const g = d.gesamt ?? {};
+  const anteil = (teil, ganz) => (!ganz || teil == null ? "—" : nf((teil / ganz) * 100, 0) + "%");
+  const kachel = (k, w, s) =>
+    '<div class="vistile"><span class="k">' + k + '</span><span class="w">' + w + '</span><span class="s">' + s + "</span></div>";
+  el("visTiles").innerHTML =
+    kachel("People", nf(g.leute ?? 0), nf(g.besuche ?? 0) + " visits") +
+    // Anteil an den Personen je Tag: sagt, ob die Seite benutzt oder nur
+    // einmal angeklickt wird.
+    kachel("Returning", anteil(g.wieder, g.leute_tage), "of daily visitors") +
+    kachel("Avg. time", visDauer(g.dauer), "per visit") +
+    kachel("On mobile", anteil(g.mobil, g.besuche), "of visits");
+
+  el("visSeiten").innerHTML = visBalken(
+    (d.bereiche ?? []).slice(0, 8).map((b) => ({ name: VIS_SEITEN[b.name] ?? b.name, n: b.n }))
+  );
+
+  const quellen = {};
+  for (const h of d.herkunft ?? []) {
+    const name = visHerkunftName(h.herkunft);
+    if (name) quellen[name] = (quellen[name] ?? 0) + h.n;
+  }
+  if (g.direkt) quellen["Direct / app"] = g.direkt;
+  el("visHerkunft").innerHTML = visBalken(
+    Object.entries(quellen).map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n).slice(0, 7)
+  );
+
+  zeichneBesucherChart();
+}
+
+// Leute je Tag als Saeulen: unten die Wiederkehrer, oben die Neuen. Tage ohne
+// Besuch sind eine 0, keine Luecke.
+function zeichneBesucherChart() {
+  const d = VIS.daten;
+  const holder = el("visHolder");
+  if (!d || holder.clientWidth === 0) return;
+  const svg = el("visChart");
+  const tip = el("visTip");
+
+  const n = Number(d.zeitraum_tage) || 14;
+  const proTag = Object.fromEntries((d.pro_tag ?? []).map((t) => [t.tag, t]));
+  const reihe = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const tag = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const t = proTag[tag];
+    const leute = t?.leute ?? 0;
+    const wieder = Math.min(leute, t?.wieder ?? 0);
+    reihe.push({ tag, leute, wieder, neu: leute - wieder, besuche: t?.besuche ?? 0, dauer: t?.dauer ?? null });
+  }
+
+  const W = Math.max(320, Math.round(holder.clientWidth));
+  const H = W < 640 ? 170 : 210;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.style.height = H + "px";
+  const PT = 10, PB = 26, PL = 34, PR = 4;
+  const hoehe = H - PT - PB;
+
+  // Glatte Achsenwerte: 0 / 10 / 20 statt 0 / 14 / 28.
+  const max = Math.max(1, ...reihe.map((r) => r.leute));
+  const roh = max / 4;
+  const p = Math.pow(10, Math.floor(Math.log10(roh)));
+  const schritt = Math.max(1, [1, 2, 5, 10].map((f) => f * p).find((s) => s >= roh));
+  const hi = Math.ceil(max / schritt) * schritt;
+
+  const slot = (W - PL - PR) / reihe.length;
+  const breite = Math.min(24, slot * 0.62);
+  const X = (i) => PL + i * slot + (slot - breite) / 2;
+  const hoeheVon = (v) => (v / hi) * hoehe;
+  const basis = H - PB;
+
+  // Rechteck mit 4px runder Oberkante, unten eckig auf der Grundlinie.
+  const saeule = (x, oben, h, farbe, rund) => {
+    if (h <= 0) return "";
+    const r = rund ? Math.min(4, h, breite / 2) : 0;
+    return '<path fill="' + farbe + '" d="M' + x.toFixed(1) + " " + (oben + h).toFixed(1) +
+      "V" + (oben + r).toFixed(1) + (r ? "Q" + x.toFixed(1) + " " + oben.toFixed(1) + " " + (x + r).toFixed(1) + " " + oben.toFixed(1) : "") +
+      "H" + (x + breite - r).toFixed(1) +
+      (r ? "Q" + (x + breite).toFixed(1) + " " + oben.toFixed(1) + " " + (x + breite).toFixed(1) + " " + (oben + r).toFixed(1) : "") +
+      "V" + (oben + h).toFixed(1) + 'Z"/>';
+  };
+
+  let gitter = "";
+  for (let v = 0; v <= hi; v += schritt) {
+    const y = basis - hoeheVon(v);
+    gitter += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) +
+      '" stroke="#1e293b" stroke-width="1"/>' +
+      '<text x="' + (PL - 7) + '" y="' + (y + 4).toFixed(1) + '" fill="#7d8ba3" font-size="11" text-anchor="end" ' +
+      'font-family="ui-monospace,monospace">' + nf(v) + "</text>";
+  }
+
+  const jede = Math.max(1, Math.ceil(reihe.length / Math.max(2, Math.floor((W - PL - PR) / 58))));
+  const datum = (tag) => new Date(tag + "T00:00:00Z").toLocaleDateString(LOC, { month: "short", day: "numeric", timeZone: "UTC" });
+  let achse = "";
+  reihe.forEach((r, i) => {
+    if ((reihe.length - 1 - i) % jede) return; // vom heutigen Tag aus zaehlen, damit er beschriftet ist
+    achse += '<text x="' + (X(i) + breite / 2).toFixed(1) + '" y="' + (H - 8) + '" fill="#7d8ba3" font-size="11" ' +
+      'text-anchor="middle" font-family="ui-monospace,monospace">' + (i === reihe.length - 1 ? "today" : datum(r.tag)) + "</text>";
+  });
+
+  let saeulen = "";
+  reihe.forEach((r, i) => {
+    const hW = hoeheVon(r.wieder);
+    const hN = hoeheVon(r.neu);
+    // 2px Luecke zwischen den Segmenten, von der oberen Haelfte genommen.
+    const luecke = hW > 0 && hN > 0 ? Math.min(2, hN / 2) : 0;
+    saeulen += saeule(X(i), basis - hW, hW, VIS_FARBE.wieder, hN <= 0);
+    saeulen += saeule(X(i), basis - hW - hN, hN - luecke, VIS_FARBE.neu, true);
+  });
+
+  svg.innerHTML = gitter +
+    '<rect class="hl" x="0" y="' + PT + '" width="' + slot.toFixed(1) + '" height="' + hoehe + '" fill="#ffffff" opacity="0"/>' +
+    saeulen + achse;
+
+  const hl = svg.querySelector(".hl");
+  const zeile = (farbe, text) => {
+    const s = document.createElement("span");
+    if (farbe) {
+      const k = document.createElement("i");
+      k.className = "vistipkey";
+      k.style.background = farbe;
+      s.appendChild(k);
+    }
+    s.appendChild(document.createTextNode(text));
+    return s;
+  };
+  holder.onmousemove = (e) => {
+    const box = holder.getBoundingClientRect();
+    const x = ((e.clientX - box.left) / box.width) * W;
+    const i = Math.floor((x - PL) / slot);
+    if (i < 0 || i >= reihe.length) { tip.classList.remove("on"); hl.setAttribute("opacity", "0"); return; }
+    const r = reihe[i];
+    hl.setAttribute("x", (PL + i * slot).toFixed(1));
+    hl.setAttribute("opacity", ".04");
+    const wert = document.createElement("b");
+    wert.textContent = nf(r.leute) + (r.leute === 1 ? " person" : " people");
+    tip.replaceChildren(
+      wert,
+      zeile(VIS_FARBE.neu, nf(r.neu) + " new"),
+      zeile(VIS_FARBE.wieder, nf(r.wieder) + " returning"),
+      zeile(null, nf(r.besuche) + " visits" + (r.dauer != null ? " · " + visDauer(r.dauer) + " avg" : "")),
+      zeile(null, i === reihe.length - 1 ? "today" : datum(r.tag))
+    );
+    tip.classList.add("on");
+    const b = tip.getBoundingClientRect();
+    const px = ((X(i) + breite / 2) / W) * box.width;
+    let links = px + 12;
+    if (links + b.width > box.width) links = Math.max(0, px - b.width - 12);
+    tip.style.left = links + "px";
+    tip.style.right = "auto";
+    tip.style.top = "4px";
+  };
+  holder.onmouseleave = () => { tip.classList.remove("on"); hl.setAttribute("opacity", "0"); };
 }
 
 /* Neues Feedback: der Feedback-Knopf leuchtet beim Betreiber gruen, bis er den

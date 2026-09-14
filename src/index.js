@@ -1083,7 +1083,8 @@ async function besuchMelden(request, db) {
 /** Auswertung - nur fuer den Betreiber. */
 async function besucheLesen(db, u) {
   const tage = zahlParam(u, "tage", 14, 1, 90);
-  const abTag = tagVor(tage);
+  // Heute mitgezaehlt: "14 Tage" sind heute und die 13 davor, nicht 15.
+  const abTag = tagVor(tage - 1);
 
   const [proTag, gesamt, bereiche, herkunft] = await Promise.all([
     db
@@ -1105,7 +1106,10 @@ async function besucheLesen(db, u) {
     db
       .prepare(
         "SELECT count(DISTINCT besucher) leute, count(*) besuche, sum(klicks) klicks," +
-          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil" +
+          " avg(dauer_s) dauer, sum(CASE WHEN geraet='mobil' THEN 1 ELSE 0 END) mobil," +
+          // Ohne Herkunft: Link getippt, aus einem Lesezeichen oder aus einer
+          // App, die keinen Verweis mitschickt.
+          " sum(CASE WHEN herkunft IS NULL THEN 1 ELSE 0 END) direkt" +
           " FROM besuche WHERE tag >= ?"
       )
       .bind(abTag)
@@ -1117,7 +1121,7 @@ async function besucheLesen(db, u) {
     db
       .prepare(
         "SELECT herkunft, count(*) n FROM besuche WHERE tag >= ? AND herkunft IS NOT NULL" +
-          " GROUP BY herkunft ORDER BY n DESC LIMIT 12"
+          " GROUP BY herkunft ORDER BY n DESC LIMIT 25"
       )
       .bind(abTag)
       .all(),
