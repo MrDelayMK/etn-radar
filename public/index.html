@@ -674,13 +674,23 @@ nav .navrechts button.fbneu{animation:fbpuls 2.6s ease-in-out infinite}
 .vistile .s{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
 .vislegende{display:flex;gap:14px;justify-content:flex-end;font-size:11.5px;color:var(--tx2);margin-bottom:2px}
 .vislegende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-.vislisten{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px;margin-top:18px}
+.vislisten{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
 @media (max-width:640px){.vislisten{grid-template-columns:1fr}}
-.vislisten .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-bottom:5px}
-.visbar{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:3px 10px;padding:5px 0}
-.visbar .nm{font-size:13px;color:var(--tx2)}
-.visbar .n{font-size:12.5px;color:var(--tx);font-weight:600}
-.visbar i{grid-column:1 / -1;height:6px;border-radius:3px;background:#4a8df2;min-width:3px}
+.visliste{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 15px 6px}
+.visliste .kopf{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding-bottom:9px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.visliste .kopf .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx2);font-weight:700}
+.visliste .kopf .h{font-size:11px;color:var(--tx3)}
+.visbar{display:grid;grid-template-columns:26px 1fr auto;align-items:center;column-gap:10px;row-gap:6px;
+  padding:8px 0;border-top:1px solid #263a5466}
+.visbar:first-child{border-top:0}
+.visbar .ic{grid-row:span 2;width:26px;height:26px;border-radius:8px;background:var(--card3);
+  display:grid;place-items:center;font-size:13.5px;line-height:1}
+.visbar .nm{font-size:13px;color:var(--tx);font-weight:560}
+.visbar .n{font-size:13px;color:var(--tx);font-weight:650;text-align:right;white-space:nowrap}
+.visbar .n small{font-size:11.5px;font-weight:500;color:var(--tx3);margin-left:7px}
+.visbar .spur{grid-column:2 / 4;height:6px;border-radius:3px;background:var(--card3);overflow:hidden}
+.visbar .spur i{display:block;height:100%;border-radius:3px;min-width:3px}
 .vistipkey{display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle}
 .fbeintrag{position:relative;padding-right:26px}
 .fbdel{position:absolute;top:8px;right:0;width:20px;height:20px;line-height:1;
@@ -1079,8 +1089,14 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <div class="tip" id="visTip"></div>
       </div>
       <div class="vislisten">
-        <div><div class="k">Pages viewed</div><div id="visSeiten"></div></div>
-        <div><div class="k">Came from</div><div id="visHerkunft"></div></div>
+        <div class="visliste">
+          <div class="kopf"><span class="k">📄 Pages viewed</span><span class="h">share of visits</span></div>
+          <div id="visSeiten"></div>
+        </div>
+        <div class="visliste">
+          <div class="kopf"><span class="k">🧭 Came from</span><span class="h">share of visits</span></div>
+          <div id="visHerkunft"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -5509,11 +5525,16 @@ function fbSchliessen() {
  * wochenlang auf 0 %. */
 const VIS = { tage: "14", daten: null };
 const VIS_ZEITRAEUME = [{ k: "7", t: "7D" }, { k: "14", t: "14D" }, { k: "30", t: "30D" }];
-const VIS_FARBE = { neu: "#4a8df2", wieder: "#d9752a" };
+// neu/wieder fuer den Chart, seiten/herkunft je eine Liste. Blau und Tuerkis
+// sind am 15.09.2026 als Paar gegen --card geprueft (bestanden).
+const VIS_FARBE = { neu: "#4a8df2", wieder: "#d9752a", seiten: "#4a8df2", herkunft: "#1aa887" };
+// Name und Icon wie in der Navigation.
 const VIS_SEITEN = {
-  overview: "Overview", migration: "Migration", tiers: "Tiers", board: "Leaderboard",
-  activity: "Activity", chain: "Chain", investigate: "Investigate", about: "About", clusters: "Clusters",
+  overview: ["Overview", "🌊"], migration: ["Migration", "🌉"], tiers: ["Tiers", "🏔️"],
+  board: ["Leaderboard", "🏆"], activity: ["Activity", "⚡"], chain: ["Chain", "⛓️"],
+  investigate: ["Investigate", "🔎"], about: ["About", "📡"], clusters: ["Clusters", "🔍"],
 };
+const VIS_QUELLE_ICON = { X: "𝕏", Facebook: "📘", Google: "🔎", Telegram: "✈️", Reddit: "👽", "Direct / app": "🔗" };
 
 const visDauer = (s) => {
   const n = Math.round(Number(s) || 0);
@@ -5533,12 +5554,16 @@ function visHerkunftName(h) {
   return h;
 }
 
-function visBalken(eintraege) {
-  if (!eintraege.length) return '<div class="dim3" style="font-size:12px">No data yet.</div>';
+// Rangliste: Icon, Name, Zahl mit Anteil an allen Besuchen, darunter der
+// Balken auf einer Spur. Die Balkenlaenge misst am groessten Eintrag.
+function visBalken(eintraege, farbe, besuche) {
+  if (!eintraege.length) return '<div class="dim3" style="font-size:12px;padding:8px 0">No data yet.</div>';
   const max = Math.max(1, ...eintraege.map((e) => e.n));
   return eintraege.map((e) =>
-    '<div class="visbar"><span class="nm">' + esc(e.name) + '</span><span class="n num">' + nf(e.n) +
-    '</span><i style="width:' + ((e.n / max) * 100).toFixed(1) + '%"></i></div>'
+    '<div class="visbar"><span class="ic">' + esc(e.ic ?? "🌐") + '</span>' +
+    '<span class="nm">' + esc(e.name) + '</span>' +
+    '<span class="n num">' + nf(e.n) + (besuche ? "<small>" + nf((e.n / besuche) * 100, 0) + "%</small>" : "") + "</span>" +
+    '<span class="spur"><i style="width:' + ((e.n / max) * 100).toFixed(1) + "%;background:" + farbe + '"></i></span></div>'
   ).join("");
 }
 
@@ -5567,7 +5592,9 @@ async function fbBesucher() {
     kachel("On mobile", anteil(g.mobil, g.besuche), "of visits");
 
   el("visSeiten").innerHTML = visBalken(
-    (d.bereiche ?? []).slice(0, 8).map((b) => ({ name: VIS_SEITEN[b.name] ?? b.name, n: b.n }))
+    (d.bereiche ?? []).slice(0, 8).map((b) => ({ name: VIS_SEITEN[b.name]?.[0] ?? b.name, ic: VIS_SEITEN[b.name]?.[1], n: b.n })),
+    VIS_FARBE.seiten,
+    g.besuche
   );
 
   const quellen = {};
@@ -5577,7 +5604,10 @@ async function fbBesucher() {
   }
   if (g.direkt) quellen["Direct / app"] = g.direkt;
   el("visHerkunft").innerHTML = visBalken(
-    Object.entries(quellen).map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n).slice(0, 7)
+    Object.entries(quellen).map(([name, n]) => ({ name, n, ic: VIS_QUELLE_ICON[name] }))
+      .sort((a, b) => b.n - a.n).slice(0, 7),
+    VIS_FARBE.herkunft,
+    g.besuche
   );
 
   zeichneBesucherChart();
