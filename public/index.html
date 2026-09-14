@@ -1621,15 +1621,17 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <div class="modalbg" id="shareModal">
   <div class="modal">
     <div class="mhead">
-      <b>📢 Share your rank</b>
+      <b id="shareTitel">📢 Share your rank</b>
       <button class="x" id="shareClose" aria-label="Close">&times;</button>
     </div>
 
-    <label class="switchrow">
-      <input type="checkbox" id="shareHideAddr" checked>
-      <span>Keep my wallet address private</span>
-    </label>
-    <div class="dim3" id="sharePrivacyNote" style="font-size:12px;margin-top:7px"></div>
+    <div id="sharePrivat">
+      <label class="switchrow">
+        <input type="checkbox" id="shareHideAddr" checked>
+        <span>Keep my wallet address private</span>
+      </label>
+      <div class="dim3" id="sharePrivacyNote" style="font-size:12px;margin-top:7px"></div>
+    </div>
 
     <div class="sharetexte" id="shareTexte" role="radiogroup" hidden></div>
 
@@ -3126,8 +3128,7 @@ function zeichneChainWoche() {
     fakten.map((f) => f[0] + " " + f[2]).join("\n");
   box.innerHTML = '<ul class="wochefakten">' +
     fakten.map((f) => "<li><i>" + f[0] + "</i><span>" + f[1] + "</span></li>").join("") + "</ul>" +
-    '<div class="sharebar"><button class="ghost" data-teilen="x">Post on X</button>' +
-    '<button class="ghost" data-teilen="tg">Share on Telegram</button></div>';
+    '<div class="sharebar"><button data-teilen>📢 Share this week</button></div>';
 }
 
 el("chainWoche").addEventListener("click", (e) => {
@@ -3138,13 +3139,9 @@ el("chainWoche").addEventListener("click", (e) => {
     investigateAddress(w.dataset.wallet);
     return;
   }
-  const b = e.target.closest("[data-teilen]");
-  if (!b || !CHAIN.text) return;
-  const url = location.origin + "/chain";
-  const ziel = b.dataset.teilen === "x"
-    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(CHAIN.text) + "&url=" + encodeURIComponent(url)
-    : "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(CHAIN.text);
-  window.open(ziel, "_blank", "noopener,width=600,height=560");
+  if (!e.target.closest("[data-teilen]") || !CHAIN.text) return;
+  // Derselbe Dialog wie "Share my rank": Vorschau, dann X oder Telegram.
+  shareTextOeffnen({ titel: "📢 Share this week", text: CHAIN.text, url: location.origin + "/chain" });
 });
 
 function zeichneChainTokens() {
@@ -4467,7 +4464,16 @@ function shareBlock(addr) {
 }
 
 // ---------- Share-Dialog ----------
+// Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
+// Chain-Reiter: dann ohne Adress-Schalter und Satzauswahl, nur Vorschau und
+// Plattform. SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
+let SHARE_FREMD = null;
+
 function shareVorschau() {
+  if (SHARE_FREMD) {
+    el("sharePreview").textContent = SHARE_FREMD.text + "\n" + SHARE_FREMD.url;
+    return;
+  }
   if (!CUR_WALLET) return;
   el("sharePreview").textContent = buildShareText(CUR_WALLET, ZEIGE_ADRESSE) + "\n" + shareUrl();
   el("sharePrivacyNote").textContent = ZEIGE_ADRESSE
@@ -4493,6 +4499,9 @@ function shareTexteZeigen() {
 
 function shareDialogOeffnen() {
   if (!CUR_WALLET) return;
+  SHARE_FREMD = null;
+  el("shareTitel").textContent = "📢 Share your rank";
+  el("sharePrivat").hidden = false;
   el("shareHideAddr").checked = !ZEIGE_ADRESSE;
   SHARE_WAHL = Math.floor(Math.random() * (SHARE_SAETZE[CUR_WALLET.tier]?.length ?? 1));
   shareTexteZeigen();
@@ -4501,10 +4510,20 @@ function shareDialogOeffnen() {
 }
 function shareDialogSchliessen() { el("shareModal").classList.remove("on"); }
 
+function shareTextOeffnen(fremd) {
+  if (!fremd?.text) return;
+  SHARE_FREMD = fremd;
+  el("shareTitel").textContent = fremd.titel;
+  el("sharePrivat").hidden = true;
+  el("shareTexte").hidden = true;
+  shareVorschau();
+  el("shareModal").classList.add("on");
+}
+
 function shareOeffnen(plattform) {
-  if (!CUR_WALLET) return;
-  const text = buildShareText(CUR_WALLET, ZEIGE_ADRESSE);
-  const url = shareUrl();
+  if (!SHARE_FREMD && !CUR_WALLET) return;
+  const text = SHARE_FREMD ? SHARE_FREMD.text : buildShareText(CUR_WALLET, ZEIGE_ADRESSE);
+  const url = SHARE_FREMD ? SHARE_FREMD.url : shareUrl();
   const zielUrl = plattform === "x"
     ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(url)
     : "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
