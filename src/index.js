@@ -2328,12 +2328,18 @@ async function notlaufLesen(cache, u) {
   );
 }
 
+// Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
+// dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
+// des Pfads.
+const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|clusters|investigate|about|wallet\/[^/]+)\/?$/;
+
 export default {
   async fetch(request, env, ctx) {
     const u = new URL(request.url);
     const pfad = u.pathname;
 
     if (!pfad.startsWith("/api/")) {
+      if (SEITEN_PFAD.test(pfad)) return env.ASSETS.fetch(new Request(new URL("/", u), request));
       return env.ASSETS.fetch(request);
     }
 

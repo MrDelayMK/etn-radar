@@ -353,6 +353,7 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .tabs .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 3px}
 .bzjahre{margin:0 0 12px}
 .bzmehr:not([hidden]){display:block;margin:12px auto 0}
+.linkkopie{padding:3px 9px;font-size:11.5px;border-radius:7px;margin-left:9px;vertical-align:middle}
 
 .sharebar{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .sharebar button,.sharebar a{padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center}
@@ -1473,13 +1474,13 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
     </div>
     <div>
       <h4>Dashboard</h4>
-      <a href="#overview">Overview</a>
-      <a href="#migration">Migration</a>
-      <a href="#tiers">Holder tiers</a>
-      <a href="#board">Leaderboard</a>
-      <a href="#activity">Activity</a>
-      <a href="#investigate">Investigate</a>
-      <a href="#about">About</a>
+      <a href="/" data-seite="overview">Overview</a>
+      <a href="/migration" data-seite="migration">Migration</a>
+      <a href="/tiers" data-seite="tiers">Holder tiers</a>
+      <a href="/leaderboard" data-seite="board">Leaderboard</a>
+      <a href="/activity" data-seite="activity">Activity</a>
+      <a href="/investigate" data-seite="investigate">Investigate</a>
+      <a href="/about" data-seite="about">About</a>
       <a href="#" data-feedback>Feedback</a>
       <a href="#" data-spende hidden>Donate</a>
     </div>
@@ -4226,7 +4227,10 @@ function shareVorschau() {
     : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
   el("sharePrivacyNote").style.color = ZEIGE_ADRESSE ? "var(--warn)" : "var(--acc2)";
 }
-const shareUrl = () => location.origin + location.pathname;
+// Der Link verraet die Wallet nur, wenn die Adresse ohnehin mitgeht - sonst
+// stuende sie seit den sauberen Pfaden (/wallet/0x...) im geteilten Link.
+const shareUrl = () =>
+  location.origin + (ZEIGE_ADRESSE && CUR_WALLET ? "/wallet/" + CUR_WALLET.address : "/");
 
 function shareTexteZeigen() {
   const saetze = SHARE_SAETZE[CUR_WALLET?.tier];
@@ -4468,7 +4472,9 @@ function renderWalletDetail(d) {
       '<span style="font-size:11px;font-weight:400">' + walletTags(d) + "</span></div>" +
     (d.anzeige ? '<div class="dim" style="font-size:12.5px">' + esc(d.tier_name) + "</div>" : "") +
     '<a class="addr" href="' + EXPLORER + d.address + '" target="_blank" rel="noopener" style="margin-top:3px;display:inline-block">' +
-      kurzAdr(d.address) + " ↗</a>" + notizBox(d.address, "+ add a note about this wallet") + "</div>" +
+      kurzAdr(d.address) + " ↗</a>" +
+      '<button class="ghost linkkopie" id="walletLink" type="button">🔗 Copy link</button>' +
+      notizBox(d.address, "+ add a note about this wallet") + "</div>" +
     '<div style="text-align:right"><div class="num" style="font-size:25px;font-weight:660">' +
     kurz(d.etn) + ' <span style="font-size:.5em;color:var(--tx2)">ETN</span></div>' +
     '<div class="dim3" style="font-size:12px">' +
@@ -4485,6 +4491,8 @@ function renderWalletDetail(d) {
     shareBlock(d.address);
 
   CUR_WALLET = d;
+  // Die Adresszeile zeigt die Wallet - so laesst sie sich als Link teilen.
+  if (el("page-investigate").classList.contains("on")) adresseSetzen("/wallet/" + d.address, false);
 
   // Die Fluss-Diagramme kommen live vom Explorer, nicht aus der Datenbank -
   // sie funktionieren deshalb auch fuer Wallets ausserhalb der verfolgten
@@ -4552,12 +4560,24 @@ function renderWalletDetail(d) {
 
 /** Springt zum Investigate-Tab und laedt sofort ein bestimmtes Wallet - Ziel
     des rechten Mausklicks "Investigate" ueberall im Dashboard. */
-function investigateAddress(addr) {
+function investigateAddress(addr, neu = true) {
   el("invQ").value = addr;
   el("invQ").dispatchEvent(new Event("input"));
-  location.hash = "investigate";
-  zeigeSeite("investigate");
+  zeigeSeite("investigate", neu);
   ladeWalletDetail(addr).catch((e) => console.error("investigate:", e));
+}
+
+/** Link in die Zwischenablage. Wo das nicht erlaubt ist (manche eingebetteten
+    Ansichten), zeigt ein Dialog den Link zum Kopieren von Hand. */
+async function linkKopieren(knopf, url) {
+  try {
+    await navigator.clipboard.writeText(url);
+    const vorher = knopf.textContent;
+    knopf.textContent = "✓ Link copied";
+    setTimeout(() => { knopf.textContent = vorher; }, 1800);
+  } catch {
+    prompt("Copy this link:", url);
+  }
 }
 
 el("invGoBtn").onclick = () => {
@@ -4568,6 +4588,8 @@ el("invQ").addEventListener("keydown", (e) => { if (e.key === "Enter") el("invGo
 el("invHead").addEventListener("click", (e) => {
   const a = e.target.closest("a[data-addr]");
   if (a) { el("invQ").value = a.dataset.addr; el("invQ").dispatchEvent(new Event("input")); ladeWalletDetail(a.dataset.addr).catch(console.error); return; }
+  const kopie = e.target.closest("#walletLink");
+  if (kopie && CUR_WALLET) { linkKopieren(kopie, location.origin + "/wallet/" + CUR_WALLET.address); return; }
   if (e.target.closest("#shareOpen")) { shareDialogOeffnen(); return; }
 });
 
@@ -4735,7 +4757,7 @@ const LADER = {
   investigate: () => ladeWatchlist(),
 };
 
-function zeigeSeite(name) {
+function zeigeSeite(name, neu = true) {
   if (typeof ZAEHLER !== "undefined" && name) ZAEHLER.bereiche.add(name);
   // Ausgeblendete Bereiche (labs) duerfen auch nicht ueber die Adresszeile
   // erreichbar sein - sonst kommt jeder ueber "#clusters" auf die noch
@@ -4747,7 +4769,11 @@ function zeigeSeite(name) {
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
   if (wechsel) window.scrollTo({ top: 0 });
   el("nav").querySelectorAll("button[data-p]").forEach((b) => b.classList.toggle("on", b.dataset.p === name));
-  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+  // Auf Investigate mit geladener Wallet bleibt deren Adresse stehen.
+  adresseSetzen(
+    name === "investigate" && CUR_WALLET ? "/wallet/" + CUR_WALLET.address : pfadVon(name),
+    neu && wechsel
+  );
   if (!geladen.has(name)) {
     geladen.add(name);
     LADER[name]().catch((err) => console.error(name + ":", err));
@@ -4773,14 +4799,57 @@ el("nav").onclick = (e) => {
   if (b) zeigeSeite(b.dataset.p);
 };
 
-// Anker-Wechsel NACH dem Laden beachten: geteilte Links wie
-// ".../#investigate", der Zurueck-Knopf des Browsers, oder ein nachtraeglich
-// gesetzter Anker. Ohne das wertet die Seite den Anker nur einmal beim Start
-// aus und ignoriert jede spaetere Aenderung stillschweigend.
-window.addEventListener("hashchange", () => {
+/* ---------- Adressen der Bereiche -------------------------------------------
+ *
+ * Saubere Pfade statt "#anker": /migration, /leaderboard, /wallet/0x... Eine
+ * untersuchte Wallet laesst sich so als Link weitergeben - vorher stand in der
+ * Adresszeile nur "#investigate", und wer den Link bekam, sah ein leeres
+ * Suchfeld. Der Worker liefert fuer jeden dieser Pfade dieselbe Seite aus.
+ *
+ * Alte Links mit "#investigate" usw. funktionieren weiter und werden beim
+ * Oeffnen auf den Pfad umgeschrieben.
+ */
+const PFADE = { overview: "/", board: "/leaderboard" };
+const pfadVon = (name) => PFADE[name] ?? "/" + name;
+
+function seiteAusPfad(pfad) {
+  const p = pfad.replace(/\/+$/, "") || "/";
+  const w = p.match(/^\/wallet\/([^/]+)$/);
+  if (w) return { seite: "investigate", wallet: decodeURIComponent(w[1]) };
+  return { seite: Object.keys(LADER).find((n) => pfadVon(n) === p) ?? null };
+}
+
+/** neu = true legt einen Verlaufseintrag an, damit "Zurueck" funktioniert. */
+function adresseSetzen(pfad, neu) {
+  if (location.pathname === pfad && !location.hash) return;
+  const url = pfad + location.search;
+  if (neu) history.pushState(null, "", url);
+  else history.replaceState(null, "", url);
+}
+
+addEventListener("popstate", () => {
+  // Ein von Hand getippter alter Anker kommt gleich als hashchange.
+  if (LADER[location.hash.slice(1)]) return;
+  const z = seiteAusPfad(location.pathname);
+  if (z.wallet && z.wallet.toLowerCase() !== String(CUR_WALLET?.address ?? "").toLowerCase()) {
+    investigateAddress(z.wallet, false);
+  } else {
+    zeigeSeite(z.seite ?? "overview", false);
+  }
+});
+
+addEventListener("hashchange", () => {
   const ziel = location.hash.slice(1);
-  const aktuell = document.querySelector("#nav button.on")?.dataset.p;
-  if (LADER[ziel] && ziel !== aktuell) zeigeSeite(ziel);
+  if (LADER[ziel]) zeigeSeite(ziel);
+});
+
+// Links auf Bereiche (Fusszeile) wechseln ohne Neuladen. Mit Strg/Cmd bleibt
+// es ein normaler Link, der in einem neuen Tab aufgeht.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-seite]");
+  if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  zeigeSeite(a.dataset.seite);
 });
 
 // ---------- Wiring ----------
@@ -5078,13 +5147,18 @@ leerenVerdrahten("invQ", () => {
     .forEach((id) => { if (el(id)) el(id).style.display = "none"; });
   el("invHead").innerHTML = "";
   CUR_WALLET = null;
+  if (el("page-investigate").classList.contains("on")) adresseSetzen("/investigate", false);
 });
 leerenVerdrahten("lbSearch", () => {
   el("lbSearchMsg").style.display = "none";
   el("lbSearchMsg").textContent = "";
 });
 
-const start = location.hash.slice(1);
+// Alte Links mit "#migration" haben Vorrang, sonst entscheidet der Pfad.
+const startZiel = LADER[location.hash.slice(1)]
+  ? { seite: location.hash.slice(1) }
+  : seiteAusPfad(location.pathname);
+const start = startZiel.seite ?? "overview";
 /* ---------- Willkommen -----------------------------------------------------
  *
  * Einmal je Browser. Der Grund ist handfest: der Stern an einer Wallet-Zeile
@@ -5512,7 +5586,8 @@ setInterval(() => {
   pruefeNeueDaten();
 }, 60000);
 
-zeigeSeite(LADER[start] ? start : "overview");
+if (startZiel.wallet) investigateAddress(startZiel.wallet, false);
+else zeigeSeite(LADER[start] ? start : "overview", false);
 // Kopfzeile (Snapshot-Zeit, Preis) soll auch dann stimmen, wenn man per
 // Deep-Link auf einem anderen Reiter startet. Wichtig: den VOLLEN Loader
 // aufrufen, nicht nur ladeOverview() - sonst gilt "overview" als geladen,
