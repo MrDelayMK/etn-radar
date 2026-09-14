@@ -126,7 +126,7 @@ h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);
 .mig .lbl{font-size:12.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--warn);
           display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .mig .lbl .ic{font-size:26px}
-.pill{background:#fbbf2418;border:1px solid #fbbf2440;color:var(--warn);
+.pill{background:#fbbf2418;border:1px solid #fbbf2440;color:var(--warn);white-space:nowrap;
       padding:4px 11px;border-radius:20px;font-size:11px;letter-spacing:.05em}
 .mig .big{font-size:clamp(42px,6.4vw,68px);font-weight:690;letter-spacing:-.04em;line-height:1}
 .mig .bigsub{margin-top:9px;font-size:15px;color:var(--tx2)}
@@ -818,6 +818,8 @@ nav .navrechts button.fbneu{animation:fbpuls 2.6s ease-in-out infinite}
        font:550 12.5px var(--sans);color:var(--tx2);transition:.13s}
 .wchip:hover{border-color:var(--acc);color:var(--tx)}
 .wchip b{color:var(--tx);font-weight:620}
+.invtipps{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:13px}
+.invtipps .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-right:3px}
 .wchip .num{font-family:var(--mono);font-size:11.5px;color:var(--tx3)}
 /* ---------- ETN-Preiskarte ---------- */
 .pricecard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
@@ -928,6 +930,69 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   .wrap{padding:0 14px}
   .mig{padding:18px}
   nav button{padding:11px 13px;font-size:13.5px}
+  nav button .ic{font-size:17px}
+
+  /* Kopf: die drei Chips in einer Reihe, galacticsl.com nur als Logo. Vorher
+     brachen sie in drei Zeilen um, der Kurs stand allein da. */
+  header{gap:10px;padding-top:18px}
+  header .brand{flex:1 0 100%}
+  .hspace{display:none}
+  .chip{padding:6px 10px;font-size:12px}
+  .homelink span{display:none}
+
+  /* Feedback und Donate stehen auch im Footer - hier bleibt der Platz den Reitern. */
+  nav .navrechts{display:none}
+
+  /* Willkommen: Titel, Satz, Knopf. Die Liste schob am Handy alles weit nach unten. */
+  .welcome ul,.welcome > img{display:none}
+
+  /* Kacheln 2x2 statt je eine ganze Zeile. */
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:14px}
+  .kpi .k{font-size:10px;gap:6px}
+  .kpi .k .ic{font-size:16px}
+  .kpi .v{font-size:22px}
+  .mig .stats{grid-template-columns:1fr 1fr;min-width:0;gap:9px}
+  .fact{padding:11px 12px}
+  .fact .k{font-size:10px}
+  .fact .v{font-size:19px}
+
+  /* Migrations-Chart: die Umschalter in eine eigene Zeile. */
+  .chartcard .top .r{width:100%;flex-wrap:wrap;gap:10px !important}
+  .chartcard .top .r > div:first-child{text-align:left !important}
+  .chartcard .top .r .tabs{flex:1 0 100%}
+}
+
+/* Die Reiter scrollen am schmalen Schirm seitlich - der ausgeblendete Rand
+   zeigt, dass rechts noch mehr kommt. */
+@media(max-width:900px){
+  nav .navtabs{-webkit-mask-image:linear-gradient(90deg,#000 84%,transparent);
+               mask-image:linear-gradient(90deg,#000 84%,transparent)}
+}
+
+/* Footer: der Beschreibungstext ueber die ganze Breite statt in einer schmalen Spalte. */
+@media(max-width:860px){ .footcols > .footbrand{grid-column:1 / -1} }
+
+/* Leaderboard am Handy als Karten: die Tabelle war 860 px breit, den Bestand
+   sah man erst nach seitlichem Wischen. Oben Rang, Wallet, Bestand; darunter
+   Stufe und 7 Tage. 24H, 6M und "Last moved" stehen im Profil der Wallet. */
+@media(max-width:640px){
+  .lbtab{min-width:0}
+  .lbtab thead{display:none}
+  .lbtab,.lbtab tbody{display:block}
+  .lbtab tr{display:grid;grid-template-columns:28px minmax(0,1fr) auto;column-gap:10px;row-gap:4px;
+            align-items:center;padding:11px 12px;border-top:1px solid var(--line)}
+  .lbtab tr:first-child{border-top:0}
+  .lbtab td{display:block;padding:0;border:0}
+  .lbtab td:nth-child(1){grid-row:1 / span 2;align-self:start;padding-top:3px;font-size:12px}
+  .lbtab td:nth-child(2){grid-column:2;grid-row:1;min-width:0}
+  .lbtab td:nth-child(4){grid-column:3;grid-row:1}
+  .lbtab td:nth-child(3){grid-column:2;grid-row:2;font-size:15px}
+  .lbtab td:nth-child(3) span{font-size:11.5px}
+  .lbtab td:nth-child(6){grid-column:3;grid-row:2;font-size:12px}
+  .lbtab td:nth-child(6)::before{content:"7D ";color:var(--tx3);font-weight:500}
+  .lbtab td:nth-child(5),.lbtab td:nth-child(7),.lbtab td:nth-child(8){display:none}
+  .lbtab td[colspan]{grid-column:1 / -1}
 }
 </style>
 </head>
@@ -1079,7 +1144,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
          dieser Block nie eingeblendet. -->
     <div class="card statcard" id="visStats" hidden>
       <div class="stathead">
-        <b>👥 Visitors</b>
+        <b>👥 ETN Radar Visitors</b>
         <div class="tabs" id="visTabs"></div>
       </div>
       <div class="vistiles" id="visTiles"></div>
@@ -1415,6 +1480,16 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         </div>
         <button id="invGoBtn">Check</button>
       </div>
+      <!-- Ohne Suche war die Seite nur ein leeres Feld. Bekannte Adressen zum
+           Ausprobieren; verschwindet, sobald eine Wallet geladen wird. -->
+      <div class="invtipps" id="invTipps">
+        <span class="lbl">Try</span>
+        <button class="wchip" data-addr="0xB7990022d3F22B6FB3afb626E05289ee3bf0AE62">🌉 ETN Bridge</button>
+        <button class="wchip" data-addr="0x92F0bac0f513CcAFC2b4101365E2d1afCf9874e4">KuCoin</button>
+        <button class="wchip" data-addr="0x6f3bAB37B8812a0343AbEb3490E6aBE68bBFBF5d">MEXC</button>
+        <button class="wchip" data-addr="0x203529b532d96Aa792Edd7F6db6b7c1376Da8131">HTX</button>
+        <button class="wchip" data-addr="0x6ae77AF00D6d646690CAB3A6d60fc96acF40FEAc">Biconomy</button>
+      </div>
       <div class="watchchips" style="display:none"></div>
     </div>
   </section>
@@ -1498,8 +1573,8 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
           <li><b>Migration</b><span>Bridge balance, daily pace, and the gap to the deadline</span></li>
           <li><b>Whales</b><span>The top 3,000 wallets, re-read every 30 minutes</span></li>
           <li><b>Sleepers</b><span>Wallets that sat still for months and suddenly move</span></li>
-          <li><b>Tiers</b><span>How the full holder base is spread across size bands</span></li>
-          <li><b>Concentration</b><span>What share the top 10, 100 and 1,000 hold over time</span></li>
+          <li><b>Tiers</b><span>How the full holder base is spread across size bands, and how each band grows day by day</span></li>
+          <li><b>Chain</b><span>Network activity, ecosystem tokens and newly verified contracts</span></li>
         </ul>
       </div>
     </div>
@@ -1536,7 +1611,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
           <li><b>Source</b><span>blockexplorer.electroneum.com, the official Blockscout instance</span></li>
           <li><b>Snapshot</b><span>Top 3,000 wallets, every 30 minutes</span></li>
           <li><b>Full census</b><span>Down to dust balances, once a week</span></li>
-          <li><b>Bridge events</b><span>Single transfers of 500,000 ETN or more, weekly</span></li>
+          <li><b>Bridge events</b><span>Every transfer out of the bridge since March 2024, checked daily</span></li>
           <li><b>Price</b><span>Whatever the explorer reports for ETN, per snapshot</span></li>
         </ul>
       </div>
@@ -2911,6 +2986,10 @@ function zeichnePreisChart(punkte) {
   };
 }
 
+// "Aug 14" wie in allen anderen Charts, nicht "8/14/2026".
+const netzDatum = (tag) =>
+  new Date(tag + "T00:00:00Z").toLocaleDateString(LOC, { month: "short", day: "numeric", timeZone: "UTC" });
+
 /** Schlichtes Balkenbild der Tagestransaktionen. */
 function zeichneNetzChart(tage) {
   const svg = el("netTxChart");
@@ -2925,13 +3004,13 @@ function zeichneNetzChart(tage) {
         '" y="' + (H - h).toFixed(2) +
         '" width="' + (breite * 0.72).toFixed(2) +
         '" height="' + h.toFixed(2) + '" rx="1"><title>' +
-        new Date(t.day).toLocaleDateString(LOC) + ": " + nf(t.tx) + " tx</title></rect>";
+        netzDatum(t.day) + ": " + nf(t.tx) + " tx</title></rect>";
     })
     .join("");
 
   el("netTxRange").textContent = "peak " + kurz(max);
-  el("netTxFrom").textContent = new Date(tage[0].day).toLocaleDateString(LOC);
-  el("netTxTo").textContent = new Date(tage[tage.length - 1].day).toLocaleDateString(LOC);
+  el("netTxFrom").textContent = netzDatum(tage[0].day);
+  el("netTxTo").textContent = netzDatum(tage[tage.length - 1].day);
 }
 
 /* ---------- Aftermath ----------------------------------------------------
@@ -3475,7 +3554,9 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
         '%;background:' + f + '"></i></div>' +
       '<div class="barlbl">' + nf(supplyAnteil, 1) + "% of circulating supply</div></div>" +
       '<div class="cnt"><b style="color:' + f + '">' + nf(t.anzahl) + "</b>" +
-      "<span>" + nf(walletAnteil, walletAnteil < 1 ? 2 : 1) + "% of wallets</span>" +
+      // "0.00 %" sah bei den obersten Stufen kaputt aus - es sind nur sehr wenige.
+      "<span>" + (walletAnteil > 0 && walletAnteil < 0.01 ? "<0.01" : nf(walletAnteil, walletAnteil < 1 ? 2 : 1)) +
+        "% of wallets</span>" +
       tierAenderung(t) + "</div></div>";
   }).join("");
 
@@ -4300,6 +4381,7 @@ const tierEmoji = (key) => ({
 
 // ---------- Investigate (full wallet detail page) ----------
 async function ladeWalletDetail(q) {
+  el("invTipps").hidden = true;
   const wrap = { head: el("invResultWrap"), chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap"), fluss: el("invFlowWrap") };
   const empty = el("invEmpty");
   Object.values(wrap).forEach((w) => (w.style.display = "none"));
@@ -5068,6 +5150,15 @@ function zeigeSeite(name, neu = true) {
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + name));
   if (wechsel) window.scrollTo({ top: 0 });
   el("nav").querySelectorAll("button[data-p]").forEach((b) => b.classList.toggle("on", b.dataset.p === name));
+  // Am Handy passen nicht alle Reiter nebeneinander: den aktiven in die Mitte
+  // der Leiste holen, sonst sieht man nach /leaderboard gar nicht, wo man ist.
+  const aktiv = document.querySelector('#nav button[data-p="' + name + '"]');
+  const leiste = aktiv?.parentElement;
+  if (leiste && leiste.scrollWidth > leiste.clientWidth) {
+    // Direkt gesetzt statt weich gescrollt: eine weiche Bewegung bricht ab,
+    // wenn gleich danach der Inhalt der Seite neu aufgebaut wird.
+    leiste.scrollLeft = aktiv.offsetLeft - leiste.offsetLeft - (leiste.clientWidth - aktiv.offsetWidth) / 2;
+  }
   // Auf Investigate mit geladener Wallet bleibt deren Adresse stehen.
   adresseSetzen(
     name === "investigate" && CUR_WALLET ? "/wallet/" + CUR_WALLET.address : pfadVon(name),
@@ -5450,7 +5541,12 @@ leerenVerdrahten("invQ", () => {
     .forEach((id) => { if (el(id)) el(id).style.display = "none"; });
   el("invHead").innerHTML = "";
   CUR_WALLET = null;
+  el("invTipps").hidden = false;
   if (el("page-investigate").classList.contains("on")) adresseSetzen("/investigate", false);
+});
+el("invTipps").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-addr]");
+  if (b) investigateAddress(b.dataset.addr);
 });
 leerenVerdrahten("lbSearch", () => {
   el("lbSearchMsg").style.display = "none";
