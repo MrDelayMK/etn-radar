@@ -1219,7 +1219,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <div class="tabs" style="margin-left:auto">
         <button class="ghost" id="hideEx" title="Hide the bridge, exchanges and contracts">Real wallets only</button>
         <button class="ghost" id="onlyEx" title="Only exchanges, bridges, services and contracts">Services only</button>
-        <button class="ghost" id="exchangesBtn" style="display:none" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
       </div>
     </h2>
     <div class="rangebar lbleiste">
@@ -1256,6 +1255,11 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
         <button class="ghost on" data-n="50">50</button>
         <button class="ghost" data-n="100">100</button>
       </div>
+    </div>
+    <!-- Nur fuer den Betreiber sichtbar (ladeJobStatus) - darum unter der
+         Tabelle statt neben den Filtern, die jeder benutzt. -->
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="ghost" id="exchangesBtn" style="display:none" title="Scores the top wallets for exchange-like behaviour. Flags candidates by pattern only - could also catch team/treasury/payout wallets, never assigns a real name.">🔍 Detect exchanges</button>
     </div>
   </section>
 </div>
