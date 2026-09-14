@@ -350,6 +350,7 @@ button.ghost:hover:not(:disabled){background:var(--card3);color:var(--tx);border
 button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs button{padding:6px 13px;font-size:12.5px;border-radius:8px}
+.tabs .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 3px}
 
 .sharebar{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .sharebar button,.sharebar a{padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center}
@@ -2039,7 +2040,12 @@ function zeichneChart(svg, punkte, totalSupply) {
   const ys = daten.map((p) => p.etn);
   const min = Math.min(...ys), max = Math.max(...ys);
   const spanne = max - min || Math.abs(max) * 0.02 || 1;
-  const lo = min - spanne * 0.12, hi = max + spanne * 0.12;
+  const lo = min - spanne * 0.12;
+  // Mehr als die gesamte Menge kann nie in der Bridge liegen - sonst stuende
+  // bei der ganzen Historie "106 %" an der obersten Linie.
+  const hi = svg._totalSupply
+    ? Math.min(max + spanne * 0.12, Math.max(max, svg._totalSupply))
+    : max + spanne * 0.12;
 
   const X = (i) => PL + (i / (daten.length - 1)) * (W - PL - PR);
   const Y = (v) => H - PB - ((v - lo) / (hi - lo)) * (H - PT - PB);
@@ -2061,13 +2067,17 @@ function zeichneChart(svg, punkte, totalSupply) {
   }).join("");
 
   // Datumsachse: so viele Marken, wie bei der aktuellen Breite lesbar sind.
+  // Ueber mehr als ein Jahr hinweg sagt der Monat samt Jahr mehr als der Tag.
+  const ueberJahr =
+    Date.parse(daten[daten.length - 1].day) - Date.parse(daten[0].day) > 330 * 86400000;
   const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
   const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
     const i = Math.round((n / marken) * (daten.length - 1));
     const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
     return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
       'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
-      new Date(daten[i].day).toLocaleDateString(LOC, { month: "short", day: "numeric" }) + "</text>";
+      new Date(daten[i].day).toLocaleDateString(LOC,
+        ueberJahr ? { month: "short", year: "numeric" } : { month: "short", day: "numeric" }) + "</text>";
   }).join("");
 
   svg.innerHTML =
@@ -2282,7 +2292,7 @@ function tierMiniChart(holder, reihe, farbe, datum) {
 // Vorgabe ist der Bestand: die Ansicht, die eine Frage ohne Vorwissen
 // beantwortet ("wie viel liegt noch drin"). Das Tempo ist die Nachfrage
 // darauf und steht einen Klick daneben.
-const MIG = { sicht: "bestand", punkte: [], opts: null };
+const MIG = { sicht: "bestand", bereich: "2026", punkte: [], opts: null, voll: {} };
 // Woche oder Monat. Die Woche zeigt einzelne grosse Migrationstage noch als
 // eigenen Balken; der Monat glaettet sie weg und zeigt dafuer den Trend.
 // Beides ist berechtigt, je nach Frage - darum beides.
@@ -2318,17 +2328,34 @@ const MIG_SICHTEN = [
   ["tempo_woche", "Per week"],
   ["tempo_monat", "Per month"],
 ];
+// Ab 2026 oder die ganze Migration seit Maerz 2024. Erst sichtbar, wenn der
+// Verlauf aus dem Bridge-Durchgang da ist - vorher gaebe es nichts umzuschalten.
+const MIG_BEREICHE = [
+  ["2026", "2026"],
+  ["all", "All"],
+];
 function migSchalter() {
   const box = el("migViews");
-  box.innerHTML = MIG_SICHTEN
-    .map(([k, t]) => '<button data-s="' + k + '"' + (MIG.sicht === k ? ' class="on"' : "") +
-      ">" + t + "</button>")
-    .join("");
-  box.querySelectorAll("button").forEach((b) => {
+  const knopf = (art, k, t, an) =>
+    "<button data-" + art + '="' + k + '" class="ghost' + (an ? " on" : "") + '">' + t + "</button>";
+  box.innerHTML =
+    (MIG.voll["2026"]
+      ? MIG_BEREICHE.map(([k, t]) => knopf("b", k, t, MIG.bereich === k)).join("") +
+        '<i class="tabsep"></i>'
+      : "") +
+    MIG_SICHTEN.map(([k, t]) => knopf("s", k, t, MIG.sicht === k)).join("");
+  box.querySelectorAll("button[data-s]").forEach((b) => {
     b.onclick = () => {
       MIG.sicht = b.dataset.s;
       migSchalter();
       zeichneMigration();
+    };
+  });
+  box.querySelectorAll("button[data-b]").forEach((b) => {
+    b.onclick = () => {
+      if (MIG.bereich === b.dataset.b) return;
+      MIG.bereich = b.dataset.b;
+      ladeBridgeVerlauf();
     };
   });
 }
@@ -2387,7 +2414,7 @@ async function ladeOverview() {
   const v = d.bridge_verlauf ?? [];
   // Die ganze Historie hat Vorrang, sobald sie einmal geladen ist - sonst
   // schluege der Chart bei jedem neuen Snapshot auf die 120 Tage zurueck.
-  MIG.punkte = MIG.voll ?? v;
+  MIG.punkte = MIG.voll[MIG.bereich] ?? MIG.voll["2026"] ?? v;
   MIG.opts = {
     deadline: m.deadline,
     totalSupply: d.total_supply,
@@ -2880,22 +2907,37 @@ function migVerlaufBeschriften() {
 }
 
 /**
- * Der Bridge-Bestand seit Anfang 2026. Kommt erst, wenn der Durchgang durch
- * die Historie bis dorthin gelesen hat - bis dahin bleibt
- * der Chart bei den 120 Tagen aus der Uebersicht.
+ * Der Bridge-Bestand seit Anfang 2026 oder (All) seit dem Start der Bridge.
+ * Kommt erst, wenn der Durchgang durch die Historie weit genug gelesen hat -
+ * bis dahin bleibt der Chart bei den 120 Tagen aus der Uebersicht.
  */
 async function ladeBridgeVerlauf() {
-  let d;
+  const bereich = MIG.bereich;
+  const zeigen = (punkte) => {
+    MIG.punkte = punkte;
+    migSchalter();
+    zeichneMigration();
+    migVerlaufBeschriften();
+  };
+  // Schon einmal geladen: sofort umschalten, der frische Stand kommt hinterher.
+  if (MIG.voll[bereich]) zeigen(MIG.voll[bereich]);
+  else migSchalter();
+  let d = null;
   try {
-    d = await hole("/api/bridge-verlauf");
-  } catch {
+    d = await hole("/api/bridge-verlauf" + (bereich === "all" ? "?period=all" : ""));
+  } catch {}
+  if (!d?.vollstaendig || (d.punkte ?? []).length < 2) {
+    // Die ganze Historie gibt es (noch) nicht: zurueck auf 2026, dessen Chart
+    // ohnehin noch steht.
+    if (bereich !== "2026" && !MIG.voll[bereich] && MIG.bereich === bereich) {
+      MIG.bereich = "2026";
+      migSchalter();
+    }
     return;
   }
-  if (!d?.vollstaendig || (d.punkte ?? []).length < 2) return;
-  MIG.voll = d.punkte;
-  MIG.punkte = d.punkte;
-  zeichneMigration();
-  migVerlaufBeschriften();
+  MIG.voll[bereich] = d.punkte;
+  // Waehrend des Ladens umgeschaltet? Dann gehoert der Chart dem anderen Bereich.
+  if (MIG.bereich === bereich) zeigen(d.punkte);
 }
 
 async function ladeBilanz() {

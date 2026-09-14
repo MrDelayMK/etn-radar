@@ -12,13 +12,11 @@ name: ETN Bridge Events
 # lang, spaetere kosten nur noch die paar Seiten seit dem letzten Mal - daher
 # das grosszuegige Zeitlimit unten.
 #
-# Dreimal taeglich automatisch, jederzeit auch per Knopf. Solange die Historie
-# nicht komplett ist, laeuft so ein Lauf je 8 Stunden (130 Minuten Arbeit,
-# danach mindestens 5 Stunden Ruhe fuer den Explorer). Ist sie komplett, liest
-# ein Lauf nur noch die Seiten seit dem letzten Mal - dann reicht einmal am Tag.
+# Taeglich automatisch, jederzeit auch per Knopf. Die Historie ist seit dem
+# 14.09.2026 komplett; ein Lauf liest nur noch die Seiten seit dem letzten Mal.
 on:
   schedule:
-    - cron: "30 6,14,22 * * *" # 06:30, 14:30, 22:30 UTC
+    - cron: "30 1 * * *" # taeglich 01:30 UTC
   workflow_dispatch:
     inputs:
       minuten:

@@ -1626,15 +1626,19 @@ async function tierVerlauf(db) {
   return { tage: [...tage.values()] };
 }
 
-async function bridgeVerlauf(db) {
+async function bridgeVerlauf(db, u) {
+  // period=all: die ganze Migration seit dem Start der Bridge statt ab HISTORIE_AB.
+  const alles = u?.searchParams.get("period") === "all";
   const stand = await db
-    .prepare("SELECT fertig, aeltestes_bekannt, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
+    .prepare("SELECT fertig, cursor, aeltestes_bekannt, anker_wei, anker_zeit FROM bridge_scan WHERE id = 1")
     .first()
     .catch(() => null);
   // Weit genug zurueck ist auch ein Stand, der noch nicht als fertig markiert
   // wurde - etwa ein Lauf, der ueber HISTORIE_AB hinaus las und abgebrochen wurde.
-  const weitGenug =
-    stand?.fertig || String(stand?.aeltestes_bekannt ?? "9999").slice(0, 10) < HISTORIE_AB;
+  // Die ganze Historie dagegen erst, wenn wirklich nichts mehr aussteht.
+  const weitGenug = alles
+    ? stand?.fertig && !stand?.cursor
+    : stand?.fertig || String(stand?.aeltestes_bekannt ?? "9999").slice(0, 10) < HISTORIE_AB;
   if (!weitGenug || !stand.anker_wei || !stand.anker_zeit) {
     return { vollstaendig: false, punkte: [] };
   }
@@ -1646,7 +1650,7 @@ async function bridgeVerlauf(db) {
         "SELECT day, abfluss_wei, zufluss_wei FROM bridge_tage WHERE day >= ? AND day <= ?" +
           " ORDER BY day DESC"
       )
-      .bind(HISTORIE_AB, ankerTag)
+      .bind(alles ? "0000-00-00" : HISTORIE_AB, ankerTag)
       .all()
   ).results;
 
@@ -1658,9 +1662,11 @@ async function bridgeVerlauf(db) {
     punkte.push({ day: t.day, etn: inEtn(bestand) });
     bestand += BigInt(t.abfluss_wei) - BigInt(t.zufluss_wei);
   }
-  // Der Stand zum Jahreswechsel - der Punkt, an dem der Verlauf beginnt.
+  // Der Stand vor dem ersten gezeigten Tag - der Punkt, an dem der Verlauf
+  // beginnt: der Jahreswechsel, bei der ganzen Historie der Tag vor dem Start.
   if (tage.length) {
-    const vorher = new Date(Date.parse(HISTORIE_AB + "T00:00:00Z") - 86400000);
+    const start = alles ? tage[tage.length - 1].day : HISTORIE_AB;
+    const vorher = new Date(Date.parse(start + "T00:00:00Z") - 86400000);
     punkte.push({ day: vorher.toISOString().slice(0, 10), etn: inEtn(bestand) });
   }
   punkte.reverse();
@@ -2387,7 +2393,7 @@ export default {
       // Aendert sich nur mit dem taeglichen Bridge-Durchgang. Eine halbe Stunde,
       // weil die Snapshot-Nummer nicht mehr im Schluessel steckt (cacheSchluessel)
       // - mit sechs Stunden hinge der Chart nach einem Lauf wieder so lange zurueck.
-      else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db), 200, 1800);
+      else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db, u), 200, 1800);
       // Neue Zeilen kommen einmal am Tag mit dem ersten Snapshot.
       else if (pfad === "/api/tier-verlauf") antwort = json(await tierVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));

@@ -400,7 +400,12 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
       return { transfers: out, seiten: seite, gedeckelt: true, cursor: next, abbruch: e.message };
     }
     const items = (d.items ?? []).filter(
-      (i) => i.value != null && BigInt(i.value) > 0n && i.to?.hash && i.success !== false
+      (i) => i.value != null && BigInt(i.value) > 0n && i.to?.hash && i.success !== false &&
+        // Ein delegatecall bewegt kein Geld: der Proxy fuehrt nur den Code seiner
+        // Implementierung aus, der mitgegebene Wert bleibt beim Proxy. Am
+        // 03.03.2024 stand so ein Aufruf als "17,96 Mrd. ETN an ETNBridge" ganz
+        // oben in den groessten Bridge-Transfers.
+        i.type !== "delegatecall" && i.type !== "staticcall"
     );
     out.push(
       ...items.map((i) => ({
