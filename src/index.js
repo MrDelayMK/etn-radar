@@ -2366,6 +2366,16 @@ export default {
       return json(await besucheLesen(env.DB, u), 200, 0);
     }
 
+    // Nur die neueste Nummer - damit der Feedback-Knopf des Betreibers
+    // aufleuchten kann, ohne jede Minute den ganzen Posteingang zu lesen.
+    if (pfad === "/api/feedback/neu") {
+      if (!adminOk(request, env)) {
+        return json({ error: "Der Posteingang ist dem Betreiber vorbehalten." }, 403, 0);
+      }
+      const r = await env.DB.prepare("SELECT max(id) AS id FROM feedback").first();
+      return json({ neuste_id: r?.id ?? 0 }, 200, 0);
+    }
+
     if (pfad === "/api/feedback") {
       if (request.method === "POST") return feedbackSenden(request, env.DB);
       if (!adminOk(request, env)) {

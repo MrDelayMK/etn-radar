@@ -69,7 +69,7 @@ a{color:inherit;text-decoration:none}
 
 /* ---------- Header ---------- */
 header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-.brand{display:flex;align-items:center;gap:15px}
+.brand{display:flex;align-items:center;gap:15px;color:inherit;text-decoration:none}
 .brand .logo{width:46px;height:46px;border-radius:50%;flex:0 0 auto;
               filter:drop-shadow(0 0 16px #5b9cff70)}
 .brand h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
@@ -605,6 +605,10 @@ nav .navrechts button{
 }
 nav .navrechts button .ic{font-size:12px;line-height:1}
 nav .navrechts button:hover{color:var(--tx);border-color:var(--acc)}
+/* Neues Feedback - leuchtet nur beim Betreiber (fbNeuPruefen). */
+nav .navrechts button.fbneu{color:#4ade80;border-color:#4ade80;animation:fbpuls 1.8s ease-in-out infinite}
+@keyframes fbpuls{0%,100%{box-shadow:0 0 0 0 #4ade8000}50%{box-shadow:0 0 12px 2px #4ade8070}}
+@media (prefers-reduced-motion:reduce){nav .navrechts button.fbneu{animation:none;box-shadow:0 0 8px 1px #4ade8060}}
 
 /* Rangaenderung neben dem Platz: ob eine Bewegung das Wallet auch Plaetze
    gekostet hat, sieht man dem Betrag allein nicht an. */
@@ -881,13 +885,13 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <div class="wrap">
 
 <header>
-  <div class="brand">
+  <a class="brand" href="/" data-seite="overview">
     <img class="logo" src="/assets/logo.png" alt="" width="46" height="46">
     <div>
       <h1>ETN Radar</h1>
       <div class="sub">Whale &amp; migration tracking &middot; Electroneum Smart Chain</div>
     </div>
-  </div>
+  </a>
   <div class="hspace"></div>
   <a class="chip homelink" href="https://galacticsl.com" target="_blank" rel="noopener" title="Galacticsl.com">
     <img src="/gsl-logo.png" alt="GSL" width="22" height="22" loading="lazy"><span>galacticsl.com</span>
@@ -4843,12 +4847,16 @@ addEventListener("hashchange", () => {
   if (LADER[ziel]) zeigeSeite(ziel);
 });
 
-// Links auf Bereiche (Fusszeile) wechseln ohne Neuladen. Mit Strg/Cmd bleibt
-// es ein normaler Link, der in einem neuen Tab aufgeht.
+// Links auf Bereiche (Logo, Fusszeile) wechseln ohne Neuladen. Mit Strg/Cmd
+// bleibt es ein normaler Link, der in einem neuen Tab aufgeht. Ist der Bereich
+// schon offen, geht es wenigstens nach oben - sonst taete der Klick nichts.
 document.addEventListener("click", (e) => {
   const a = e.target.closest("a[data-seite]");
   if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
+  if (document.querySelector("#nav button.on")?.dataset.p === a.dataset.seite) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   zeigeSeite(a.dataset.seite);
 });
 
@@ -5273,9 +5281,34 @@ async function fbBesucher() {
   }
 }
 
+/* Neues Feedback: der Feedback-Knopf leuchtet beim Betreiber gruen, bis er den
+ * Posteingang oeffnet. "Gesehen" ist die hoechste Nummer beim letzten Oeffnen,
+ * gemerkt in seinem Browser. Gefragt wird nur nach dieser einen Nummer - eine
+ * Zeile, nicht der ganze Posteingang. */
+const FB_GESEHEN_KEY = "etnFbGesehen";
+
+function fbGesehen(id) {
+  try { localStorage.setItem(FB_GESEHEN_KEY, String(id)); } catch { /* privater Modus */ }
+  document.querySelector("#nav [data-feedback]")?.classList.remove("fbneu");
+}
+
+async function fbNeuPruefen() {
+  if (!ADMIN.token || document.hidden) return;
+  try {
+    const d = await hole("/api/feedback/neu");
+    let gesehen = 0;
+    try { gesehen = Number(localStorage.getItem(FB_GESEHEN_KEY)) || 0; } catch { /* privater Modus */ }
+    document.querySelector("#nav [data-feedback]")?.classList.toggle("fbneu", d.neuste_id > gesehen);
+  } catch {
+    /* kein Zugriff oder Netz weg - dann eben kein Leuchten */
+  }
+}
+
 async function fbPosteingang() {
   try {
     const d = await hole("/api/feedback");
+    // Die Liste kommt neueste zuerst - was jetzt da ist, gilt als gesehen.
+    fbGesehen(d.eintraege?.[0]?.id ?? 0);
     const box = el("fbInbox");
     box.hidden = false;
     el("fbListe").innerHTML = d.eintraege?.length
@@ -5584,6 +5617,7 @@ setInterval(() => {
     pruefeFrische();
   }
   pruefeNeueDaten();
+  fbNeuPruefen();
 }, 60000);
 
 if (startZiel.wallet) investigateAddress(startZiel.wallet, false);
@@ -5597,6 +5631,7 @@ if (start !== "overview" && LADER[start]) {
   geladen.add("overview");
   LADER.overview().catch(console.error);
 }
+fbNeuPruefen();
 </script>
 </body>
 </html>
