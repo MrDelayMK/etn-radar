@@ -606,9 +606,16 @@ nav .navrechts button{
 nav .navrechts button .ic{font-size:12px;line-height:1}
 nav .navrechts button:hover{color:var(--tx);border-color:var(--acc)}
 /* Neues Feedback - leuchtet nur beim Betreiber (fbNeuPruefen). */
-nav .navrechts button.fbneu{color:#4ade80;border-color:#4ade80;animation:fbpuls 1.8s ease-in-out infinite}
-@keyframes fbpuls{0%,100%{box-shadow:0 0 0 0 #4ade8000}50%{box-shadow:0 0 12px 2px #4ade8070}}
-@media (prefers-reduced-motion:reduce){nav .navrechts button.fbneu{animation:none;box-shadow:0 0 8px 1px #4ade8060}}
+/* Ohne Farbe -> leicht gruen -> leuchtend gruen -> ausklingen bis ohne Farbe. */
+nav .navrechts button.fbneu{animation:fbpuls 2.6s ease-in-out infinite}
+@keyframes fbpuls{
+  0%,100%{color:var(--tx2);border-color:var(--line2);box-shadow:0 0 0 0 #4ade8000}
+  18%{color:#a7f0c2;border-color:#4ade8070;box-shadow:0 0 5px 0 #4ade8035}
+  48%{color:#4ade80;border-color:#4ade80;box-shadow:0 0 16px 4px #4ade80a0}
+}
+@media (prefers-reduced-motion:reduce){
+  nav .navrechts button.fbneu{animation:none;color:#4ade80;border-color:#4ade80;box-shadow:0 0 8px 1px #4ade8060}
+}
 
 /* Rangaenderung neben dem Platz: ob eine Bewegung das Wallet auch Plaetze
    gekostet hat, sieht man dem Betrag allein nicht an. */
