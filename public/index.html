@@ -191,7 +191,7 @@ svg.chart{width:100%;display:block}
 .bzrow{display:flex;align-items:center;gap:13px;padding:10px 0;border-top:1px solid var(--line)}
 .bzrow:first-child{border-top:0}
 .bzrow .pos{
-  width:24px;flex-shrink:0;text-align:center;font-family:var(--mono);font-size:12px;
+  width:32px;flex-shrink:0;text-align:center;font-family:var(--mono);font-size:12px;
   color:var(--tx3);font-weight:700
 }
 .bzrow .wer{flex:1;min-width:0}
@@ -351,6 +351,8 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs button{padding:6px 13px;font-size:12.5px;border-radius:8px}
 .tabs .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 3px}
+.bzjahre{margin:0 0 12px}
+.bzmehr:not([hidden]){display:block;margin:12px auto 0}
 
 .sharebar{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .sharebar button,.sharebar a{padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center}
@@ -1128,7 +1130,9 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <button class="infoBtn" data-info="The largest single transfers ever sent out of the bridge contract to a new-chain address — 500,000 ETN or more. Everyday traffic, the hundreds of small migrations that happen daily, is left out on purpose. 'Holds today' is that address's balance in the current snapshot; a dash means it is not among the tracked wallets today, which usually means the ETN moved on.">ⓘ</button>
     </h2>
     <div class="card">
+      <div class="tabs bzjahre" id="bzJahre"></div>
       <div id="bzTransfers" class="empty">Loading&hellip;</div>
+      <button class="ghost bzmehr" id="bzMehr" hidden></button>
       <div class="tiersfoot" style="margin-top:14px">
         <div class="dim3" id="bzTransfersNote" style="font-size:11.5px"></div>
         <button class="ghost" id="bridgeBtn" style="display:none">🔍 Scan for events now</button>
@@ -2940,6 +2944,74 @@ async function ladeBridgeVerlauf() {
   if (MIG.bereich === bereich) zeigen(d.punkte);
 }
 
+// ---------- Groesste Migrationen ----------
+// "holds today" ist bewusst vorsichtig formuliert: ein Strich heisst nicht
+// "leer", sondern "heute nicht unter den erfassten Wallets". Beides sieht in
+// der Datenbank gleich aus, und das eine als das andere auszugeben waere
+// eine Behauptung ueber fremdes Geld.
+const bzZeile = (r, platz, zusatz) =>
+  '<a class="bzrow" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
+  '<span class="pos">' + platz + "</span>" +
+  '<span class="wer"><span class="adr">' +
+    (r.label ? esc(r.label) : kurzAdr(r.checksum_hash ?? r.address)) + "</span>" +
+    '<span class="meta">' + zusatz + "</span></span>" +
+  '<span class="betrag"><span class="b">' + kurz(r.etn) + " ETN</span>" +
+    '<span class="h">' +
+    (r.bestand_jetzt != null
+      ? "holds " + kurz(r.bestand_jetzt) + " today"
+      : "not tracked today") +
+    "</span></span></a>";
+
+// Erst die Top 10, jeder Klick auf "Show more" haengt 25 an. Alle knapp 2.000
+// auf einmal waeren eine Seite, die niemand bis unten liest.
+const BZ = { jahr: "all", zeilen: [], abruf: 0 };
+const BZ_ERSTE = 10, BZ_MEHR = 25;
+
+async function ladeMigrationen(mehr = false) {
+  const nr = ++BZ.abruf;
+  const knopf = el("bzMehr");
+  // Beim Jahreswechsel verschwindet der Knopf, bis die neue Liste steht -
+  // sonst haengte ein schneller Klick das alte Jahr an das neue.
+  if (mehr) knopf.disabled = true;
+  else knopf.hidden = true;
+  const offset = mehr ? BZ.zeilen.length : 0;
+  let d;
+  try {
+    d = await hole("/api/migrationen?period=" + BZ.jahr + "&offset=" + offset +
+      "&limit=" + (mehr ? BZ_MEHR : BZ_ERSTE));
+  } catch (e) {
+    if (nr !== BZ.abruf) return;
+    knopf.disabled = false;
+    if (!mehr) {
+      el("bzTransfers").className = "empty";
+      el("bzTransfers").textContent = fehlerText(e);
+    }
+    return;
+  }
+  if (nr !== BZ.abruf) return;
+  BZ.zeilen = mehr ? BZ.zeilen.concat(d.eintraege) : d.eintraege;
+
+  periodTabs(el("bzJahre"), BZ.jahr, (k) => {
+    BZ.jahr = k;
+    ladeMigrationen();
+  }, [{ k: "all", t: "All" }, ...d.jahre.map((j) => ({ k: j, t: j }))]);
+
+  const liste = el("bzTransfers");
+  liste.className = BZ.zeilen.length ? "" : "empty";
+  liste.innerHTML = BZ.zeilen.length
+    ? BZ.zeilen.map((r, i) => bzZeile(r, i + 1,
+        new Date(r.tag).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" }) +
+        (r.teile > 1 ? " · in " + r.teile + " transfers" : ""))).join("")
+    : "No single migration above " + kurz(d.mindestbetrag) + " ETN" +
+      (BZ.jahr === "all" ? "" : " in " + BZ.jahr) + ".";
+
+  const rest = d.gesamt - BZ.zeilen.length;
+  knopf.hidden = rest <= 0;
+  knopf.disabled = false;
+  knopf.textContent = "Show " + Math.min(BZ_MEHR, rest) + " more · " + nf(rest) + " left";
+}
+el("bzMehr").onclick = () => ladeMigrationen(true);
+
 async function ladeBilanz() {
   let d;
   try {
@@ -3027,30 +3099,6 @@ async function ladeBilanz() {
   el("bzTab").innerHTML = kopf + "<tbody>" + koerper + "</tbody>";
 
   // --- Listen ---
-  // "haelt heute" ist bewusst vorsichtig formuliert: ein Strich heisst nicht
-  // "leer", sondern "heute nicht unter den erfassten Wallets". Beides sieht in
-  // der Datenbank gleich aus, und das eine als das andere auszugeben waere
-  // eine Behauptung ueber fremdes Geld.
-  const zeile = (r, i, zusatz) =>
-    '<a class="bzrow" href="' + EXPLORER + r.address + '" target="_blank" rel="noopener">' +
-    '<span class="pos">' + (i + 1) + "</span>" +
-    '<span class="wer"><span class="adr">' +
-      (r.label ? esc(r.label) : kurzAdr(r.checksum_hash ?? r.address)) + "</span>" +
-      '<span class="meta">' + zusatz + "</span></span>" +
-    '<span class="betrag"><span class="b">' + kurz(r.etn) + " ETN</span>" +
-      '<span class="h">' +
-      (r.bestand_jetzt != null
-        ? "holds " + kurz(r.bestand_jetzt) + " today"
-        : "not tracked today") +
-      "</span></span></a>";
-
-  const tr = d.top_transfers ?? [];
-  el("bzTransfers").className = tr.length ? "" : "empty";
-  el("bzTransfers").innerHTML = tr.length
-    ? tr.map((r, i) => zeile(r, i, new Date(r.tag).toLocaleDateString(LOC, {
-        day: "2-digit", month: "short", year: "numeric" }))).join("")
-    : "No single migration above " + kurz(d.mindestbetrag) + " ETN found in the period checked.";
-
   el("bzTransfersNote").textContent = d.transfers_ab
     ? d.transfers_vollstaendig
       ? "All migrations since " +
@@ -4674,7 +4722,7 @@ const LADER = {
   // danach. Parallel gestartet gewaenne mal der eine, mal der andere.
   migration: async () => {
     await uebersicht();
-    await Promise.all([ladeBilanz(), ladeBridgeVerlauf(), ladeJobStatus("bridge", "bridgeBtn")]);
+    await Promise.all([ladeBilanz(), ladeMigrationen(), ladeBridgeVerlauf(), ladeJobStatus("bridge", "bridgeBtn")]);
   },
   tiers: () => Promise.all([uebersicht(), ladeTierVerlauf()]),
   about: () => Promise.resolve(),

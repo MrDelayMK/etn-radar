@@ -1793,56 +1793,15 @@ async function bilanz(db, env) {
       ? endspurt.letzte_30 / endspurt.davor_30
       : null;
 
-  // Die groessten Einzelbetraege, die je die Bridge verlassen haben - direkt
-  // aus dem Rohbestand, soweit der Durchgang die Historie schon gelesen hat.
-  //
-  // Vorher aus bridge_events. Die Tabelle wird aber erst im letzten Schritt
-  // eines Laufs neu aufgebaut - nach dem abgebrochenen Lauf vom 10.09.2026
-  // zeigte die Liste darum noch den Stand vom 07.09., ohne den groessten
-  // Transfer des Jahres (189,7 Mio. am 06.05.). Der Rohbestand dagegen ist nach
-  // jedem Haeppchen aktuell, und ueber den Index auf etn liest das kaum Zeilen.
-  const [roh, stand] = await Promise.all([
-    db
-      .prepare("SELECT day, to_address, etn FROM bridge_transfers ORDER BY etn DESC LIMIT 10")
-      .all(),
-    db
-      .prepare("SELECT aeltestes_bekannt, fertig, cursor IS NOT NULL AS hat_cursor FROM bridge_scan WHERE id = 1")
-      .first()
-      .catch(() => null),
-  ]);
-  const top = roh.results ?? [];
+  // Wie weit die Transfer-Historie reicht. Die Liste der groessten
+  // Migrationen selbst kommt aus /api/migrationen (siehe migrationen()).
+  const stand = await db
+    .prepare("SELECT aeltestes_bekannt, fertig, cursor IS NOT NULL AS hat_cursor FROM bridge_scan WHERE id = 1")
+    .first()
+    .catch(() => null);
   const aeltesterTag = stand?.aeltestes_bekannt?.slice(0, 10) ?? null;
   // Vollstaendig erst am Anfang der Bridge: fertig UND kein Cursor mehr.
   const transferVollstaendig = !!stand?.fertig && !stand?.hat_cursor;
-
-  // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
-  const adressen = [...new Set(top.map((r) => r.to_address))];
-  const info = {};
-  if (adressen.length) {
-    const platz = adressen.map(() => "?").join(",");
-    const zeilen = (
-      await db
-        .prepare(
-          "SELECT a.hash, a.label, a.label_type, a.checksum_hash, c.etn, c.rank_pos" +
-            " FROM addresses a LEFT JOIN current_balances c ON c.address = a.hash" +
-            " WHERE a.hash IN (" + platz + ")"
-        )
-        .bind(...adressen)
-        .all()
-    ).results;
-    for (const z of zeilen) info[z.hash] = z;
-  }
-  const schmuecke = (adr) => {
-    const i = info[adr] ?? {};
-    return {
-      address: adr,
-      checksum_hash: i.checksum_hash ?? null,
-      label: i.label ?? null,
-      label_type: i.label_type ?? null,
-      bestand_jetzt: i.etn ?? null,
-      rang_jetzt: i.rank_pos ?? null,
-    };
-  };
 
   // Wallets, die es vor dem Stichtag noch nicht gab. Vorher ist die Liste
   // leer - die Abfrage kostet dank Index trotzdem nichts.
@@ -1872,11 +1831,6 @@ async function bilanz(db, env) {
     verloren,
     endspurt,
     neue_wallets: neue,
-    top_transfers: top.map((r) => ({
-      ...schmuecke(r.to_address),
-      tag: r.day,
-      etn: r.etn,
-    })),
     // Wie weit die Transfer-Historie reicht. Solange der Durchgang nicht am
     // Anfang der Bridge ist, sind "Top 10" die Top 10 des bisher gepruefen
     // Fensters - und das gehoert dazugeschrieben, sonst liest sich eine
@@ -1884,6 +1838,83 @@ async function bilanz(db, env) {
     transfers_ab: aeltesterTag,
     transfers_vollstaendig: transferVollstaendig,
     mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
+  };
+}
+
+/* ---------- Groesste Migrationen aus der Bridge ---------------------------
+ *
+ * Je Wallet und Tag zusammengefasst: wer an einem Tag in drei Teilen migriert,
+ * hat einmal migriert. Am 16.04.2024 stand sonst dieselbe Wallet mit 428 Mio.
+ * in drei Transfers dreimal in den Top 10. Die Zahl der Teile geht mit.
+ *
+ * Die zusammengefasste Liste entsteht in EINER Abfrage ueber alle knapp 2.000
+ * grossen Transfers und liegt dann eine halbe Stunde im Zwischenspeicher. Jahr
+ * und Seite schneiden nur noch daraus - sonst kostete jede neue Kombination
+ * aus Jahr und Seite wieder den ganzen Tabellenlauf.
+ */
+const MIGRATIONEN_TTL = 1800;
+
+async function migrationenAlle(db) {
+  const intern = new Request("https://intern.etn-radar/migrationen");
+  const treffer = await caches.default.match(intern);
+  if (treffer) return treffer.json();
+  const zeilen = (
+    await db
+      .prepare(
+        "SELECT day, to_address, SUM(etn) AS etn, COUNT(*) AS teile FROM bridge_transfers" +
+          " GROUP BY to_address, day ORDER BY etn DESC"
+      )
+      .all()
+  ).results.map((r) => [r.day, r.to_address, r.etn, r.teile]);
+  await caches.default.put(
+    intern,
+    new Response(JSON.stringify(zeilen), {
+      headers: { "content-type": "application/json", "cache-control": "max-age=" + MIGRATIONEN_TTL },
+    })
+  );
+  return zeilen;
+}
+
+async function migrationen(db, u) {
+  const alle = await migrationenAlle(db);
+  const periode = u.searchParams.get("period") ?? "";
+  const liste = /^\d{4}$/.test(periode) ? alle.filter((r) => r[0].startsWith(periode)) : alle;
+  const offset = Math.max(0, Math.min(liste.length, Math.floor(Number(u.searchParams.get("offset")) || 0)));
+  const limit = Math.max(1, Math.min(50, Math.floor(Number(u.searchParams.get("limit")) || 25)));
+  const seite = liste.slice(offset, offset + limit);
+
+  // Label und heutiger Bestand - in EINER Abfrage, nicht je Zeile eine.
+  const adressen = [...new Set(seite.map((r) => r[1]))];
+  const info = {};
+  if (adressen.length) {
+    const zeilen = (
+      await db
+        .prepare(
+          "SELECT a.hash, a.label, a.label_type, a.checksum_hash, c.etn" +
+            " FROM addresses a LEFT JOIN current_balances c ON c.address = a.hash" +
+            " WHERE a.hash IN (" + adressen.map(() => "?").join(",") + ")"
+        )
+        .bind(...adressen)
+        .all()
+    ).results;
+    for (const z of zeilen) info[z.hash] = z;
+  }
+
+  return {
+    jahre: [...new Set(alle.map((r) => r[0].slice(0, 4)))].sort(),
+    gesamt: liste.length,
+    offset,
+    mindestbetrag: BRIDGE_MIN_TRANSFER_ETN,
+    eintraege: seite.map(([tag, adr, etn, teile]) => ({
+      address: adr,
+      checksum_hash: info[adr]?.checksum_hash ?? null,
+      label: info[adr]?.label ?? null,
+      label_type: info[adr]?.label_type ?? null,
+      bestand_jetzt: info[adr]?.etn ?? null,
+      tag,
+      etn,
+      teile,
+    })),
   };
 }
 
@@ -2394,6 +2425,7 @@ export default {
       // weil die Snapshot-Nummer nicht mehr im Schluessel steckt (cacheSchluessel)
       // - mit sechs Stunden hinge der Chart nach einem Lauf wieder so lange zurueck.
       else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db, u), 200, 1800);
+      else if (pfad === "/api/migrationen") antwort = json(await migrationen(db, u), 200, 900);
       // Neue Zeilen kommen einmal am Tag mit dem ersten Snapshot.
       else if (pfad === "/api/tier-verlauf") antwort = json(await tierVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));
