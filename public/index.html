@@ -150,6 +150,34 @@ h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);
 .tvkarte svg{width:100%;height:92px;display:block}
 .tvkarte .tip{top:-2px;padding:5px 10px}
 .tvkarte .tip b{font-size:13.5px;color:var(--tx)}
+
+/* Chain-Reiter */
+.wochefakten{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.wochefakten li{display:flex;gap:11px;align-items:baseline;font-size:14px;color:var(--tx2);line-height:1.45}
+.wochefakten li i{font-style:normal;width:22px;flex:none;text-align:center}
+.wochefakten b{color:var(--tx);font-weight:640}
+.wochefakten a{color:var(--acc);text-decoration:none;font-weight:600}
+.wochefakten a:hover{text-decoration:underline}
+.tokliste .tokrow{display:flex;align-items:center;gap:13px;padding:11px 0;border-top:1px solid var(--line);
+  color:inherit;text-decoration:none}
+.tokliste .tokrow:first-child{border-top:0}
+.tokliste a.tokrow:hover .nm{color:var(--acc)}
+.tokrow img,.tokrow .neuicon{width:34px;height:34px;border-radius:50%;flex:none;background:var(--card2)}
+.tokrow .neuicon{display:grid;place-items:center;font:700 13px var(--mono);color:var(--tx3);border:1px solid var(--line2)}
+.tokrow .wer{flex:1;min-width:0}
+.tokrow .nm{display:block;font-size:14px;font-weight:620;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tokrow .nm small{font:600 11.5px var(--mono);color:var(--tx3);margin-left:7px}
+.tokrow .meta{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.tokrow .zahl{text-align:right;flex:none}
+.tokrow .zahl b{display:block;font-size:15px;font-weight:660;color:var(--tx)}
+.tokrow .zahl b small{font-size:11.5px;font-weight:500;color:var(--tx3)}
+.tokrow .zahl > span{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.tokrow .links{display:flex;gap:6px;flex:none}
+.tokrow .links a{padding:5px 11px;font-size:12px;border-radius:8px;text-decoration:none;white-space:nowrap;
+  background:var(--card2);color:var(--tx2);border:1px solid var(--line2)}
+.tokrow .links a:hover{color:var(--tx);border-color:var(--acc)}
+.tokmehr{font-size:12px;padding-top:9px;border-top:1px solid var(--line)}
+@media (max-width:620px){.tokliste .tokrow{flex-wrap:wrap}.tokrow .links{width:100%;padding-left:47px}}
 .chartholder{position:relative;cursor:crosshair}
 svg.chart{width:100%;display:block}
 .tip{
@@ -919,6 +947,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   <button data-p="tiers"><span class="ic">🏔️</span>Tiers</button>
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
+  <button data-p="chain"><span class="ic">⛓️</span>Chain</button>
   <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
   <button data-p="about"><span class="ic">📡</span>About</button>
@@ -1296,6 +1325,26 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   </section>
 </div>
 
+<!-- ================= CHAIN ================= -->
+<div class="page" id="page-chain">
+  <section style="margin-top:22px">
+    <h2>⛓️ Network activity</h2>
+    <div class="tierverlauf" id="chainKacheln"></div>
+  </section>
+  <section>
+    <h2>🗓️ This week on Electroneum <span class="hint" id="chainWocheRange"></span></h2>
+    <div class="card" id="chainWoche"><div class="empty">Loading&hellip;</div></div>
+  </section>
+  <section>
+    <h2>💎 Ecosystem tokens</h2>
+    <div class="card tokliste" id="chainTokens"><div class="empty">Loading&hellip;</div></div>
+  </section>
+  <section>
+    <h2>🧱 New on chain <span class="hint">verified contracts, last 7 days</span></h2>
+    <div class="card tokliste" id="chainNeu"><div class="empty">Loading&hellip;</div></div>
+  </section>
+</div>
+
 <!-- ================= CLUSTERS (experimental) ================= -->
 <div class="page" id="page-clusters">
   <section style="margin-top:22px">
@@ -1490,6 +1539,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
       <a href="/tiers" data-seite="tiers">Holder tiers</a>
       <a href="/leaderboard" data-seite="board">Leaderboard</a>
       <a href="/activity" data-seite="activity">Activity</a>
+      <a href="/chain" data-seite="chain">Chain</a>
       <a href="/investigate" data-seite="investigate">Investigate</a>
       <a href="/about" data-seite="about">About</a>
       <a href="#" data-feedback>Feedback</a>
@@ -2209,7 +2259,11 @@ function zeichneTierVerlauf() {
   });
 }
 
-function tierMiniChart(holder, reihe, farbe, datum) {
+// opts: format (Achse), einheit (Tooltip), links (Platz fuer die Achse),
+// ende: "datum" beschriftet den letzten Punkt mit seinem Tag statt "now".
+function tierMiniChart(holder, reihe, farbe, datum, opts = {}) {
+  const zahl = opts.format ?? nf;
+  const amEnde = (i) => (opts.ende === "datum" ? datum(reihe[i].day) : "now");
   const svg = holder.querySelector("svg");
   const tip = holder.querySelector(".tip");
   const W = Math.max(200, Math.round(holder.clientWidth));
@@ -2221,7 +2275,7 @@ function tierMiniChart(holder, reihe, farbe, datum) {
     return;
   }
 
-  const PT = 8, PB = 18, PL = 38, PR = 8;
+  const PT = 8, PB = 18, PL = opts.links ?? 38, PR = 8;
   const werte = reihe.map((p) => p.n);
   const min = Math.min(...werte), max = Math.max(...werte);
   // Mindestspanne: sonst liefe aus 912 -> 915 eine Linie quer ueber die ganze
@@ -2236,7 +2290,7 @@ function tierMiniChart(holder, reihe, farbe, datum) {
     '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) +
     '" stroke="#1e293b" stroke-width="1"/>' +
     '<text x="' + (PL - 6) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" fill="#7d8ba3" font-size="10.5" ' +
-    'text-anchor="end" font-family="ui-monospace,monospace">' + nf(v) + "</text>";
+    'text-anchor="end" font-family="ui-monospace,monospace">' + zahl(v) + "</text>";
 
   let linie = "";
   reihe.forEach((p, i) => { linie += (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.n).toFixed(1); });
@@ -2246,7 +2300,7 @@ function tierMiniChart(holder, reihe, farbe, datum) {
     '<text x="' + PL + '" y="' + (H - 4) + '" fill="#7d8ba3" font-size="10.5" ' +
       'font-family="ui-monospace,monospace">' + datum(reihe[0].day) + "</text>" +
     '<text x="' + (W - PR) + '" y="' + (H - 4) + '" fill="#7d8ba3" font-size="10.5" text-anchor="end" ' +
-      'font-family="ui-monospace,monospace">now</text>' +
+      'font-family="ui-monospace,monospace">' + amEnde(letzte) + "</text>" +
     '<path d="' + flaeche + '" fill="' + farbe + '" opacity=".1"/>' +
     '<path d="' + linie + '" fill="none" stroke="' + farbe + '" stroke-width="2" ' +
       'stroke-linejoin="round" stroke-linecap="round"/>' +
@@ -2270,9 +2324,9 @@ function tierMiniChart(holder, reihe, farbe, datum) {
     setzePunkt(i);
     // Werte zuerst, Datum darunter - und per textContent, nicht als HTML.
     const wert = document.createElement("b");
-    wert.textContent = nf(reihe[i].n) + " wallets";
+    wert.textContent = nf(reihe[i].n) + " " + (opts.einheit ?? "wallets");
     const wann = document.createElement("span");
-    wann.textContent = i === letzte ? "now" : datum(reihe[i].day);
+    wann.textContent = i === letzte ? amEnde(i) : datum(reihe[i].day);
     tip.replaceChildren(wert, wann);
     tip.classList.add("on");
     const px = (X(i) / W) * r.width;
@@ -2381,6 +2435,7 @@ function alleChartsNachziehen() {
   if (MIG.punkte.length) zeichneMigration();
   if (el("invChart")._punkte) zeichneChart(el("invChart"));
   if (TIER_VERLAUF.tage) zeichneTierVerlauf();
+  if (CHAIN.daten) zeichneChainKacheln();
   if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
 function beobachte(holderId, zeichnen) {
@@ -2392,6 +2447,7 @@ function beobachte(holderId, zeichnen) {
 }
 beobachte("prHolder", () => { if (el("prChart")._punkte) zeichnePreisChart(); });
 beobachte("tierVerlauf", () => { if (TIER_VERLAUF.tage) zeichneTierVerlauf(); });
+beobachte("chainKacheln", () => { if (CHAIN.daten) zeichneChainKacheln(); });
 beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
 beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
@@ -2954,6 +3010,187 @@ async function ladeBridgeVerlauf() {
   MIG.voll[bereich] = d.punkte;
   // Waehrend des Ladens umgeschaltet? Dann gehoert der Chart dem anderen Bereich.
   if (MIG.bereich === bereich) zeigen(d.punkte);
+}
+
+// ---------- Chain ----------
+// Liest nur /api/chain (src/index.js, chain()). Oben Kacheln im Stil der
+// Tier-Verlaeufe, darunter Wochenrueckblick, Tokens und neue Contracts.
+const CHAIN = { daten: null, text: "" };
+const CHAIN_KACHELN = [
+  // art: "schnitt" = Tagesschnitt der Woche, "summe" = Wochensumme
+  { k: "tx", titel: "Transactions", einheit: "transactions", art: "schnitt" },
+  { k: "wallets", titel: "New wallets", einheit: "new wallets", art: "schnitt" },
+  { k: "contracts", titel: "Verified contracts", einheit: "verified", art: "summe" },
+];
+
+async function ladeChain() {
+  try {
+    CHAIN.daten = await hole("/api/chain");
+  } catch (e) {
+    for (const id of ["chainWoche", "chainTokens", "chainNeu"]) {
+      el(id).innerHTML = '<div class="empty">' + esc(fehlerText(e)) + "</div>";
+    }
+    return;
+  }
+  zeichneChainKacheln();
+  zeichneChainWoche();
+  zeichneChainTokens();
+  zeichneChainNeu();
+}
+
+const chainDatum = (tag) =>
+  new Date(tag + "T00:00:00Z").toLocaleDateString(LOC, { month: "short", day: "numeric", timeZone: "UTC" });
+const chainZahl = (v) => (v >= 10000 ? kurz(v) : nf(v, v < 10 && v % 1 ? 1 : 0));
+
+// Veraenderung zur Vorwoche - nur, wenn beide Wochen volle sieben Tage haben.
+function chainVergleich(w) {
+  if (!w?.woche || !w.vorwoche || w.woche.tage < 7 || w.vorwoche.tage < 7 || !(w.vorwoche.summe > 0)) return null;
+  return ((w.woche.summe - w.vorwoche.summe) / w.vorwoche.summe) * 100;
+}
+function chainProzent(p) {
+  if (p == null) return "";
+  if (Math.abs(p) < 1) return '<span class="dim3">same as last week</span>';
+  return '<span class="' + (p > 0 ? "up" : "down") + '">' + (p > 0 ? "▲ " : "▼ ") +
+    nf(Math.abs(p), Math.abs(p) < 10 ? 1 : 0) + "% vs. last week</span>";
+}
+
+function zeichneChainKacheln() {
+  const d = CHAIN.daten;
+  const box = el("chainKacheln");
+  if (!d || box.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
+  box.innerHTML = CHAIN_KACHELN.map((c) => {
+    const w = d[c.k];
+    const wert = !w?.woche ? null : c.art === "summe" ? w.woche.summe : w.woche.summe / w.woche.tage;
+    return '<div class="tvkarte" data-k="' + c.k + '">' +
+      '<div class="kopf"><span class="nm">' + c.titel + '</span><span class="wert num">' +
+        (wert == null ? "—" : chainZahl(wert)) + "</span></div>" +
+      '<div class="unter">' + (chainProzent(chainVergleich(w)) || "<span></span>") +
+        "<span>" + (c.art === "summe" ? "last 7 days" : "per day, 7-day avg") + "</span></div>" +
+      '<div class="chartholder"><svg></svg><div class="tip"></div></div></div>';
+  }).join("");
+  box.querySelectorAll(".tvkarte").forEach((karte) => {
+    const c = CHAIN_KACHELN.find((x) => x.k === karte.dataset.k);
+    tierMiniChart(karte.querySelector(".chartholder"), d[c.k]?.reihe ?? [], "#5b9cff", chainDatum, {
+      format: chainZahl, einheit: c.einheit, ende: "datum", links: 46,
+    });
+  });
+}
+
+function zeichneChainWoche() {
+  const d = CHAIN.daten;
+  const box = el("chainWoche");
+  if (!d) return;
+  el("chainWocheRange").textContent = chainDatum(d.woche.von) + " – " + chainDatum(d.woche.bis);
+  const mit = (p) => (p == null ? "" : " · " + chainProzent(p));
+  // [Emoji, HTML fuer die Seite, Klartext fuer den geteilten Post]
+  const fakten = [];
+  if (d.tx?.woche) {
+    const t = kurz(d.tx.woche.summe) + " transactions";
+    fakten.push(["📈", "<b>" + t + "</b>" + mit(chainVergleich(d.tx)), t]);
+  }
+  if (d.wallets?.woche) {
+    const t = nf(d.wallets.woche.summe) + " new wallets";
+    fakten.push(["👛", "<b>" + t + "</b>" + mit(chainVergleich(d.wallets)), t]);
+  }
+  if (d.migration) {
+    const m = d.migration;
+    const p = m.vorwoche > 0 ? ((m.woche - m.vorwoche) / m.vorwoche) * 100 : null;
+    fakten.push(["🌉", "<b>" + kurz(m.woche) + " ETN</b> migrated out of the bridge" + mit(p),
+      kurz(m.woche) + " ETN migrated out of the bridge"]);
+  }
+  if (d.bewegung) {
+    const b = d.bewegung;
+    const verb = b.etn < 0 ? "moved out" : "received";
+    const betrag = kurz(Math.abs(b.etn)) + " ETN";
+    fakten.push(["🐋",
+      'Biggest move: <a href="/wallet/' + esc(b.address) + '" data-wallet="' + esc(b.address) + '">' +
+        (b.label ? esc(b.label) : kurzAdr(b.checksum_hash ?? b.address)) + "</a> " + verb + " <b>" + betrag + "</b>",
+      "Biggest move: " + (b.label ?? b.address.slice(0, 8) + "…" + b.address.slice(-6)) + " " + verb + " " + betrag]);
+  }
+  if (d.contracts?.woche?.summe) {
+    const t = nf(d.contracts.woche.summe) + " contracts";
+    fakten.push(["🧱", "<b>" + t + "</b> verified", t + " verified"]);
+  }
+  const bester = (d.tokens ?? []).filter((t) => t.holders_7d > 0).sort((a, b) => b.holders_7d - a.holders_7d)[0];
+  if (bester) {
+    fakten.push(["💎", "<b>" + esc(bester.symbol) + "</b> gained the most holders: <b>+" + nf(bester.holders_7d) + "</b>",
+      bester.symbol + " gained the most holders: +" + nf(bester.holders_7d)]);
+  }
+
+  if (!fakten.length) {
+    CHAIN.text = "";
+    box.innerHTML = '<div class="empty">Collecting data for the first week&hellip;</div>';
+    return;
+  }
+  CHAIN.text = "This week on Electroneum (" + el("chainWocheRange").textContent + ")\n" +
+    fakten.map((f) => f[0] + " " + f[2]).join("\n");
+  box.innerHTML = '<ul class="wochefakten">' +
+    fakten.map((f) => "<li><i>" + f[0] + "</i><span>" + f[1] + "</span></li>").join("") + "</ul>" +
+    '<div class="sharebar"><button class="ghost" data-teilen="x">Post on X</button>' +
+    '<button class="ghost" data-teilen="tg">Share on Telegram</button></div>';
+}
+
+el("chainWoche").addEventListener("click", (e) => {
+  const w = e.target.closest("a[data-wallet]");
+  if (w) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    investigateAddress(w.dataset.wallet);
+    return;
+  }
+  const b = e.target.closest("[data-teilen]");
+  if (!b || !CHAIN.text) return;
+  const url = location.origin + "/chain";
+  const ziel = b.dataset.teilen === "x"
+    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(CHAIN.text) + "&url=" + encodeURIComponent(url)
+    : "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(CHAIN.text);
+  window.open(ziel, "_blank", "noopener,width=600,height=560");
+});
+
+function zeichneChainTokens() {
+  const liste = CHAIN.daten?.tokens ?? [];
+  const box = el("chainTokens");
+  if (!liste.some((t) => t.holders != null)) {
+    box.innerHTML = '<div class="empty">Collecting token data&hellip;</div>';
+    return;
+  }
+  box.innerHTML = liste.map((t) => {
+    const d = t.holders_7d;
+    const woche = d == null ? "&nbsp;"
+      : d > 0 ? '<span class="up">+' + nf(d) + "</span> this week"
+      : d < 0 ? '<span class="down">−' + nf(-d) + "</span> this week"
+      : "no change this week";
+    const meta = [
+      t.transfers != null ? kurz(t.transfers) + " transfers" : null,
+      t.supply != null ? "supply " + kurz(Number(t.supply)) : null,
+    ].filter(Boolean).join(" · ");
+    return '<div class="tokrow">' +
+      '<img src="/assets/tokens/' + esc(t.logo) + '" alt="" width="34" height="34" loading="lazy">' +
+      '<span class="wer"><span class="nm">' + esc(t.name) + "<small>" + esc(t.symbol) + "</small></span>" +
+        '<span class="meta">' + meta + "</span></span>" +
+      '<span class="zahl"><b class="num">' + nf(t.holders) + " <small>holders</small></b><span>" + woche + "</span></span>" +
+      '<span class="links"><a href="' + esc(t.trade) + '" target="_blank" rel="noopener">Trade ↗</a>' +
+        '<a href="https://blockexplorer.electroneum.com/token/' + esc(t.address) +
+        '" target="_blank" rel="noopener">Explorer ↗</a></span></div>';
+  }).join("");
+}
+
+function zeichneChainNeu() {
+  const c = CHAIN.daten?.contracts;
+  const box = el("chainNeu");
+  const gruppen = c?.gruppen ?? [];
+  if (!gruppen.length) {
+    box.innerHTML = '<div class="empty">No newly verified contracts in the last 7 days.</div>';
+    return;
+  }
+  box.innerHTML = gruppen.map((g) =>
+    '<a class="tokrow" href="' + EXPLORER + esc(g.address) + '" target="_blank" rel="noopener">' +
+    '<span class="neuicon">' + esc((g.name.match(/[A-Za-z0-9]/)?.[0] ?? "?").toUpperCase()) + "</span>" +
+    '<span class="wer"><span class="nm">' + esc(g.name) + (g.anzahl > 1 ? "<small>×" + nf(g.anzahl) + "</small>" : "") + "</span>" +
+      '<span class="meta">verified ' + zeitHer(g.neuste) + " ago</span></span>" +
+    '<span class="zahl"><b class="num">' + (g.tx > 0 ? nf(g.tx) : "—") + "</b><span>" +
+      (g.tx > 0 ? "transactions" : "not used yet") + "</span></span></a>"
+  ).join("") + (c.weitere ? '<div class="tokmehr dim3">+ ' + nf(c.weitere) + " more</div>" : "");
 }
 
 // ---------- Groesste Migrationen ----------
@@ -4762,6 +4999,7 @@ const LADER = {
   board: () => ladeLeaderboard(),
   activity: () =>
     Promise.all([ladeWatchlist(), ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
+  chain: () => ladeChain(),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
   // Wartet auf eine Suche - die Merkliste ist das einzige, was hier von
   // selbst etwas zu zeigen hat, und genau dort ist sie am nuetzlichsten.
@@ -4791,7 +5029,7 @@ function zeigeSeite(name, neu = true) {
   }
   // Der Chart wurde eventuell in einem versteckten Tab gezeichnet und hatte
   // dort die Breite 0 - beim Einblenden neu vermessen.
-  if (name === "overview" || name === "tiers" || name === "migration") alleChartsNachziehen();
+  if (name === "overview" || name === "tiers" || name === "migration" || name === "chain") alleChartsNachziehen();
   if (name === "activity" && FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
 

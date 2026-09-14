@@ -210,6 +210,39 @@ export async function fetchTxChart(apiBase) {
 }
 
 /**
+ * Stand eines Tokens fuer den Chain-Reiter: Holder, Transfers, Gesamtmenge.
+ * Zwei Anfragen - die Transferzahl gibt es nur ueber /counters.
+ */
+export async function fetchTokenStand(apiBase, address) {
+  const t = await getJson(`${apiBase}/tokens/${address}`);
+  const z = await getJson(`${apiBase}/tokens/${address}/counters`).catch(() => null);
+  const dezimalen = toInt(t.decimals) ?? 18;
+  return {
+    holders: toInt(z?.token_holders_count ?? t.holders ?? t.holders_count),
+    transfers: toInt(z?.transfers_count),
+    // Ganze Token als Text: 100.000.000 BOLT sind in Wei jenseits dessen, was
+    // eine Zahl in JavaScript genau traegt.
+    supply: t.total_supply != null ? String(BigInt(t.total_supply) / 10n ** BigInt(dezimalen)) : null,
+  };
+}
+
+/** Die zuletzt verifizierten Contracts, neueste zuerst - eine Seite, 50 Stueck. */
+export async function fetchVerifiedContracts(apiBase) {
+  const d = await getJson(`${apiBase}/smart-contracts`);
+  return (d.items ?? [])
+    .map((c) => ({
+      address: String(c.address?.hash ?? "").toLowerCase(),
+      name: c.address?.name ?? null,
+      // Bei einem Proxy sagt die Implementierung, was er ist ("Vault" statt
+      // "ERC1967Proxy").
+      impl_name: c.address?.implementations?.[0]?.name ?? null,
+      verified_at: c.verified_at,
+      tx_count: toInt(c.transaction_count),
+    }))
+    .filter((c) => c.address && c.verified_at);
+}
+
+/**
  * Einzelne Adresse - fuer Wallets, die aus den Top N gefallen sind.
  *
  * ACHTUNG: Dieser Endpoint liefert KEIN transaction_count (anders als die

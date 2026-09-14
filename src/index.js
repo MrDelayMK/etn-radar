@@ -10,6 +10,7 @@ import { clusterGruppen } from "./clusters.js";
 import { handleTelegramWebhook } from "./telegram.js";
 import { fetchAddress } from "./blockscout.js";
 import { HISTORIE_AB } from "./bridge-tage.js";
+import { CHAIN_TOKENS, tradeLink } from "./chain-tokens.js";
 
 // Die Daten aendern sich nur alle 30 Minuten - zwei Minuten waren also
 // fuenfzehnmal haeufiger nachgefragt als noetig. Bei Andrang ist das der
@@ -1841,6 +1842,148 @@ async function bilanz(db, env) {
   };
 }
 
+/* ---------- Chain-Reiter ---------------------------------------------------
+ *
+ * Liest nur, was der Snapshot-Lauf abgelegt hat (src/chain.js) - null
+ * Anfragen an den Explorer, egal wie viele zuschauen.
+ *
+ * "Diese Woche" sind die letzten sieben ABGESCHLOSSENEN Tage. Der laufende Tag
+ * waere ein halber und zoege jeden Vergleich nach unten.
+ */
+async function chain(db, env) {
+  const alle = (sql, ...werte) =>
+    db.prepare(sql).bind(...werte).all().then((r) => r.results ?? []).catch(() => []);
+  const bridge = String(env.BRIDGE_ADDRESS ?? "").toLowerCase();
+  const heute = tagVor(0);
+  const woche = { von: tagVor(7), bis: tagVor(1) };
+  const vorwoche = { von: tagVor(14), bis: tagVor(8) };
+
+  const [tage, tokenZeilen, contracts, bridgeTage, bewegung] = await Promise.all([
+    alle("SELECT day, tx_count, total_addresses FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
+    alle(
+      "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
+      tagVor(15)
+    ),
+    alle(
+      "SELECT address, name, impl_name, verified_at, tx_count FROM chain_contracts" +
+        " WHERE verified_at >= ? ORDER BY verified_at",
+      tagVor(92)
+    ),
+    alle("SELECT day, abfluss_wei FROM bridge_tage WHERE day >= ?", vorwoche.von),
+    // Die groesste einzelne Bewegung der Woche, ohne die Bridge selbst.
+    alle(
+      "SELECT e.address, e.delta_etn, a.label, a.checksum_hash FROM events e" +
+        " LEFT JOIN addresses a ON a.hash = e.address" +
+        " WHERE e.detected_at >= ? AND e.detected_at < ? AND e.type IN ('gain','loss')" +
+        " AND e.address != ? ORDER BY abs(e.delta_etn) DESC LIMIT 1",
+      woche.von + "T00:00:00Z",
+      heute + "T00:00:00Z",
+      bridge
+    ),
+  ]);
+
+  // Summe einer Tagesreihe ueber einen Zeitraum samt Zahl der Tage mit Wert:
+  // zwei Wochen zu vergleichen ist nur mit je sieben Tagen ehrlich.
+  const summe = (reihe, z) => {
+    const drin = reihe.filter((p) => p.day >= z.von && p.day <= z.bis);
+    return drin.length ? { summe: drin.reduce((a, p) => a + p.n, 0), tage: drin.length } : null;
+  };
+  const kachel = (reihe) => ({
+    reihe: reihe.slice(-90),
+    woche: summe(reihe, woche),
+    vorwoche: summe(reihe, vorwoche),
+  });
+
+  const tx = tage
+    .filter((t) => t.tx_count != null && t.day < heute)
+    .map((t) => ({ day: t.day, n: t.tx_count }));
+
+  // Neue Wallets eines Tages = Adressen am Folgetag minus Adressen an diesem
+  // Tag, jeweils vom ersten Snapshot. Nur zwischen direkt aufeinanderfolgenden
+  // Tagen - ueber eine Luecke hinweg waeren zwei Tage als einer gezaehlt.
+  const adr = tage.filter((t) => t.total_addresses != null);
+  const wallets = [];
+  for (let i = 1; i < adr.length; i++) {
+    if (Date.parse(adr[i].day) - Date.parse(adr[i - 1].day) !== 86400000) continue;
+    wallets.push({ day: adr[i - 1].day, n: Math.max(0, adr[i].total_addresses - adr[i - 1].total_addresses) });
+  }
+
+  // Verifizierte Contracts je Tag. Der aelteste gesammelte Tag ist nur
+  // angebrochen - die erste abgerufene Seite endete mittendrin - und faellt
+  // raus. Tage ohne Verifizierung zaehlen als 0.
+  const proTag = {};
+  for (const c of contracts) {
+    const d = c.verified_at.slice(0, 10);
+    proTag[d] = (proTag[d] ?? 0) + 1;
+  }
+  const contractReihe = [];
+  if (contracts.length) {
+    const ab = Date.parse(contracts[0].verified_at.slice(0, 10)) + 86400000;
+    for (let t = ab; t < Date.parse(heute); t += 86400000) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      contractReihe.push({ day: d, n: proTag[d] ?? 0 });
+    }
+  }
+
+  // "New on chain": gleiche Vorlagen zusammengefasst. Am 14.09. kamen zehn
+  // GnosisSafe- und GamePool-Kopien in derselben Sekunde - als Einzelzeilen
+  // waere die Liste nur Rauschen. Bei Proxys zaehlt die Implementierung.
+  const gruppen = new Map();
+  for (const c of contracts) {
+    if (c.verified_at < woche.von) continue;
+    const name = c.impl_name || c.name || "Unnamed contract";
+    const g = gruppen.get(name) ?? { name, anzahl: 0, tx: 0, neuste: c.verified_at, address: c.address, _top: -1 };
+    g.anzahl++;
+    g.tx += c.tx_count ?? 0;
+    if (c.verified_at > g.neuste) g.neuste = c.verified_at;
+    if ((c.tx_count ?? 0) > g._top) {
+      g._top = c.tx_count ?? 0;
+      g.address = c.address;
+    }
+    gruppen.set(name, g);
+  }
+  const neu = [...gruppen.values()]
+    .sort((a, b) => b.tx - a.tx || b.anzahl - a.anzahl || (a.neuste < b.neuste ? 1 : -1))
+    .map(({ _top, ...g }) => g);
+
+  const inEtn = (wei) => Number(BigInt(wei) / 10n ** 12n) / 1e6;
+  const migriert = (z) =>
+    bridgeTage.filter((t) => t.day >= z.von && t.day <= z.bis).reduce((a, t) => a + inEtn(t.abfluss_wei), 0);
+
+  const tokens = CHAIN_TOKENS.map((t) => {
+    const adresse = t.address.toLowerCase();
+    const zeilen = tokenZeilen.filter((z) => z.address === adresse);
+    const jetzt = zeilen[zeilen.length - 1];
+    // Vergleichsstand vor sieben Tagen - aber nicht aelter als neun, sonst
+    // hiesse "this week" in Wahrheit zwei.
+    const vorher = [...zeilen].reverse().find((z) => z.day <= tagVor(7) && z.day >= tagVor(9));
+    const diff = (feld) => (jetzt?.[feld] != null && vorher?.[feld] != null ? jetzt[feld] - vorher[feld] : null);
+    return {
+      symbol: t.symbol,
+      name: t.name,
+      address: t.address,
+      logo: t.logo,
+      trade: tradeLink(t.address),
+      holders: jetzt?.holders ?? null,
+      holders_7d: diff("holders"),
+      transfers: jetzt?.transfers ?? null,
+      transfers_7d: diff("transfers"),
+      supply: jetzt?.supply ?? null,
+    };
+  }).sort((a, b) => (b.holders ?? -1) - (a.holders ?? -1));
+
+  const b = bewegung[0];
+  return {
+    woche,
+    tx: kachel(tx),
+    wallets: kachel(wallets),
+    contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
+    migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,
+    bewegung: b ? { address: b.address, checksum_hash: b.checksum_hash, label: b.label, etn: b.delta_etn } : null,
+    tokens,
+  };
+}
+
 /* ---------- Groesste Migrationen aus der Bridge ---------------------------
  *
  * Je Wallet und Tag zusammengefasst: wer an einem Tag in drei Teilen migriert,
@@ -2331,7 +2474,7 @@ async function notlaufLesen(cache, u) {
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
 // des Pfads.
-const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|clusters|investigate|about|wallet\/[^/]+)\/?$/;
+const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|clusters|investigate|about|wallet\/[^/]+)\/?$/;
 
 export default {
   async fetch(request, env, ctx) {
@@ -2442,6 +2585,9 @@ export default {
       // - mit sechs Stunden hinge der Chart nach einem Lauf wieder so lange zurueck.
       else if (pfad === "/api/bridge-verlauf") antwort = json(await bridgeVerlauf(db, u), 200, 1800);
       else if (pfad === "/api/migrationen") antwort = json(await migrationen(db, u), 200, 900);
+      // Neue Werte kommen hoechstens alle sechs Stunden (Tokens) oder einmal am
+      // Tag (Tageswerte) - eine Stunde reicht dicke.
+      else if (pfad === "/api/chain") antwort = json(await chain(db, env), 200, 3600);
       // Neue Zeilen kommen einmal am Tag mit dem ersten Snapshot.
       else if (pfad === "/api/tier-verlauf") antwort = json(await tierVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));

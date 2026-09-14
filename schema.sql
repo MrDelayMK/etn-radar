@@ -157,6 +157,36 @@ CREATE TABLE IF NOT EXISTS tier_tage (
   PRIMARY KEY (day, tier)
 );
 
+-- Chain-Reiter (src/chain.js). Tageswerte der ganzen Chain: Transaktionen aus
+-- dem Tages-Chart des Explorers (nur abgeschlossene Tage), Adressen vom ersten
+-- Snapshot eines Tages - die Differenz zweier Tage sind die neuen Wallets.
+CREATE TABLE IF NOT EXISTS chain_tage (
+  day              TEXT PRIMARY KEY,        -- YYYY-MM-DD
+  tx_count         INTEGER,
+  total_addresses  INTEGER
+);
+-- Holder und Transfers der beobachteten Oekosystem-Tokens (src/chain-tokens.js),
+-- ein Stand je Tag und Token; der letzte Abruf des Tages gewinnt.
+CREATE TABLE IF NOT EXISTS token_tage (
+  day        TEXT NOT NULL,
+  address    TEXT NOT NULL,                 -- lowercase
+  holders    INTEGER,
+  transfers  INTEGER,
+  supply     TEXT,                          -- ganze Token, als Text
+  abgerufen  TEXT NOT NULL,
+  PRIMARY KEY (day, address)
+);
+-- Frisch verifizierte Contracts fuer "New on chain" und die Kachel dazu.
+CREATE TABLE IF NOT EXISTS chain_contracts (
+  address      TEXT PRIMARY KEY,            -- lowercase
+  name         TEXT,
+  impl_name    TEXT,                        -- bei Proxys die Implementierung
+  verified_at  TEXT NOT NULL,
+  tx_count     INTEGER,
+  abgerufen    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chain_contracts_verified ON chain_contracts(verified_at);
+
 -- Sperr-Zustand fuer manuelle "Jetzt ausfuehren"-Knoepfe (Census,
 -- Cluster-Analyse, ...). Getrennt von den jeweiligen *_runs-Tabellen (die
 -- erst beim FERTIGEN Lauf geschrieben werden): ohne eigene Sperre koennte man

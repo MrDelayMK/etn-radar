@@ -8,6 +8,7 @@
 import { fetchTopAddresses, fetchStats, fetchTxChart } from "./blockscout.js";
 import { tierFor, TIERS } from "./tiers.js";
 import { benachrichtigeSleeperWakes } from "./telegram.js";
+import { chainSammeln } from "./chain.js";
 
 const CHUNK = 100; // Statements pro D1-Batch
 
@@ -692,6 +693,21 @@ export async function runIngest(env, db, opts = {}) {
     } catch (e) {
       log("  Telegram-Benachrichtigung fehlgeschlagen: " + e.message);
     }
+  }
+
+  // --- 10. Chain-Reiter ----------------------------------------------------
+  //
+  // Tageswerte der ganzen Chain, beobachtete Tokens, neu verifizierte
+  // Contracts (src/chain.js). Nach dem Schreiben und in eigenem try: der
+  // Snapshot ist hier schon sicher, ein Aussetzer des Explorers bei den Tokens
+  // darf ihn nicht mehr kippen.
+  try {
+    const c = await chainSammeln(env, db, { day, stats, txChart, log });
+    if (c.tage || c.tokens || c.contracts) {
+      log("  Chain: " + c.tage + " Tageswerte, " + c.tokens + " Tokens, " + c.contracts + " Contracts");
+    }
+  } catch (e) {
+    log("  Chain-Daten fehlgeschlagen: " + e.message);
   }
 
   log("Snapshot #" + snapId + " fertig in " + (ms / 1000).toFixed(1) + "s");
