@@ -85,11 +85,21 @@ den eigenen Snapshots. Im laufenden Betrieb braucht die Seite **keine fremde
 Kursquelle**. Drei Versuche, den Kurs live von außen zu holen, scheiterten an
 IP-Sperren — CoinGecko antwortet Workern ohne User-Agent mit 403 und mit
 Kennung dann 429, Coinpaprika mit 402. Die Einzelheiten stehen im Kopf von
-`preisverlauf()` in `src/index.js`.
+`preisverlauf()` in `src/api/uebersicht.js`.
 
 ---
 
 ## 5. Betrieb
+
+**Aufbau.** Der Worker verteilt in `src/index.js` nur die Anfragen; die
+Endpunkte stehen nach Themen in `src/api/` (Übersicht, Wallets, Migration,
+Chain, Betreiber). Die Seite selbst ist `public/index.html` (Markup),
+`public/app.css` und `public/app.js`.
+
+**Vor jedem Ausrollen** `npm test` laufen lassen (gut zwei Minuten, weil die
+Explorer-Drossel echt mitläuft) oder `npm run test:schnell`. Die Tests fragen
+weder den Explorer noch D1; zwei davon brauchen die lokale Datenbank in
+`data/etn.db` und überspringen sich ohne sie.
 
 **Admin-Zugang.** Einmal `https://etn-radar.galacticsl.com/?admin=<DEIN WORT>`
 aufrufen; der Browser merkt es sich. Danach erscheinen die „Run now"-Knöpfe und

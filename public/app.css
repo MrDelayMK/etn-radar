@@ -1,0 +1,980 @@
+:root{
+  --bg:#080b12; --bg2:#0d1220; --card:#111827; --card2:#151d2e; --card3:#1a2436;
+  /* Border-Farben angehoben (waren 1.2:1 / 1.4:1 gegen --card, kaum sichtbar);
+     Tabellen-/Kartenraender sollen erkennbar bleiben, ohne grell zu wirken. */
+  --line:#263a54; --line2:#3d5474;
+  /* tx2/tx3 nochmal angehoben: die erste Korrektur war zwar WCAG-AA-konform
+     (5.7-6.7:1), wirkte bei 10-11px Grossbuchstaben-Labels aber weiterhin
+     "blass" - Kontrastzahl allein erklaert die Lesbarkeit nicht, Gewicht und
+     Groesse zaehlen mit (siehe die font-weight-Ergaenzungen unten bei .kpi .k,
+     .fact .k, h2 etc). Jetzt 6.0-9.6:1, durchgehend AA, meist AAA. */
+  --tx:#e8eef8; --tx2:#a6b6cc; --tx3:#94a1bd;
+  --up:#22d3a7; --down:#f4635e; --warn:#fbbf24; --acc:#5b9cff; --acc2:#a78bfa;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+/* Das eingebaute [hidden]{display:none} des Browsers ist die schwaechste
+   Regel ueberhaupt - jedes display:flex auf einer Klasse schlaegt sie. Genau
+   das ist hier schon zweimal passiert: der Clusters-Reiter blieb trotz hidden
+   sichtbar, und das Willkommens-Panel liess sich nicht wegklicken. Einmal
+   global, damit es kein drittes Mal gibt. */
+[hidden]{display:none !important}
+body{
+  background:
+    radial-gradient(1100px 520px at 12% -8%, #14224a 0%, transparent 60%),
+    radial-gradient(900px 460px at 88% 0%, #0f2f3d 0%, transparent 55%),
+    var(--bg);
+  color:var(--tx); font:15px/1.55 var(--sans); min-height:100vh; padding:0 0 80px;
+}
+.wrap{max-width:1360px;margin:0 auto;padding:0 22px;position:relative}
+
+/* Hintergrundbild. Zwei feste Ebenen hinter dem Inhalt: das Bild selbst,
+   darueber ein Verlauf, der nach unten in die Grundfarbe laeuft. Ohne den
+   Verlauf konkurriert das Bild ueber die ganze Seitenlaenge mit Text und
+   Zahlen - oben, wo nur der Kopf steht, darf es dagegen zu sehen sein. */
+body::before{
+  content:""; position:fixed; inset:0; z-index:-2;
+  background:url("/assets/bg.jpg") center 62%/cover no-repeat;
+  opacity:.72;
+}
+body::after{
+  content:""; position:fixed; inset:0; z-index:-1;
+  background:linear-gradient(180deg,
+    rgba(8,11,18,.05) 0%, rgba(8,11,18,.34) 38%, rgba(8,11,18,.74) 66%, rgba(8,11,18,.93) 92%);
+}
+@media(prefers-reduced-motion:no-preference){
+  body::before{animation:bgAn 1.2s ease-out}
+}
+@keyframes bgAn{from{opacity:0;transform:scale(1.04)}to{opacity:.72;transform:none}}
+a{color:inherit;text-decoration:none}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.up{color:var(--up)} .down{color:var(--down)} .dim{color:var(--tx2)} .dim3{color:var(--tx3)}
+
+/* ---------- Header ---------- */
+header{padding:26px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+.brand{display:flex;align-items:center;gap:15px;color:inherit;text-decoration:none}
+.brand .logo{width:46px;height:46px;border-radius:50%;flex:0 0 auto;
+              filter:drop-shadow(0 0 16px #5b9cff70)}
+.brand h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
+.brand .sub{font-size:12.5px;color:var(--tx3);margin-top:2px}
+.hspace{flex:1}
+.homelink{
+  text-decoration:none;color:var(--tx2);transition:.15s;gap:8px;padding-left:9px
+}
+.homelink:hover{color:var(--tx);border-color:var(--acc)}
+.homelink img{display:block;border-radius:4px;flex-shrink:0}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
+  background:var(--card);border:1px solid var(--line);border-radius:9px;
+  font-size:12.5px;color:var(--tx2)
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 9px var(--up)}
+
+/* ---------- Tabs ---------- */
+nav{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+/* Nur die Reiter scrollen. Vorher scrollte die ganze Leiste, und bei 1024 Pixel
+   Breite lagen Feedback und Donate rechts ausserhalb - gemessen: 1.215 Pixel
+   Inhalt in 965 Pixeln Platz. Wer die Knoepfe nicht sieht, findet sie nicht. */
+nav .navtabs{display:flex;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+nav .navtabs::-webkit-scrollbar{display:none}
+nav button{
+  background:none;border:0;border-bottom:2px solid transparent;color:var(--tx2);
+  padding:13px 20px;font:620 14.5px var(--sans);cursor:pointer;white-space:nowrap;
+  border-radius:0;transition:.15s;display:flex;align-items:center;gap:9px
+}
+nav button .ic{font-size:19px}
+nav button:hover{color:var(--tx)}
+nav button.on{color:var(--tx);border-bottom-color:var(--acc)}
+.page{display:none}
+.page.on{display:block;animation:ein .18s ease-out}
+@keyframes ein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* ---------- Building blocks ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:19px}
+.grid{display:grid;gap:14px}
+section{margin-top:26px}
+/* Kontrastzahl allein macht kleine Grossbuchstaben-Labels nicht lesbar -
+   font-weight:700 traegt hier mehr zur wahrgenommenen Klarheit bei als jede
+   weitere Aufhellung der Farbe. Gilt fuer alle .k/.nm-span/label-Klassen unten. */
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--tx2);
+   margin-bottom:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);font-weight:400}
+
+/* ---------- Migration block ---------- */
+.mig{
+  background:linear-gradient(160deg,#151f38 0%,#111827 48%,#171227 100%);
+  border:1px solid #2b3a5c;border-radius:20px;padding:26px 26px 22px
+}
+.mig .head{display:flex;align-items:flex-start;gap:26px;flex-wrap:wrap;margin-bottom:22px}
+.mig .lbl{font-size:12.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--warn);
+          display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mig .lbl .ic{font-size:26px}
+.pill{background:#fbbf2418;border:1px solid #fbbf2440;color:var(--warn);white-space:nowrap;
+      padding:4px 11px;border-radius:20px;font-size:11px;letter-spacing:.05em}
+.mig .big{font-size:clamp(42px,6.4vw,68px);font-weight:690;letter-spacing:-.04em;line-height:1}
+.mig .bigsub{margin-top:9px;font-size:15px;color:var(--tx2)}
+.mig .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:13px;flex:1;min-width:300px}
+.fact{background:#0b111e99;border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.fact .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
+.fact .v{font-size:23px;font-weight:650;margin-top:5px;letter-spacing:-.025em}
+.chartcard{background:#0a0f1bee;border:1px solid var(--line);border-radius:14px;padding:16px 16px 8px}
+.chartcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+/* Wallets je Stufe ueber die Zeit: eine kleine Karte je Stufe (small multiples). */
+.tierverlauf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+@media (max-width:900px){.tierverlauf{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.tierverlauf{grid-template-columns:1fr}}
+.tvkarte{background:#0a0f1bee;border:1px solid var(--line);border-radius:12px;padding:12px 14px 6px}
+.tvkarte .kopf{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.tvkarte .kopf .nm{font-size:13.5px;font-weight:600;color:var(--tx)}
+.tvkarte .kopf .wert{font-size:17px;font-weight:660;color:var(--tx)}
+.tvkarte .unter{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--tx3);margin-top:1px}
+.tvkarte .unter .up,.tvkarte .unter .down{font-weight:600}
+.tvkarte .chartholder{height:92px;margin-top:6px}
+.tvkarte svg{width:100%;height:92px;display:block}
+.tvkarte .tip{top:-2px;padding:5px 10px}
+.tvkarte .tip b{font-size:13.5px;color:var(--tx)}
+
+/* Chain-Reiter */
+.chainkacheln{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:560px){.chainkacheln{grid-template-columns:1fr}}
+.wochefakten{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.wochefakten li{display:flex;gap:11px;align-items:baseline;font-size:14px;color:var(--tx2);line-height:1.45}
+.wochefakten li i{font-style:normal;width:22px;flex:none;text-align:center}
+.wochefakten b{color:var(--tx);font-weight:640}
+.wochefakten a{color:var(--acc);text-decoration:none;font-weight:600}
+.wochefakten a:hover{text-decoration:underline}
+.tokliste .tokrow{display:flex;align-items:center;gap:13px;padding:11px 0;border-top:1px solid var(--line);
+  color:inherit;text-decoration:none}
+.tokliste .tokrow:first-child{border-top:0}
+.tokliste a.tokrow:hover .nm{color:var(--acc)}
+.tokrow img,.tokrow .neuicon{width:34px;height:34px;border-radius:50%;flex:none;background:var(--card2)}
+.tokrow .neuicon{display:grid;place-items:center;font:700 13px var(--mono);color:var(--tx3);border:1px solid var(--line2)}
+.tokrow .wer{flex:1;min-width:0}
+.tokrow .nm{display:block;font-size:14px;font-weight:620;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tokrow .nm small{font:600 11.5px var(--mono);color:var(--tx3);margin-left:7px}
+.tokrow .meta{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.tokrow .zahl{text-align:right;flex:none}
+.tokrow .zahl b{display:block;font-size:15px;font-weight:660;color:var(--tx)}
+.tokrow .zahl b small{font-size:11.5px;font-weight:500;color:var(--tx3)}
+.tokrow .zahl > span{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.tokrow .links{display:flex;gap:6px;flex:none}
+.tokrow .links a{padding:5px 11px;font-size:12px;border-radius:8px;text-decoration:none;white-space:nowrap;
+  background:var(--card2);color:var(--tx2);border:1px solid var(--line2)}
+.tokrow .links a:hover{color:var(--tx);border-color:var(--acc)}
+.tokmehr{font-size:12px;padding-top:9px;border-top:1px solid var(--line)}
+@media (max-width:620px){.tokliste .tokrow{flex-wrap:wrap}.tokrow .links{width:100%;padding-left:47px}}
+.chartholder{position:relative;cursor:crosshair}
+svg.chart{width:100%;display:block}
+.tip{
+  position:absolute;top:10px;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:#0a1120f5;border:1px solid var(--line2);border-radius:10px;padding:9px 13px;
+  font-size:12.5px;line-height:1.5;white-space:nowrap;z-index:5;box-shadow:0 10px 30px #000a
+}
+.tip.on{opacity:1}
+.tip b{display:block;font-size:15px;color:var(--warn)}
+.tip span{display:block;color:var(--tx3);font-size:11.5px}
+.warnbar{
+  margin-top:16px;background:#f4635e12;border:1px solid #f4635e33;border-left:3px solid var(--down);
+  border-radius:10px;padding:13px 16px;font-size:13.5px;color:#ffd4d2
+}
+/* ---------- Aftermath ---------- */
+.bfacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px}
+.bfacts .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
+.bfacts .v{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.02em}
+
+/* Vergleichstabelle. Die Spalten sind Zeitpunkte, die Zeilen Kennzahlen -
+   umgekehrt waere jede Zeile ein anderer Massstab und nichts vergleichbar. */
+.btab{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+.btab th,.btab td{padding:9px 12px;text-align:right;white-space:nowrap}
+.btab thead th{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);
+  font-weight:700;border-bottom:1px solid var(--line2)
+}
+.btab thead th.jetzt,.btab td.jetzt{background:#5b9cff0f}
+.btab thead th.stich,.btab td.stich{background:#f4635e12;color:#ff9a92}
+.btab tbody th{
+  text-align:left;font-weight:560;color:var(--tx2);font-size:12.5px;
+  border-top:1px solid var(--line)
+}
+.btab tbody td{border-top:1px solid var(--line);font-family:var(--mono);color:var(--tx)}
+.btab td .unten{display:block;font-size:10.5px;color:var(--tx3);margin-top:2px}
+.btab tbody tr:hover td{background:#ffffff06}
+.btab .offen{color:var(--tx3)}
+
+.bzrow{display:flex;align-items:center;gap:13px;padding:10px 0;border-top:1px solid var(--line)}
+.bzrow:first-child{border-top:0}
+.bzrow .pos{
+  width:32px;flex-shrink:0;text-align:center;font-family:var(--mono);font-size:12px;
+  color:var(--tx3);font-weight:700
+}
+.bzrow .wer{flex:1;min-width:0}
+.bzrow .adr{display:block;font-family:var(--mono);font-size:12.5px;color:var(--tx);
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bzrow .meta{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.bzrow .betrag{text-align:right;flex-shrink:0}
+.bzrow .betrag .b{display:block;font-size:14px;font-weight:660;color:var(--warn)}
+.bzrow .betrag .h{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+
+/* ---------- Burn forecast ---------- */
+.burncard{
+  position:relative;overflow:hidden;
+  background:radial-gradient(120% 140% at 88% 0%,#f4635e26 0%,#f4635e0d 42%,transparent 70%),
+             linear-gradient(155deg,#1c1420 0%,#141019 55%,#1a1117 100%);
+  border:1px solid #f4635e4d;border-radius:20px;padding:26px 28px 22px
+}
+.burncard .flames{
+  position:absolute;top:14px;right:26px;font-size:76px;line-height:1;opacity:.15;
+  animation:flacker 2.6s ease-in-out infinite;pointer-events:none;
+  transform-origin:center bottom
+}
+@media (max-width:620px){ .burncard .flames{display:none} }
+@keyframes flacker{
+  0%,100%{transform:scale(1) rotate(-2deg);opacity:.14}
+  45%    {transform:scale(1.09) rotate(3deg);opacity:.22}
+}
+@media (prefers-reduced-motion:reduce){ .burncard .flames{animation:none} }
+.burnhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.tag-burn{
+  background:#f4635e1f;border:1px solid #f4635e55;color:#ff8f8b;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.11em
+}
+.burnbig{
+  font-size:clamp(38px,5.6vw,60px);font-weight:700;letter-spacing:-.04em;line-height:1;
+  color:#ff9a92;text-shadow:0 0 34px #f4635e40
+}
+.burnsub{margin-top:9px;font-size:15.5px;color:var(--tx);line-height:1.5;max-width:62ch}
+.burnsub b{color:#ffb4ae}
+.burnbar{margin-top:18px;height:13px;background:#0a0f1b;border:1px solid var(--line);border-radius:7px;overflow:hidden;display:flex}
+.burnbar i{display:block;height:100%}
+.burnbar #burnBarDone{background:linear-gradient(90deg,#22d3a7,#4ade80)}
+.burnbar .burn{background:repeating-linear-gradient(45deg,#f4635e,#f4635e 7px,#c93b36 7px,#c93b36 14px);flex:1}
+.burnverdict{margin-top:13px;font-size:14px;font-weight:600}
+.migbar{height:10px;background:#0a0f1b;border-radius:6px;overflow:hidden;margin-top:14px;
+        border:1px solid var(--line);display:flex;position:relative}
+/* Marke fuer den Stand vor 90 Tagen. Sie sitzt fast auf der Kante des
+   gruenen Balkens - genau das ist die Aussage. */
+.migbar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:#e2e8f0;
+          opacity:.85;border-radius:2px}
+.migbar i{display:block;height:100%}
+.migbar .done{background:linear-gradient(90deg,#22d3a7,#4ade80)}
+.migbar .rest{background:linear-gradient(90deg,#f4635e,#fbbf24);flex:1}
+.migbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tx2);margin-top:7px}
+.migbar-lbl b{color:var(--tx)}
+
+/* ---------- KPI ---------- */
+.kpis{grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
+.kpi .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);
+        display:flex;align-items:center;gap:9px}
+.kpi .k .ic{font-size:20px}
+.kpi .v{font-size:28px;font-weight:660;margin:8px 0 3px;letter-spacing:-.028em}
+.kpi .s{font-size:12px;color:var(--tx2)}
+
+/* ---------- Tier rows ---------- */
+.tierrow{
+  display:flex;align-items:center;gap:14px;padding:11px 14px;background:var(--card2);
+  border:1px solid var(--line);border-radius:12px;transition:.15s
+}
+.tierrow:hover{border-color:var(--line2);transform:translateX(2px)}
+.tierrow .e{font-size:34px;line-height:1;width:44px;text-align:center;flex-shrink:0}
+.tierrow .nm{flex:1;min-width:0}
+.tierrow .nm b{font-size:14.5px;font-weight:600;display:block}
+.tierrow .nm span{font-size:12px;font-weight:560;color:var(--tx2);font-family:var(--mono)}
+.tierrow .bars{flex:2;min-width:90px}
+.tierrow .bar{height:7px;background:#0a0f1b;border-radius:4px;overflow:hidden;margin-bottom:4px}
+.tierrow .bar i{display:block;height:100%;border-radius:4px}
+.tierrow .barlbl{font-size:11px;color:var(--tx2)}
+.tierrow .cnt{text-align:right;flex-shrink:0;min-width:96px}
+.tierrow .cnt b{font-size:17px;font-weight:660;display:block}
+.tierrow .cnt span{font-size:11px;color:var(--tx2)}
+.tierrow .cnt span.aend{display:block;margin-top:2px;font-weight:600;cursor:help}
+.tierrow .cnt span.aend.up{color:var(--up)}
+.tierrow .cnt span.aend.down{color:var(--down)}
+.tiersfoot{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;flex-wrap:wrap}
+.tiersfoot button{padding:9px 16px;font-size:12.5px}
+.activitybar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.activitybar button{padding:8px 15px;font-size:12.5px}
+
+/* ---------- Cluster cards ---------- */
+.clustergroup{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px 19px}
+.clustergroup .head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.clustergroup .src{font-size:12.5px;color:var(--tx2)}
+.clustergroup .src b{color:var(--tx);font-family:var(--mono);font-weight:600}
+.clustergroup .combo{text-align:right}
+.clustergroup .combo b{font-size:19px;font-weight:660;display:block}
+.clustergroup .combo span{font-size:11px;color:var(--tx2)}
+.clustergroup .confbar{height:5px;background:#0a0f1b;border-radius:3px;overflow:hidden;margin:12px 0 13px}
+.clustergroup .confbar i{display:block;height:100%;background:linear-gradient(90deg,var(--warn),var(--acc2));border-radius:3px}
+.cmember{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line)}
+.cmember:first-of-type{border-top:0}
+.cmember .em{font-size:20px;flex-shrink:0}
+.cmember .id{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmember .id b{font-family:var(--sans);color:var(--tx);font-weight:560}
+.cmember .val{text-align:right;flex-shrink:0}
+.cmember .val b{font-size:13px;display:block}
+.cmember .val span{font-size:11px;color:var(--tx2)}
+
+/* ---------- Inputs ---------- */
+.searchrow{display:flex;gap:10px;flex-wrap:wrap}
+input[type=text]{
+  flex:1;min-width:250px;background:#0a0f1b;border:1px solid var(--line2);border-radius:11px;
+  padding:13px 15px;color:var(--tx);font:14px var(--mono);outline:none;transition:.15s
+}
+input[type=text]:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+/* Suchfeld mit X zum Leeren. Das X sitzt IM Feld statt daneben: daneben
+   stuende es neben dem Suchknopf und saehe aus wie ein zweiter Knopf. */
+.suchfeld{position:relative;flex:1;min-width:250px;display:flex}
+.suchfeld input[type=text]{flex:1;min-width:0;width:100%;padding-right:42px}
+.suchfeld.klein{flex:none;min-width:0}
+.suchfeld.klein input[type=text]{padding-right:32px}
+.suchfeld .leeren{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  background:none;border:0;border-radius:8px;padding:3px 9px;color:var(--tx3);
+  font:400 20px/1 var(--sans);cursor:pointer;min-width:0}
+.suchfeld.klein .leeren{right:3px;padding:2px 7px;font-size:17px}
+.suchfeld .leeren:hover{color:var(--tx);background:#ffffff0f}
+.suchfeld .leeren[hidden]{display:none}
+/* Vom Browser vorgeschlagene Eingaben faerbt er sonst hell ein - auf dem
+   dunklen Grund ein weisses Feld. Der innere Schatten uebermalt das. */
+input:-webkit-autofill,input:-webkit-autofill:hover{
+  -webkit-text-fill-color:var(--tx);caret-color:var(--tx);-webkit-box-shadow:0 0 0 40px #0a0f1b inset}
+input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 40px #0a0f1b inset,0 0 0 3px #5b9cff22}
+/* Leaderboard: Balance-Filter und Suche rechtsbuendig unter den
+   Filterknoepfen der Kopfzeile - Feld und Knopf so hoch wie die Leiste. */
+.lbleiste{justify-content:flex-end}
+/* Enger als die anderen Tabellen: drei Zeitraeume nebeneinander. */
+.lbtab td{padding:9px 12px}
+.lbtab td.dz{font-size:13px}
+.lbtab td.unsicher{opacity:.55}
+.lbsuche{display:flex;gap:9px;margin-left:10px}
+.lbsuche .suchfeld{width:260px}
+.lbsuche input[type=text]{padding-top:6px;padding-bottom:6px;font-size:13px;border-radius:9px}
+.lbsuche button.ghost{padding:6px 14px;font-size:13px;border-radius:9px}
+@media (max-width:640px){
+  .lbleiste{justify-content:flex-start}
+  .lbsuche{margin-left:0;width:100%}.lbsuche .suchfeld{flex:1;width:auto}
+}
+button{
+  background:var(--acc);color:#04101f;border:0;border-radius:11px;padding:13px 22px;
+  font:600 14px var(--sans);cursor:pointer;transition:.15s
+}
+button:hover{filter:brightness(1.12)}
+button:disabled{opacity:.35;cursor:default;filter:none}
+button.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--line2)}
+button.ghost:hover:not(:disabled){background:var(--card3);color:var(--tx);border-color:var(--acc)}
+button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{padding:6px 13px;font-size:12.5px;border-radius:8px}
+.tabs .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 3px}
+.bzjahre{margin:0 0 12px}
+.bzmehr:not([hidden]){display:block;margin:12px auto 0}
+.linkkopie{padding:3px 9px;font-size:11.5px;border-radius:7px;margin-left:9px;vertical-align:middle}
+
+.sharebar{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.sharebar button,.sharebar a{padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center}
+
+/* ---------- Modal (Share-Dialog) ---------- */
+.modalbg{
+  position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;
+  padding:20px;background:#020610d0;backdrop-filter:blur(3px)
+}
+.modalbg.on{display:flex}
+.modal{
+  background:var(--card2);border:1px solid var(--line2);border-radius:16px;padding:22px;
+  width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px #000b
+}
+.modal .mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+.modal .mhead b{font-size:17px;font-weight:650}
+.modal .x{background:none;border:0;color:var(--tx2);font-size:22px;line-height:1;padding:2px 8px;cursor:pointer}
+.modal .x:hover{color:var(--tx)}
+.switchrow{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:var(--tx);user-select:none}
+.switchrow input{width:17px;height:17px;accent-color:var(--acc);cursor:pointer;flex-shrink:0}
+.sharetexte{display:flex;flex-direction:column;gap:6px;margin-top:16px}
+.sharetexte[hidden]{display:none}
+.sharetexte button{text-align:left;padding:8px 12px;font:500 13px/1.4 var(--sans);border-radius:9px}
+.sharetexte button.ghost.on{background:var(--card3);color:var(--tx);border-color:var(--acc)}
+.sharepreview{
+  margin:15px 0 17px;background:#0a0f1b;border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;font-size:13px;line-height:1.62;color:var(--tx2);white-space:pre-wrap;
+  word-break:break-word
+}
+.modalfoot{display:flex;gap:10px;flex-wrap:wrap}
+.spendetext{font-size:13.5px;color:var(--tx2);line-height:1.55}
+.spendeadr{margin:15px 0 17px;background:#0a0f1b;border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;font:13.5px var(--mono);color:var(--tx);word-break:break-all;user-select:all}
+[data-spende][hidden]{display:none!important}
+.modalfoot button{flex:1;min-width:170px;justify-content:center;font-size:13.5px}
+
+.result{margin-top:15px;display:none}
+.result.show{display:block}
+.progress{height:10px;background:#0a0f1b;border-radius:5px;overflow:hidden;margin:12px 0 8px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:5px}
+
+/* ---------- Movers ---------- */
+.movergrid{grid-template-columns:1fr 1fr}
+.mv{display:flex;align-items:center;gap:13px;padding:11px 0;border-bottom:1px solid var(--line)}
+.mv:last-child{border-bottom:0}
+.mv .em{font-size:29px;line-height:1;flex-shrink:0}
+.mv .id{flex:1;min-width:0}
+.mv .id b{font-size:13.5px;font-weight:560;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv .id span{font-size:11.5px;color:var(--tx2)}
+.mv .val{text-align:right;flex-shrink:0}
+.mv .val b{font-size:14px;display:block}
+.mv .val span{font-size:11.5px;color:var(--tx2)}
+
+/* ---------- Table ---------- */
+.tablewrap{overflow-x:auto;border-radius:13px;border:1px solid var(--line);
+            background:var(--card)}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:860px}
+th{
+  background:var(--card3);text-align:left;padding:12px 13px;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--tx2);font-weight:700;
+  position:sticky;top:0;white-space:nowrap;border-bottom:1px solid var(--line2)
+}
+td{padding:13px;border-top:1px solid var(--line)}
+td.tiercell{font-size:22px;line-height:1;white-space:nowrap}
+td.tiercell span{font-size:12.5px;color:var(--tx2);vertical-align:middle;margin-left:5px}
+/* Zebrastreifen: leichter Helligkeitswechsel ist beim Scannen einer breiten
+   Tabelle wirksamer als ein duennerer Rahmen. */
+tbody tr:nth-child(even){background:#ffffff06}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:#ffffff10}
+tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
+.r{text-align:right}
+.addr{font-family:var(--mono);font-size:13px;color:var(--tx2)}
+.rk{font-size:12.5px;font-family:var(--mono)}
+.tag{
+  display:inline-block;padding:2px 8px;border-radius:6px;font-size:10.5px;
+  background:#5b9cff1c;color:#9dc4ff;border:1px solid #5b9cff33;margin-left:7px;white-space:nowrap
+}
+.tag.ex{background:#fbbf241c;color:#fcd34d;border-color:#fbbf2433}
+.tag.br{background:#a78bfa1c;color:#c4b5fd;border-color:#a78bfa33}
+.tag.sleep{background:#64748b1c;color:#cbd5e1;border-color:#64748b44;font-size:13px;padding:1px 7px}
+.tag.maybe{background:#a78bfa1c;color:#c4b5fd;border-color:#a78bfa33;cursor:help}
+
+/* ---------- Info popup (small "i" instead of always-on text) ---------- */
+.infoBtn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:50%;background:var(--card2);
+  border:1px solid var(--line2);color:var(--tx2);font:700 10.5px var(--sans);
+  cursor:pointer;flex-shrink:0;vertical-align:middle;padding:0;line-height:1
+}
+.infoBtn:hover{color:var(--tx);border-color:var(--acc)}
+.infopop{
+  position:fixed;z-index:60;background:var(--card2);border:1px solid var(--line2);
+  border-radius:10px;padding:12px 14px;box-shadow:0 12px 32px #000a;max-width:300px;
+  font-size:12.5px;line-height:1.55;color:var(--tx2)
+}
+
+/* ---------- Right-click context menu ---------- */
+.ctxmenu{
+  position:fixed;z-index:50;background:var(--card2);border:1px solid var(--line2);
+  border-radius:10px;padding:5px;box-shadow:0 12px 32px #000a;min-width:200px
+}
+.ctxmenu button{
+  display:block;width:100%;text-align:left;background:none;color:var(--tx);
+  border:0;padding:9px 11px;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer
+}
+.ctxmenu button:hover{background:var(--acc);color:#04101f}
+
+/* ---------- Leaderboard: range filter + page jump ---------- */
+.rangebar{display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+.rangeinput{
+  width:118px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
+  padding:8px 11px;color:var(--tx);font:13px var(--mono);outline:none
+}
+.rangeinput:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+/* Mit input davor: seit das Feld type="text" ist, gewann sonst die allgemeine
+   Textfeld-Regel - und das Feld wurde 592 px breit. */
+input.pagejump{
+  flex:none;min-width:0;width:56px;background:#0a0f1b;border:1px solid var(--line2);border-radius:9px;
+  padding:7px 9px;color:var(--tx);font:13px var(--mono);outline:none;text-align:center
+}
+.pagejump:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+.pager{display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap}
+.pager .info{font-size:12.5px;color:var(--tx2);font-family:var(--mono)}
+
+/* ---------- Money-flow (Sankey) ---------- */
+.sankeygrid{grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:1000px){ .sankeygrid{grid-template-columns:1fr} }
+.sankeycard{padding:16px 16px 10px}
+.sankeyhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.sankeyhead .dir{font-size:13px;font-weight:650}
+.sankeyhead .dir.in{color:var(--up)}
+.sankeyhead .dir.out{color:var(--down)}
+.sankeyhead .num{font-size:17px;font-weight:660}
+.sankeyholder{position:relative;width:100%}
+.sankeyholder svg{width:100%;display:block;overflow:visible}
+
+/* Baender und Balken: im Ruhezustand gedaempft, beim Zeigen leuchtet die
+   angefasste Verbindung samt ihrer beiden Balken auf. */
+.sankeyholder .band,.sankeyholder .bar,.sankeyholder .lbl{cursor:pointer}
+.sankeyholder .band{fill-opacity:.28;transition:fill-opacity .12s}
+.sankeyholder.aktiv .band{fill-opacity:.07}
+.sankeyholder .band.on{fill-opacity:.72;filter:url(#glow)}
+.sankeyholder .bar{transition:opacity .12s}
+.sankeyholder.aktiv .bar{opacity:.3}
+.sankeyholder .bar.on{opacity:1;filter:url(#glow)}
+.sankeyholder .lbl{font-size:11.5px;fill:var(--tx2);font-family:var(--mono);pointer-events:none;transition:fill .12s}
+.sankeyholder.aktiv .lbl{fill:var(--tx3)}
+.sankeyholder .lbl.on{fill:#fff;font-weight:600}
+.sankeyholder .lbl.name{font-family:var(--sans);font-weight:600;fill:var(--tx)}
+.sankeytip{
+  position:fixed;z-index:70;display:none;pointer-events:none;
+  background:#0a1120f2;border:1px solid var(--line2);border-radius:10px;padding:10px 13px;
+  font-size:12.5px;line-height:1.55;box-shadow:0 10px 30px #000b;max-width:280px
+}
+.sankeytip.on{display:block}
+.sankeytip b{display:block;font-size:14px;margin-bottom:3px}
+.sankeytip .adr{font-family:var(--mono);font-size:11px;color:var(--tx3);word-break:break-all}
+
+/* ---------- Exchange net-flow ---------- */
+.flowhead{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+.flowhead .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
+.flowhead .v{font-size:31px;font-weight:670;letter-spacing:-.03em;margin:5px 0 3px}
+.flowhead .s{font-size:12.5px;color:var(--tx2)}
+.flowsplit{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;flex:1;min-width:290px}
+.flowsplit .fact .v{font-size:19px;margin-top:4px}
+.flowex{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.flowex:first-child{border-top:0}
+.flowex .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flowex .nm b{font-weight:560}
+.flowex .val{flex-shrink:0;font-weight:600}
+
+/* ---------- Feeds ---------- */
+.feedgrid{grid-template-columns:1fr 1fr}
+.ev{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.ev:last-child{border-bottom:0}
+.ev .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:19px;flex-shrink:0}
+.ev .tx{flex:1;min-width:0}
+.ev .tx b{font-size:13px;font-weight:560}
+.ev .tx div{font-size:11.5px;color:var(--tx2);margin-top:2px}
+.ev .when{font-size:11px;color:var(--tx3);white-space:nowrap;flex-shrink:0}
+
+.empty{color:var(--tx2);font-size:13.5px;padding:22px;text-align:center}
+.skel{background:linear-gradient(90deg,#141c2c,#1d2739,#141c2c);background-size:200% 100%;
+      animation:sh 1.3s infinite;border-radius:7px;height:15px}
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* ---------- About ---------- */
+.abouthead{display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin:26px 0 4px}
+.abouthead img{width:96px;height:96px;border-radius:50%;flex:0 0 auto;
+               filter:drop-shadow(0 0 26px #5b9cff55)}
+.abouthead h1{font-size:30px;font-weight:680;letter-spacing:-.025em}
+.abouthead p{color:var(--tx2);max-width:46em;margin-top:7px;line-height:1.65}
+.aboutgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.aboutcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:19px 21px}
+.aboutcard h3{font-size:15px;font-weight:620;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+.aboutcard p{color:var(--tx2);line-height:1.68;margin-bottom:10px}
+.aboutcard p:last-child{margin-bottom:0}
+.aboutcard b{color:var(--tx);font-weight:620}
+.aboutlist{list-style:none;display:grid;gap:9px;margin-top:4px}
+.aboutlist li{display:flex;gap:11px;align-items:baseline;color:var(--tx2);line-height:1.55}
+.aboutlist li b{flex:0 0 8.5em;color:var(--tx);font-weight:600}
+.person{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.person>img{width:132px;height:132px;border-radius:15px;object-fit:cover;flex:0 0 auto;
+            border:1px solid var(--line2)}
+.person .role{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+              color:var(--acc);font-weight:700}
+.person h3{font-size:21px;margin:5px 0 11px}
+.person .body{flex:1 1 320px}
+.linkrow{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+.linkrow a{border:1px solid var(--line2);border-radius:9px;padding:8px 14px;
+           font-size:13px;color:var(--tx2);font-weight:550}
+.linkrow a:hover{border-color:var(--acc);color:var(--tx)}
+.linkrow a.primary{background:var(--acc);border-color:var(--acc);color:#04101f}
+@media(max-width:860px){ .aboutgrid{grid-template-columns:1fr} }
+
+.evtag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:5px;
+       background:var(--card3);border:1px solid var(--line);color:var(--tx3);
+       font-size:10.5px;font-weight:600;vertical-align:1px;letter-spacing:.01em}
+
+/* ---------- Frische der Daten ---------- */
+.chip.alt{border-color:#fbbf2455;background:#fbbf2412;color:#fcd34d}
+.chip.alt .dot{background:var(--warn);box-shadow:0 0 9px var(--warn)}
+.chip.tot{border-color:#f4635e66;background:#f4635e14;color:#ff9a96}
+.chip.tot .dot{background:var(--down);box-shadow:0 0 9px var(--down)}
+.stale{display:flex;align-items:center;gap:13px;margin-top:18px;padding:13px 17px;
+       border-radius:13px;background:#f4635e12;border:1px solid #f4635e44;
+       color:var(--tx2);font-size:13px;line-height:1.55}
+.stale .ic{font-size:22px;line-height:1;flex:0 0 auto}
+.stale b{color:var(--tx);font-weight:640}
+
+/* ---------- Rueckmeldung ---------- */
+.fbfeld{width:100%;background:#0a0f1b;border:1px solid var(--line2);border-radius:11px;
+        padding:11px 13px;color:var(--tx);font:14px var(--sans);outline:none;
+        resize:vertical;min-height:110px;transition:.15s}
+.fbfeld:focus{border-color:var(--acc);box-shadow:0 0 0 3px #5b9cff22}
+.fbzeile{display:flex;gap:10px;flex-wrap:wrap;margin-top:11px}
+.fbzeile input{flex:1;min-width:160px;min-height:0;padding:9px 12px;font-size:13.5px}
+.fbhinweis{font-size:12px;color:var(--tx3);margin-top:9px;line-height:1.55}
+.fbstatus{font-size:13px;margin-top:11px;font-weight:560}
+.fbhp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+/* Rechts angedockt statt in der Reihe - die Fusszeile allein findet
+   niemand, der nicht ohnehin sucht. */
+/* Feedback und Donate uebereinander statt nebeneinander: zusammen so hoch wie
+   ein Reiter, aber nur halb so breit wie zwei. */
+nav .navrechts{display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding:2px 0}
+nav .navrechts button{
+  padding:2px 10px;font:600 11.5px/1.3 var(--sans);gap:5px;justify-content:flex-start;
+  border:1px solid var(--line2);border-radius:7px;color:var(--tx2)
+}
+nav .navrechts button .ic{font-size:12px;line-height:1}
+nav .navrechts button:hover{color:var(--tx);border-color:var(--acc)}
+/* Neues Feedback - leuchtet nur beim Betreiber (fbNeuPruefen). */
+/* Ohne Farbe -> leicht gruen -> leuchtend gruen -> ausklingen bis ohne Farbe. */
+nav .navrechts button.fbneu{animation:fbpuls 2.6s ease-in-out infinite}
+@keyframes fbpuls{
+  0%,100%{color:var(--tx2);border-color:var(--line2);box-shadow:0 0 0 0 #4ade8000}
+  18%{color:#a7f0c2;border-color:#4ade8070;box-shadow:0 0 5px 0 #4ade8035}
+  48%{color:#4ade80;border-color:#4ade80;box-shadow:0 0 16px 4px #4ade80a0}
+}
+@media (prefers-reduced-motion:reduce){
+  nav .navrechts button.fbneu{animation:none;color:#4ade80;border-color:#4ade80;box-shadow:0 0 8px 1px #4ade8060}
+}
+
+/* Rangaenderung neben dem Platz: ob eine Bewegung das Wallet auch Plaetze
+   gekostet hat, sieht man dem Betrag allein nicht an. */
+.rk{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:0 4px;
+    border-radius:4px;margin-left:5px;letter-spacing:0}
+.rk.up{color:#34d399;background:#34d3991c}
+.rk.down{color:#f4635e;background:#f4635e1c}
+
+.fbinbox{margin-top:18px;padding-top:15px;border-top:1px solid var(--line)}
+/* Feste Hoehe mit eigenem Rollbereich: bei hundert Nachrichten waere der
+   Dialog sonst laenger als der Bildschirm. */
+.fbliste{max-height:300px;overflow-y:auto;padding-right:4px}
+
+/* Besucherzahlen auf der Uebersicht - nur fuer den Betreiber sichtbar. */
+.statcard .stathead{display:flex;justify-content:space-between;align-items:center;
+                    gap:10px;margin-bottom:14px;font-size:13.5px;color:var(--tx2)}
+
+/* Besucher (nur Betreiber). Die beiden Chart-Farben sind am 15.09.2026 gegen
+   --card (#111827) geprueft: Helligkeitsband, Farbschwaeche, Kontrast - alles
+   bestanden. Das Blau der Seite (#5b9cff) ist dafuer zu hell. */
+.vistiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:18px}
+@media (max-width:640px){.vistiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vistile{background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.vistile .k{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);font-weight:700}
+.vistile .w{display:block;font-size:21px;font-weight:650;color:var(--tx);margin-top:4px;letter-spacing:-.01em}
+.vistile .s{display:block;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.vislegende{display:flex;gap:14px;justify-content:flex-end;font-size:11.5px;color:var(--tx2);margin-bottom:2px}
+.vislegende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.vislisten{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+@media (max-width:640px){.vislisten{grid-template-columns:1fr}}
+.visliste{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 15px 6px}
+.visliste .kopf{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding-bottom:9px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.visliste .kopf .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx2);font-weight:700}
+.visliste .kopf .h{font-size:11px;color:var(--tx3)}
+.visbar{display:grid;grid-template-columns:26px 1fr auto;align-items:center;column-gap:10px;row-gap:6px;
+  padding:8px 0;border-top:1px solid #263a5466}
+.visbar:first-child{border-top:0}
+.visbar .ic{grid-row:span 2;width:26px;height:26px;border-radius:8px;background:var(--card3);
+  display:grid;place-items:center;font-size:13.5px;line-height:1}
+.visbar .nm{font-size:13px;color:var(--tx);font-weight:560}
+.visbar .n{font-size:13px;color:var(--tx);font-weight:650;text-align:right;white-space:nowrap}
+.visbar .n small{font-size:11.5px;font-weight:500;color:var(--tx3);margin-left:7px}
+.visbar .spur{grid-column:2 / 4;height:6px;border-radius:3px;background:var(--card3);overflow:hidden}
+.visbar .spur i{display:block;height:100%;border-radius:3px;min-width:3px}
+.vistipkey{display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle}
+.fbeintrag{position:relative;padding-right:26px}
+.fbdel{position:absolute;top:8px;right:0;width:20px;height:20px;line-height:1;
+       border:0;background:transparent;color:var(--tx3);cursor:pointer;
+       border-radius:5px;font-size:15px;padding:0}
+.fbdel:hover{background:#f4635e1c;color:#f4635e}
+.fbinbox h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+            color:var(--tx3);font-weight:700;margin-bottom:11px}
+.fbeintrag{padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--tx2);
+           line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.fbeintrag:first-of-type{border-top:0}
+.fbeintrag .wer{display:block;font-size:11px;color:var(--tx3);margin-bottom:3px;
+                font-family:var(--mono);white-space:normal}
+
+/* ---------- Willkommen (einmalig) ---------- */
+.welcome{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:22px;
+         background:linear-gradient(150deg,var(--card2) 0%,var(--card) 68%);
+         border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.welcome>img{width:58px;height:58px;border-radius:50%;flex:0 0 auto;
+             filter:drop-shadow(0 0 18px #5b9cff55)}
+.welcome .wbody{flex:1;min-width:260px}
+.welcome b.wtitel{display:block;font-size:17px;font-weight:660;letter-spacing:-.01em}
+.welcome p{color:var(--tx2);line-height:1.6;margin:6px 0 12px;max-width:56em}
+.welcome ul{list-style:none;display:grid;gap:7px}
+.welcome li{display:flex;gap:10px;align-items:baseline;color:var(--tx2);
+            font-size:13px;line-height:1.55}
+.welcome li i{font-style:normal;flex:0 0 auto;width:1.3em;text-align:center}
+.welcome li b{color:var(--tx);font-weight:620}
+.welcome .wclose{flex:0 0 auto;align-self:center}
+@media(max-width:640px){ .welcome .wclose{width:100%} }
+
+/* Das News-Panel teilt sich das Aussehen mit dem Willkommens-Panel: beide
+   sind dasselbe Versprechen - einmal lesen, wegklicken, weg. */
+.welcome.news{background:linear-gradient(150deg,#132038 0%,var(--card) 68%);
+              border-color:#5b9cff44}
+.welcome.news .gross{font-size:30px;line-height:1;color:var(--acc);opacity:.9;
+                     flex:0 0 auto;margin-top:2px}
+.newsrow{display:flex;align-items:center;gap:11px;padding:8px 0;
+         border-top:1px solid var(--line)}
+.newsrow:first-child{border-top:0}
+.newsrow .em{font-size:21px;line-height:1;flex:0 0 auto}
+.newsrow .id{flex:1;min-width:0}
+.newsrow .id b{font-size:13.5px;font-weight:620;color:var(--tx)}
+.newsrow .notiz{display:block;font-size:11.5px;color:var(--tx3);font-style:italic;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.newsrow .val{font-family:var(--mono);font-size:13.5px;font-weight:650;flex:0 0 auto}
+.newsmehr{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--acc);
+          font-weight:600;cursor:pointer}
+.newsmehr:hover{text-decoration:underline}
+
+/* ---------- Merkliste ---------- */
+/* Der Stern war mit 13px und 32% Deckkraft praktisch unsichtbar - wer nicht
+   wusste, dass es die Merkliste gibt, konnte sie nicht finden. Groesser,
+   deutlich sichtbar, und in der Farbe, die er im aktiven Zustand hat. */
+.star{background:none;border:0;cursor:pointer;padding:0 2px 0 8px;font-size:17px;
+      line-height:1;color:var(--warn);opacity:.42;transition:.13s;vertical-align:-1px}
+.star:hover{opacity:1;transform:scale(1.2)}
+.star.on{opacity:1}
+
+/* Auf der Wallet-Seite ein beschrifteter Knopf statt eines blossen Zeichens -
+   dort hat man Platz, und dort faellt die Entscheidung "das behalte ich im
+   Auge" am ehesten. */
+.watchbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:11px;
+          background:var(--card2);border:1px solid var(--line2);color:var(--tx2);
+          font:600 12.5px var(--sans);cursor:pointer;transition:.13s}
+.watchbtn:hover{border-color:var(--warn);color:var(--tx)}
+.watchbtn.on{background:#fbbf2418;border-color:#fbbf2455;color:var(--warn)}
+
+/* Merklisten-Zeile: wie eine Bewegungszeile, aber mit Notiz darunter. Die
+   Bewegungszeile ist ein <a> - darin kann kein Eingabefeld stehen. */
+.wlrow{display:flex;align-items:flex-start;gap:13px;padding:13px 2px;border-top:1px solid var(--line)}
+.wlrow:first-child{border-top:0;padding-top:2px}
+.wlrow .em{font-size:27px;line-height:1;flex:0 0 auto}
+.wlrow .id{flex:1;min-width:0}
+.wlrow .id .name{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.wlrow .id b{font-size:14px;font-weight:620}
+.wlrow .sub{font-size:12px;color:var(--tx3);font-family:var(--mono);margin-top:2px}
+.wlrow .val{text-align:right;flex:0 0 auto}
+.wlrow .val b{display:block;font-size:14.5px;font-weight:650}
+.wlrow .val span{font-size:11.5px;color:var(--tx3)}
+.wlnote{margin-top:7px;font-size:12.5px;color:var(--tx2);cursor:text;
+        border-left:2px solid var(--line2);padding-left:9px;line-height:1.5}
+.wlnote.leer{color:var(--tx3);opacity:.65;font-style:italic}
+.wlnote:hover{border-left-color:var(--acc);color:var(--tx)}
+.wlnote input{width:100%;background:#0a0f1b;border:1px solid var(--acc);border-radius:8px;
+              padding:6px 9px;color:var(--tx);font:12.5px var(--sans);outline:none}
+/* Notiz-Stift neben dem Stern: jede Wallet kann eine Notiz tragen, auch ohne
+   gemerkt zu sein. Kraeftig, sobald eine Notiz existiert. */
+.notizstift{background:none;border:0;cursor:pointer;padding:0 2px 0 6px;font-size:13px;
+            line-height:1;opacity:.3;transition:.13s;min-width:0;vertical-align:0}
+.notizstift:hover{opacity:1;transform:scale(1.15)}
+.notizstift.on{opacity:.95}
+.lbtab .wlnote{margin-top:4px;font-size:12px;max-width:420px}
+#invHead .wlnote{max-width:520px}
+
+/* Leerer Zustand als Einladung statt als Nichts. */
+.watchempty{border:1px dashed var(--line2);border-radius:13px;padding:17px 19px;
+            display:flex;align-items:center;gap:14px;color:var(--tx3);font-size:13px;line-height:1.55}
+.watchempty .gross{font-size:26px;line-height:1;color:var(--warn);opacity:.7}
+.watchempty b{color:var(--tx2);font-weight:620}
+
+/* Seit dem letzten Besuch */
+.seitbanner{display:flex;align-items:center;gap:10px;margin-bottom:13px;padding:10px 14px;
+            border-radius:11px;background:#5b9cff14;border:1px solid #5b9cff33;
+            font-size:12.5px;color:var(--tx2)}
+.seitbanner b{color:var(--tx);font-weight:620}
+.seitbadge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:5px;
+           background:#5b9cff1c;border:1px solid #5b9cff33;color:#9dc4ff;
+           font-size:10.5px;font-weight:650;vertical-align:1px}
+.watchhead{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.watchhead .cnt{font-size:12px;color:var(--tx3);font-weight:500}
+.watchhead .clear{margin-left:auto;background:var(--card2);border:1px solid var(--line2);
+                  border-radius:8px;color:var(--tx3);font-size:11.5px;padding:5px 11px;cursor:pointer}
+.watchhead .clear:hover{border-color:var(--down);color:var(--down)}
+.watchmiss{font-size:11.5px;color:var(--tx3);padding-top:10px;margin-top:4px;
+           border-top:1px solid var(--line)}
+.watchmiss code{font-family:var(--mono);color:var(--tx2)}
+
+.watchchips{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+             padding-top:13px;margin-top:13px;border-top:1px solid var(--line)}
+.watchchips .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+                 color:var(--tx3);font-weight:700;margin-right:3px}
+.wchip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:9px;
+       background:var(--card2);border:1px solid var(--line2);cursor:pointer;
+       font:550 12.5px var(--sans);color:var(--tx2);transition:.13s}
+.wchip:hover{border-color:var(--acc);color:var(--tx)}
+.wchip b{color:var(--tx);font-weight:620}
+.invtipps{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:13px}
+.invtipps .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);font-weight:700;margin-right:3px}
+.wchip .num{font-family:var(--mono);font-size:11.5px;color:var(--tx3)}
+/* ---------- ETN-Preiskarte ---------- */
+.pricecard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
+           border:1px solid var(--line);border-radius:16px;padding:19px 21px 13px}
+.pricehead{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;margin-bottom:6px}
+.pricehead .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+              color:var(--tx3);font-weight:700}
+.pricehead .v{font-size:32px;font-weight:680;letter-spacing:-.025em;margin-top:4px}
+.pricehead .chg{margin-left:auto;text-align:right}
+.pricehead .chg .num{font-size:20px;font-weight:650}
+.pricehead .chg .k{margin-top:3px}
+.pricefoot{display:flex;flex-wrap:wrap;gap:8px 22px;padding-top:11px;margin-top:4px;
+           border-top:1px solid var(--line);font-size:12px;color:var(--tx3)}
+.pricefoot b{color:var(--tx2);font-weight:620;margin-left:3px}
+.pricecard .tabs{margin:2px 0 12px}
+
+/* Die grossen Marken: Allzeithoch, der Zyklus von 2021, Allzeittief.
+   Der Abstand in Prozent ist die eigentliche Aussage - "$0.2079" sagt fuer
+   sich genommen wenig, "-99,5% davon entfernt" sagt alles. Also traegt die
+   Prozentzahl das optische Gewicht und nicht der Kurs. */
+.marken{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;
+        margin-top:18px}
+.marke{position:relative;background:var(--card2);border:1px solid var(--line2);
+       border-radius:13px;padding:13px 16px 14px;overflow:hidden}
+/* Farbiger Streifen an der Kante - hebt die Kachel heraus, ohne dass die
+   ganze Flaeche schreit. */
+.marke::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+.marke.up::before{background:var(--up)}
+.marke.down::before{background:var(--down)}
+.marke.up{background:linear-gradient(120deg,#22d3a70e 0%,var(--card2) 62%)}
+.marke.down{background:linear-gradient(120deg,#f4635e0e 0%,var(--card2) 62%)}
+.marke .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);
+          font-weight:700;display:block;margin-bottom:8px}
+.marke .pct{display:block;font-family:var(--mono);font-size:25px;font-weight:700;
+            line-height:1.05;letter-spacing:-.02em}
+.marke.up .pct{color:var(--up)}
+.marke.down .pct{color:var(--down)}
+.marke .u{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+          margin-top:7px;font-size:11.5px;color:var(--tx3)}
+.marke .w{font-family:var(--mono);color:var(--tx2);font-weight:640}
+@media (max-width:520px){
+  .marken{grid-template-columns:1fr 1fr;gap:9px}
+  .marke{padding:11px 13px 12px}
+  .marke .pct{font-size:21px}
+}
+.pricefoot .quelle{margin-left:auto;color:var(--tx3)}
+
+
+/* ---------- Netzwerk-Kennzahlen ---------- */
+.netcard{background:linear-gradient(160deg,var(--card2) 0%,var(--card) 62%);
+         border:1px solid var(--line);border-radius:16px;padding:19px 21px 15px}
+.nethead{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:16px}
+.nethead .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+              color:var(--tx3);font-weight:700}
+.nethead .live{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--tx3)}
+.nethead .live i{width:6px;height:6px;border-radius:50%;background:var(--up);
+                 box-shadow:0 0 8px var(--up)}
+@media(prefers-reduced-motion:no-preference){
+  .nethead .live i{animation:puls 2.4s ease-in-out infinite}
+}
+@keyframes puls{0%,100%{opacity:1}50%{opacity:.35}}
+.nethead .cap{margin-left:auto;font-size:12.5px;color:var(--tx2)}
+.nethead .cap b{color:var(--tx);font-weight:620}
+
+.netgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;
+         background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.netstat{background:var(--card);padding:13px 15px 14px}
+.netstat .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+            color:var(--tx3);font-weight:700;margin-bottom:6px}
+.netstat .v{font-size:19px;font-weight:650;letter-spacing:-.02em}
+.netstat .s{font-size:11.5px;color:var(--tx3);margin-top:3px}
+
+.nettx{margin-top:15px}
+.nettx .top{display:flex;align-items:baseline;gap:10px;margin-bottom:7px}
+.nettx .top b{font-size:12.5px;color:var(--tx2);font-weight:560}
+.nettx .top span{font-size:11.5px;color:var(--tx3);margin-left:auto}
+.nettx svg{width:100%;height:52px;display:block}
+.nettx rect{fill:var(--acc);opacity:.55;transition:opacity .12s}
+.nettx rect:hover{opacity:1}
+.nettx .axis{display:flex;justify-content:space-between;font-size:10.5px;
+             color:var(--tx3);margin-top:5px}
+
+@media(max-width:1000px){ .netgrid{grid-template-columns:repeat(3,1fr)} }
+@media(max-width:560px){ .netgrid{grid-template-columns:repeat(2,1fr)} .netstat .v{font-size:17px} }
+
+footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-size:12.5px}
+.footcols{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:26px}
+.footcols h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+             color:var(--tx3);font-weight:700;margin-bottom:11px}
+.footcols a{display:block;color:var(--tx2);padding:3px 0}
+.footcols a:hover{color:var(--acc)}
+.footbrand{display:flex;gap:13px;align-items:flex-start}
+.footbrand img{width:38px;height:38px;border-radius:50%;flex:0 0 auto}
+.footbrand b{display:block;font-size:14.5px;color:var(--tx);margin-bottom:5px}
+.footbrand p{color:var(--tx3);max-width:34em;line-height:1.6}
+.footbar{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--tx3);font-size:11.5px}
+.footbar .sp{margin-left:auto}
+@media(max-width:860px){ .footcols{grid-template-columns:1fr 1fr} .footbar .sp{margin-left:0} }
+
+@media(max-width:1000px){ .movergrid,.feedgrid{grid-template-columns:1fr} }
+@media(max-width:640px){
+  .tierrow{flex-wrap:wrap;gap:9px}
+  .tierrow .bars{flex:1 0 100%;order:3}
+  .tierrow .cnt{min-width:0}
+}
+@media(max-width:560px){
+  .wrap{padding:0 14px}
+  .mig{padding:18px}
+  nav button{padding:11px 13px;font-size:13.5px}
+  nav button .ic{font-size:17px}
+
+  /* Kopf: die drei Chips in einer Reihe, galacticsl.com nur als Logo. Vorher
+     brachen sie in drei Zeilen um, der Kurs stand allein da. */
+  header{gap:10px;padding-top:18px}
+  header .brand{flex:1 0 100%}
+  .hspace{display:none}
+  .chip{padding:6px 10px;font-size:12px}
+  .homelink span{display:none}
+
+  /* Feedback und Donate stehen auch im Footer - hier bleibt der Platz den Reitern. */
+  nav .navrechts{display:none}
+
+  /* Willkommen: Titel, Satz, Knopf. Die Liste schob am Handy alles weit nach unten. */
+  .welcome ul,.welcome > img{display:none}
+
+  /* Kacheln 2x2 statt je eine ganze Zeile. */
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:14px}
+  .kpi .k{font-size:10px;gap:6px}
+  .kpi .k .ic{font-size:16px}
+  .kpi .v{font-size:22px}
+  .mig .stats{grid-template-columns:1fr 1fr;min-width:0;gap:9px}
+  .fact{padding:11px 12px}
+  .fact .k{font-size:10px}
+  .fact .v{font-size:19px}
+
+  /* Migrations-Chart: die Umschalter in eine eigene Zeile. */
+  .chartcard .top .r{width:100%;flex-wrap:wrap;gap:10px !important}
+  .chartcard .top .r > div:first-child{text-align:left !important}
+  .chartcard .top .r .tabs{flex:1 0 100%}
+}
+
+/* Die Reiter scrollen am schmalen Schirm seitlich - der ausgeblendete Rand
+   zeigt, dass rechts noch mehr kommt. */
+@media(max-width:900px){
+  nav .navtabs{-webkit-mask-image:linear-gradient(90deg,#000 84%,transparent);
+               mask-image:linear-gradient(90deg,#000 84%,transparent)}
+}
+
+/* Footer: der Beschreibungstext ueber die ganze Breite statt in einer schmalen Spalte. */
+@media(max-width:860px){ .footcols > .footbrand{grid-column:1 / -1} }
+
+/* Leaderboard am Handy als Karten: die Tabelle war 860 px breit, den Bestand
+   sah man erst nach seitlichem Wischen. Oben Rang, Wallet, Bestand; darunter
+   Stufe und 7 Tage. 24H, 6M und "Last moved" stehen im Profil der Wallet. */
+@media(max-width:640px){
+  .lbtab{min-width:0}
+  .lbtab thead{display:none}
+  .lbtab,.lbtab tbody{display:block}
+  .lbtab tr{display:grid;grid-template-columns:28px minmax(0,1fr) auto;column-gap:10px;row-gap:4px;
+            align-items:center;padding:11px 12px;border-top:1px solid var(--line)}
+  .lbtab tr:first-child{border-top:0}
+  .lbtab td{display:block;padding:0;border:0}
+  .lbtab td:nth-child(1){grid-row:1 / span 2;align-self:start;padding-top:3px;font-size:12px}
+  .lbtab td:nth-child(2){grid-column:2;grid-row:1;min-width:0}
+  .lbtab td:nth-child(4){grid-column:3;grid-row:1}
+  .lbtab td:nth-child(3){grid-column:2;grid-row:2;font-size:15px}
+  .lbtab td:nth-child(3) span{font-size:11.5px}
+  .lbtab td:nth-child(6){grid-column:3;grid-row:2;font-size:12px}
+  .lbtab td:nth-child(6)::before{content:"7D ";color:var(--tx3);font-weight:500}
+  .lbtab td:nth-child(5),.lbtab td:nth-child(7),.lbtab td:nth-child(8){display:none}
+  .lbtab td[colspan]{grid-column:1 / -1}
+}

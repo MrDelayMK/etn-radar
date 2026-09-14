@@ -4,7 +4,7 @@ name: ETN Tier Census
 # Cent-Bereich und brauchen keine hohe Aufloesung - siehe die Begruendung in
 # src/tiers.js ("Zwei Geschwindigkeiten"). Wer es eilig hat, kann im Dashboard
 # jederzeit "Run full census now" druecken (hoechstens einmal alle 24h, siehe
-# /api/census/trigger in src/index.js) statt auf den Wochenlauf zu warten.
+# job_trigger in src/api/betreiber.js) statt auf den Wochenlauf zu warten.
 on:
   schedule:
     - cron: "30 3 * * 0" # jeden Sonntag 03:30 UTC

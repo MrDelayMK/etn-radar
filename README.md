@@ -494,7 +494,7 @@ und Exchange Detection auslösbar, montags automatisch
 
 Wandert ETN auf die Börsen oder von ihnen herunter? Rechnet die täglichen
 Balance-Änderungen aller gelabelten Börsen-Wallets zusammen
-(`exchange_flow` in [`src/index.js`](src/index.js), Reiter „Activity"):
+(`exchange_flow` in [`src/api/wallets.js`](src/api/wallets.js), Reiter „Activity"):
 
 - **Positiv** = ETN ist auf die Börsen gewandert. Wird üblicherweise als
   Verkaufsbereitschaft gelesen.

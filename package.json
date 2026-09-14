@@ -14,9 +14,11 @@
     "db:migrate:local": "node scripts/apply-migrations.mjs",
     "serve": "node scripts/serve-local.mjs",
     "backfill": "node scripts/backfill.mjs",
-    "ingest:once": "node scripts/ingest-local.mjs"
+    "ingest:once": "node scripts/ingest-local.mjs",
+    "test": "node scripts/tests.mjs",
+    "test:schnell": "node scripts/tests.mjs --schnell"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "4.131.0"
   }
 }
