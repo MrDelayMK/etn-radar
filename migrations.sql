@@ -178,13 +178,11 @@ CREATE TABLE IF NOT EXISTS tier_tage (
   PRIMARY KEY (day, tier)
 );
 
--- Chain-Reiter (src/chain.js). Tageswerte der ganzen Chain: Transaktionen aus
--- dem Tages-Chart des Explorers (nur abgeschlossene Tage), Adressen vom ersten
--- Snapshot eines Tages - die Differenz zweier Tage sind die neuen Wallets.
+-- Chain-Reiter (src/chain.js). Transaktionen je Tag aus dem Tages-Chart des
+-- Explorers, nur abgeschlossene Tage.
 CREATE TABLE IF NOT EXISTS chain_tage (
-  day              TEXT PRIMARY KEY,        -- YYYY-MM-DD
-  tx_count         INTEGER,
-  total_addresses  INTEGER
+  day       TEXT PRIMARY KEY,               -- YYYY-MM-DD
+  tx_count  INTEGER
 );
 -- Holder und Transfers der beobachteten Oekosystem-Tokens (src/chain-tokens.js),
 -- ein Stand je Tag und Token; der letzte Abruf des Tages gewinnt.

@@ -3,8 +3,8 @@
 // (src/ingest.js) und haengt an derselben Explorer-Drossel.
 //
 // Explorer-Last:
-//   - Tageswerte kosten nichts extra. Transaktions-Chart und Adresszahl holt
-//     der Snapshot ohnehin, hier werden sie nur abgelegt.
+//   - Tageswerte kosten nichts extra. Den Transaktions-Chart holt der
+//     Snapshot ohnehin, hier wird er nur abgelegt.
 //   - Tokens und Contracts alle sechs Stunden: 5 Tokens x 2 Anfragen plus eine
 //     Seite Contracts = 11 Anfragen, rund 44 am Tag.
 //
@@ -20,26 +20,12 @@ const TOKEN_TAKT_MS = 6 * 3600000;
 // die Kachel einen Verlauf aus dem, was seit dem Start gesammelt wurde.
 const CONTRACTS_MAX_ALTER_MS = 30 * 86400000;
 
-export async function chainSammeln(env, db, { day, stats, txChart, log = () => {} }) {
+export async function chainSammeln(env, db, { day, txChart, log = () => {} }) {
   const api = env.EXPLORER_API;
   const ergebnis = { tage: 0, tokens: 0, contracts: 0 };
 
   // --- Tageswerte ---------------------------------------------------------
   const stmts = [];
-
-  // Adressen der Chain vom ERSTEN Snapshot des Tages. Die Differenz zweier
-  // Tage sind die neuen Wallets des Vortags.
-  if (stats?.total_addresses != null) {
-    stmts.push(
-      db
-        .prepare(
-          "INSERT INTO chain_tage (day, total_addresses) VALUES (?,?)" +
-            " ON CONFLICT(day) DO UPDATE SET total_addresses = excluded.total_addresses" +
-            " WHERE chain_tage.total_addresses IS NULL"
-        )
-        .bind(day, stats.total_addresses)
-    );
-  }
 
   // Transaktionen je Tag, jeder abgeschlossene Tag einmal. Der Explorer
   // rechnet den Chart einmal am Tag fuer den VORTAG: am 14.09. abends endete die
@@ -69,8 +55,6 @@ export async function chainSammeln(env, db, { day, stats, txChart, log = () => {
     }
   }
 
-  // Die Adress-Zeile laeuft jedes Mal mit, schreibt aber nur beim ersten Lauf
-  // des Tages - im Bericht zaehlen nur die neuen Transaktions-Tage.
   if (stmts.length) await db.batch(stmts);
 
   // --- Tokens und Contracts, alle sechs Stunden -----------------------------

@@ -702,7 +702,7 @@ export async function runIngest(env, db, opts = {}) {
   // Snapshot ist hier schon sicher, ein Aussetzer des Explorers bei den Tokens
   // darf ihn nicht mehr kippen.
   try {
-    const c = await chainSammeln(env, db, { day, stats, txChart, log });
+    const c = await chainSammeln(env, db, { day, txChart, log });
     if (c.tage || c.tokens || c.contracts) {
       log("  Chain: " + c.tage + " Tageswerte, " + c.tokens + " Tokens, " + c.contracts + " Contracts");
     }

@@ -152,6 +152,8 @@ h2 .hint{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--tx3);
 .tvkarte .tip b{font-size:13.5px;color:var(--tx)}
 
 /* Chain-Reiter */
+.chainkacheln{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:560px){.chainkacheln{grid-template-columns:1fr}}
 .wochefakten{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .wochefakten li{display:flex;gap:11px;align-items:baseline;font-size:14px;color:var(--tx2);line-height:1.45}
 .wochefakten li i{font-style:normal;width:22px;flex:none;text-align:center}
@@ -1329,7 +1331,7 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 <div class="page" id="page-chain">
   <section style="margin-top:22px">
     <h2>⛓️ Network activity</h2>
-    <div class="tierverlauf" id="chainKacheln"></div>
+    <div class="tierverlauf chainkacheln" id="chainKacheln"></div>
   </section>
   <section>
     <h2>🗓️ This week on Electroneum <span class="hint" id="chainWocheRange"></span></h2>
@@ -3021,7 +3023,6 @@ const CHAIN = { daten: null, text: "" };
 const CHAIN_KACHELN = [
   // art: "schnitt" = Tagesschnitt der Woche, "summe" = Wochensumme
   { k: "tx", titel: "Transactions", einheit: "transactions", art: "schnitt" },
-  { k: "wallets", titel: "New wallets", einheit: "new wallets", art: "schnitt" },
   { k: "contracts", titel: "Verified contracts", einheit: "verified", art: "summe" },
 ];
 
@@ -3089,10 +3090,6 @@ function zeichneChainWoche() {
   if (d.tx?.woche) {
     const t = kurz(d.tx.woche.summe) + " transactions";
     fakten.push(["📈", "<b>" + t + "</b>" + mit(chainVergleich(d.tx)), t]);
-  }
-  if (d.wallets?.woche) {
-    const t = nf(d.wallets.woche.summe) + " new wallets";
-    fakten.push(["👛", "<b>" + t + "</b>" + mit(chainVergleich(d.wallets)), t]);
   }
   if (d.migration) {
     const m = d.migration;

@@ -1859,7 +1859,7 @@ async function chain(db, env) {
   const vorwoche = { von: tagVor(14), bis: tagVor(8) };
 
   const [tage, tokenZeilen, contracts, bridgeTage, bewegung] = await Promise.all([
-    alle("SELECT day, tx_count, total_addresses FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
+    alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
       tagVor(15)
@@ -1897,16 +1897,6 @@ async function chain(db, env) {
   const tx = tage
     .filter((t) => t.tx_count != null && t.day < heute)
     .map((t) => ({ day: t.day, n: t.tx_count }));
-
-  // Neue Wallets eines Tages = Adressen am Folgetag minus Adressen an diesem
-  // Tag, jeweils vom ersten Snapshot. Nur zwischen direkt aufeinanderfolgenden
-  // Tagen - ueber eine Luecke hinweg waeren zwei Tage als einer gezaehlt.
-  const adr = tage.filter((t) => t.total_addresses != null);
-  const wallets = [];
-  for (let i = 1; i < adr.length; i++) {
-    if (Date.parse(adr[i].day) - Date.parse(adr[i - 1].day) !== 86400000) continue;
-    wallets.push({ day: adr[i - 1].day, n: Math.max(0, adr[i].total_addresses - adr[i - 1].total_addresses) });
-  }
 
   // Verifizierte Contracts je Tag. Der aelteste gesammelte Tag ist nur
   // angebrochen - die erste abgerufene Seite endete mittendrin - und faellt
@@ -1976,7 +1966,6 @@ async function chain(db, env) {
   return {
     woche,
     tx: kachel(tx),
-    wallets: kachel(wallets),
     contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
     migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,
     bewegung: b ? { address: b.address, checksum_hash: b.checksum_hash, label: b.label, etn: b.delta_etn } : null,
