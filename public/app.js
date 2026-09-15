@@ -2773,7 +2773,7 @@ function buildShareText(d, zeigeAdresse, format = "text", mitLink = true) {
   const kopf = d.tier_emoji + " " + ichBin(d);
   const satz = format === "karte" || !s ? kopf + "." : kopf + " — " + s[1];
   if (format === "karte" && mitLink) {
-    if (!zeigeAdresse) return satz + " What are you?";
+    if (!zeigeAdresse) return satz + "\n\nWhat are you?";
     return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
   }
   const verweis = mitLink ? ":" : ": " + location.host;
@@ -2845,10 +2845,10 @@ function shareBlock(addr) {
 // Darunter entscheidet das Geraet den Hauptweg, ohne dass jemand waehlen muss:
 //   Handy  - "Share" oeffnet das Teilen-Menue des Geraets; Bild und Text landen
 //            zusammen in X, Telegram & Co., ganz ohne Link.
-//   PC     - "Post on X" / "Telegram" per Adresse. X und Telegram lassen eine
-//            Webseite kein Bild mitschicken: die karte kommt darum als Link mit
-//            Vorschau, das foto wird gespeichert und das Fenster mit dem Text
-//            geoeffnet - anhaengen muss man es selbst.
+//   PC     - X und Telegram lassen eine Webseite kein Bild mitschicken: die
+//            karte geht darum per "Post on X" / "Telegram" als Link mit
+//            Vorschau; beim foto sind "Save image" und "Copy text" die
+//            Hauptknoepfe, posten muss man selbst.
 // Klein darunter liegen die anderen Wege, falls die Erkennung danebenliegt.
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
@@ -2921,11 +2921,16 @@ function shareKnoepfe() {
   if (istHandy() && !SHARE_FREMD) {
     gross = k("teilen", "📤 Share");
     if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
+    if (format === "foto") klein.push(k("speichern", "⬇️ Save image"));
+    klein.push(k("kopieren", "📋 Copy text"));
+  } else if (format === "foto") {
+    gross = k("speichern", "⬇️ Save image") + k("kopieren", "📋 Copy text", "ghost");
+    klein.push(k("x", "𝕏 Open X"), k("tg", "✈️ Open Telegram"));
   } else {
     gross = k("x", "𝕏&nbsp; Post on X") + k("tg", "✈️ Telegram", "ghost");
+    if (format === "karte") klein.push(k("speichern", "⬇️ Save image"));
+    klein.push(k("kopieren", "📋 Copy text"));
   }
-  if (format !== "text") klein.push(k("speichern", "⬇️ Save image"));
-  klein.push(k("kopieren", "📋 Copy text"));
   el("shareFoot").innerHTML = gross;
   el("shareMehr").innerHTML = klein.join("");
 }
@@ -3020,12 +3025,13 @@ function shareTextOeffnen(fremd) {
 }
 
 function shareOeffnen(plattform, { text, url }) {
-  // Telegram verlangt eine Adresse; ohne Link geht der Text selbst als "url" mit.
+  // Der Link steht als eigene Zeile im Text statt als eigener Parameter: sonst
+  // haengt X ihn mit einem Leerzeichen an die letzte Zeile, und Telegram setzt
+  // ihn sogar vor den Text. Die Vorschaukarte erzeugen beide trotzdem.
+  const voll = url ? text + "\n" + url : text;
   const zielUrl = plattform === "x"
-    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + (url ? "&url=" + encodeURIComponent(url) : "")
-    : url
-      ? "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text)
-      : "https://t.me/share/url?url=" + encodeURIComponent(text);
+    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(voll)
+    : "https://t.me/share/url?url=" + encodeURIComponent(voll);
   window.open(zielUrl, "_blank", "noopener,width=600,height=560");
 }
 
@@ -3065,15 +3071,10 @@ async function shareAktion(knopf) {
   if (aktion === "speichern") return id && bildSpeichern(id, bildArt(format));
 
   if (aktion === "x" || aktion === "tg") {
-    const inhalt = shareInhalt("link");
-    shareOeffnen(aktion, inhalt);
-    if (format === "foto") {
-      // Das Bild nimmt X/Telegram nicht an - gespeichert ist es, anhaengen muss man selbst.
-      bildSpeichern(id, "square");
-      knopfMeldung(knopf, "✓ Image saved – add it to your post", 4000);
-      return;
-    }
-    return shareDialogSchliessen();
+    shareOeffnen(aktion, shareInhalt("link"));
+    // Beim Foto bleibt der Dialog offen - das Bild speichert man hier noch.
+    if (format !== "foto") shareDialogSchliessen();
+    return;
   }
 
   if (aktion === "teilen") {
