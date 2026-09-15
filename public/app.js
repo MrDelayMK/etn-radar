@@ -2680,11 +2680,11 @@ let TELEGRAM_BOT = null; // Bot-Benutzername aus /api/overview, null = Feature n
 /**
  * Share-Texte je Stufe.
  *
- * Fuenf Saetze je Stufe, die Person waehlt selbst: stolz, witzig, bescheiden,
- * angriffslustig - nicht jeder Wal will gleich klingen. Beim Oeffnen ist einer
- * zufaellig vorgewaehlt, damit auch wer nichts anklickt nicht denselben Post
- * schickt wie alle anderen seiner Stufe. Die Fakten darunter (Rang, Bestand,
- * Abstand zur naechsten Stufe) bleiben fuer alle gleich.
+ * Drei Saetze je Stufe - stolz, witzig, ruhig -, die Person waehlt selbst.
+ * Jeder Satz bekommt sein eigenes Bild <stufe>-<ton> in public/assets/share/
+ * (Link-Vorschau *-card.jpg, gerahmtes Foto *-square.jpg). Beim Oeffnen ist ein
+ * Satz mit Bild zufaellig vorgewaehlt, damit nicht alle einer Stufe denselben
+ * Post schicken.
  *
  * Bewusst ohne Kursversprechen und ohne "to the moon": der Text geht unter dem
  * Namen der Person hinaus, und eine Prognose, die sie nie abgegeben hat,
@@ -2692,83 +2692,65 @@ let TELEGRAM_BOT = null; // Bot-Benutzername aus /api/overview, null = Feature n
  */
 const SHARE_SAETZE = {
   humpback: [
-    "one of the very few giants in the deep water.",
-    "the biggest shadow in the water.",
-    "rare air down here — only a handful of us.",
-    "the ocean makes room when I move.",
-    "deep water, long breath, zero rush.",
+    ["proud", "only a handful of us live this deep. The ocean goes quiet when we move."],
+    ["funny", "I don't check the price. The price checks on me."],
+    ["calm", "deep water, long breath, zero rush."],
   ],
   whale: [
-    "when I surface, the chain notices.",
-    "I don't chase waves, I make them.",
-    "eight figures deep and in no hurry.",
-    "ETN Radar keeps an eye on me — fair enough.",
-    "big splash, calm mind.",
+    ["proud", "when I surface, the whole chain feels the wave."],
+    ["funny", "relax, I didn't sell. I just rolled over in my sleep."],
+    ["calm", "eight figures deep and in no hurry."],
   ],
   shark: [
-    "patient, circling, never far from the action.",
-    "calm on the surface, sharp underneath.",
-    "always moving, never sleeping.",
-    "the whales know I'm coming.",
-    "seven figures, all teeth.",
+    ["proud", "calm on the surface, sharp underneath."],
+    ["funny", "the whales think they're in charge. Cute."],
+    ["calm", "patient. Circling. Never far from the action."],
   ],
   dolphin: [
-    "quick, smart, and swimming with the big ones.",
-    "not the biggest in the ocean — just the smartest.",
-    "keeping up with the whales, having more fun.",
-    "smart money swims in pods.",
-    "fast fins, friendly face.",
+    ["proud", "smart money swims in pods."],
+    ["funny", "not the biggest in the ocean. Definitely having the most fun."],
+    ["calm", "quick, clever, and keeping pace with the giants."],
   ],
   fish: [
-    "seven figures of ETN and still growing.",
-    "officially an ETN millionaire.",
-    "one million reasons to keep swimming.",
-    "small pond? Not me. I'm in the ocean now.",
-    "swimming upstream and loving it.",
+    ["proud", "seven figures of ETN and still swimming upstream."],
+    ["funny", "officially a millionaire. In ETN. Please don't do the conversion."],
+    ["calm", "one million reasons to keep swimming."],
   ],
   octopus: [
-    "eight arms, and every one of them is holding on.",
-    "eight arms, zero paper hands.",
-    "hard to spot, harder to shake off.",
-    "clever, flexible, and holding tight.",
-    "half a million and a grip to match.",
+    ["proud", "eight arms, zero paper hands."],
+    ["funny", "eight arms and not one of them can find the sell button."],
+    ["calm", "clever, flexible, and holding on with everything I've got."],
   ],
   crab: [
-    "hard shell, strong grip, not letting go.",
-    "sideways is still forward.",
-    "tough shell, soft spot for ETN.",
-    "pinching every ETN I've got.",
-    "slow and steady, claws out.",
+    ["proud", "hard shell, strong grip, not letting go."],
+    ["funny", "sideways market? Crabs were literally built for this."],
+    ["calm", "sideways is still forward."],
   ],
   shrimp: [
-    "small on my own, but the ocean runs on us.",
-    "don't let the size fool you.",
-    "six figures and punching above my weight.",
-    "tiny, but there are a lot of us.",
-    "the whales' favourite snack? Not today.",
+    ["proud", "six figures and punching above my weight."],
+    ["funny", "the whales' favourite snack? Not today."],
+    ["calm", "small on my own, but the ocean runs on us."],
   ],
   plankton: [
-    "the base the whole food chain is built on.",
-    "no plankton, no whales. Simple as that.",
-    "the ocean starts with us.",
-    "too small to notice, too many to ignore.",
-    "drifting in, one ETN at a time.",
+    ["proud", "no plankton, no whales. Simple biology."],
+    ["funny", "whales eat plankton? I'd like to see them try."],
+    ["calm", "the whole food chain is built on us."],
   ],
   microbe: [
-    "everyone starts somewhere.",
-    "small, but already on the radar.",
-    "microscopic, but I'm on the chain.",
-    "invisible to the whales, visible to ETN Radar.",
-    "life on chain starts small.",
+    ["proud", "microscopic, but I'm on the chain."],
+    ["funny", "zoom in. No, more. More. There I am."],
+    ["calm", "everyone starts somewhere. This is my somewhere."],
   ],
   dust: [
-    "for now. Every whale started as a speck.",
-    "a speck on the chain, but I'm here.",
-    "every mountain was dust once.",
-    "light as air and just getting started.",
-    "dust today, a story tomorrow.",
+    ["proud", "every whale started as a speck."],
+    ["funny", "technically dust. Spiritually a whale."],
+    ["calm", "dust today, a story tomorrow."],
   ],
 };
+// Saetze, deren Bilder schon fertig sind. Muss zu SHARE_BILDER in src/share.js
+// passen, sonst zeigt die Link-Vorschau ein fremdes Bild - tests/share.test.mjs
+// prueft das.
+const SHARE_BILDER = new Set(["whale-funny", "crab-funny", "humpback-calm"]);
 let SHARE_WAHL = 0;
 
 // "I'm a Whale", "I'm an Octopus" - Plankton und Dust ohne Artikel.
@@ -2776,13 +2758,29 @@ const ichBin = (d) =>
   "I'm " + (d.tier === "plankton" || d.tier === "dust" ? "" : /^[aeiou]/i.test(d.tier_name) ? "an " : "a ") +
   d.tier_name + " on the Electroneum Smart Chain";
 
-function buildShareText(d, zeigeAdresse) {
-  const saetze = SHARE_SAETZE[d.tier];
-  const satz = d.tier_emoji + " " + ichBin(d) +
-    (saetze ? " — " + saetze[SHARE_WAHL % saetze.length] : ".");
-  if (!zeigeAdresse) {
-    return satz + "\n\nWhat are you? Find your tier on ETN Radar:";
+/**
+ * Post-Text je Weg (siehe Share-Dialog):
+ *   karte - der Satz steht schon im Vorschaubild, im Post nicht nochmal
+ *   foto  - der Satz kommt in den Text, dazu nur die kurze Domain statt Link
+ *   text  - Satz und Link zur Seite bzw. zum Wallet
+ */
+function buildShareText(d, zeigeAdresse, format = "text") {
+  const s = SHARE_SAETZE[d.tier]?.[SHARE_WAHL];
+  const kopf = d.tier_emoji + " " + ichBin(d);
+  const schluss = format === "foto" ? ": " + location.host : ":";
+  if (format === "karte") {
+    if (!zeigeAdresse) return kopf + ". What are you?";
+    return [kopf + ".", "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
   }
+  const satz = kopf + (s ? " — " + s[1] : ".");
+  if (!zeigeAdresse) {
+    return satz + "\n\nWhat are you? Find your tier on ETN Radar" + schluss;
+  }
+  return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand? Check yours on ETN Radar" + schluss].join("\n");
+}
+
+// Rang, Bestand, naechste Stufe, Adresse - nur wenn die Adresse mitgehen darf.
+function shareFakten(d) {
   const fakten = [];
   if (d.in_top_n && d.rank_pos) fakten.push("Rank #" + nf(d.rank_pos) + " of all ETN holders");
   fakten.push("Holding " + kurz(d.etn) + " ETN");
@@ -2795,7 +2793,7 @@ function buildShareText(d, zeigeAdresse) {
     fakten.push("Top tier reached — nowhere left to climb 🎉");
   }
   fakten.push("Wallet: " + d.address);
-  return [satz, "", fakten.join("\n"), "", "Where do you stand? Check yours on ETN Radar:"].join("\n");
+  return fakten;
 }
 
 // Nach dem vollen Namen der Stufe, so wie ihn der Server schickt. Vorher stand
@@ -2821,18 +2819,88 @@ function shareBlock(addr) {
 }
 
 // ---------- Share-Dialog ----------
+// Drei Wege, weil nicht jeder gleich teilt:
+//   karte - Link mit Vorschaubild (Bild + Satz), X oder Telegram mit einem Klick
+//   foto  - das gerahmte 1:1-Bild als Foto posten: ueber das Teilen-Menue des
+//           Geraets, oder speichern und selbst anhaengen. X und Telegram lassen
+//           eine Webseite kein Bild direkt mitschicken.
+//   text  - nur Text, mit Link zur Seite bzw. zum Wallet
+// Saetze ohne fertiges Bild gehen nur als Text.
+//
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
-// Chain-Reiter: dann ohne Adress-Schalter und Satzauswahl, nur Vorschau und
-// Plattform. SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
+// Chain-Reiter: dann ohne Adress-Schalter, Satz- und Formatwahl.
+// SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
 let SHARE_FREMD = null;
+let SHARE_FORMAT = "karte";
+let SHARE_FOTO = { id: null, datei: null, laden: null };
+
+const shareBildId = () => {
+  const s = SHARE_SAETZE[CUR_WALLET?.tier]?.[SHARE_WAHL];
+  const id = s ? CUR_WALLET.tier + "-" + s[0] : null;
+  return id && SHARE_BILDER.has(id) ? id : null;
+};
+const shareBildUrl = (id, art) => location.origin + "/assets/share/" + id + "-" + art + ".jpg";
+const kannFotoTeilen = () => {
+  try { return !!navigator.canShare?.({ files: [new File([""], "x.jpg", { type: "image/jpeg" })] }); } catch { return false; }
+};
+
+// Was gerade rausgehen wuerde: { text, url }. Ohne url (Foto) steht die Domain im Text.
+function shareInhalt() {
+  if (SHARE_FREMD) return { text: SHARE_FREMD.text, url: SHARE_FREMD.url };
+  const id = shareBildId();
+  if (id && SHARE_FORMAT === "karte") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte"), url: location.origin + "/s/" + id };
+  if (id && SHARE_FORMAT === "foto") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "foto"), url: "" };
+  return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "text"), url: shareUrl() };
+}
+
+// Das Foto schon beim Umschalten laden: das Teilen-Menue muss direkt im Klick
+// aufgehen, sonst verweigert es der Browser (vor allem Safari).
+function fotoVorladen(id) {
+  if (SHARE_FOTO.id === id) return SHARE_FOTO.laden;
+  const eintrag = { id, datei: null, laden: null };
+  SHARE_FOTO = eintrag;
+  eintrag.laden = fetch(shareBildUrl(id, "square"))
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((b) => { if (b) eintrag.datei = new File([b], "etn-radar-" + id + ".jpg", { type: "image/jpeg" }); })
+    .catch(() => {})
+    .finally(() => { if (!eintrag.datei) eintrag.id = null; });
+  return eintrag.laden;
+}
+
+function shareKnoepfe(format) {
+  const foto = kannFotoTeilen();
+  const knoepfe = format === "foto"
+    ? [foto && ["foto-teilen", "📤 Share photo", ""], ["foto-speichern", "⬇️ Save image", foto ? "ghost" : ""], ["kopieren", "📋 Copy text", "ghost"]]
+    : [["x", "𝕏&nbsp; Post on X", ""], ["tg", "✈️ Telegram", "ghost"], ["kopieren", "📋 Copy text", "ghost"]];
+  el("shareFoot").innerHTML = knoepfe.filter(Boolean)
+    .map(([aktion, text, klasse]) => '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>")
+    .join("");
+}
 
 function shareVorschau() {
-  if (SHARE_FREMD) {
-    el("sharePreview").textContent = SHARE_FREMD.text + "\n" + SHARE_FREMD.url;
-    return;
+  if (!SHARE_FREMD && !CUR_WALLET) return;
+  const inhalt = shareInhalt();
+  el("sharePreview").textContent = inhalt.text + (inhalt.url ? "\n" + inhalt.url : "");
+  if (SHARE_FREMD) { shareKnoepfe("text"); return; }
+
+  const id = shareBildId();
+  const format = id ? SHARE_FORMAT : "text";
+  el("shareFormat").querySelectorAll("button").forEach((b) => {
+    const an = b.dataset.format === format;
+    b.classList.toggle("on", an);
+    b.setAttribute("aria-checked", String(an));
+    b.disabled = !id && b.dataset.format !== "text";
+  });
+  const bild = el("shareBild");
+  bild.hidden = format === "text";
+  bild.classList.toggle("foto", format === "foto");
+  if (!bild.hidden) {
+    const src = shareBildUrl(id, format === "foto" ? "square" : "card");
+    if (el("shareBildImg").getAttribute("src") !== src) el("shareBildImg").src = src;
   }
-  if (!CUR_WALLET) return;
-  el("sharePreview").textContent = buildShareText(CUR_WALLET, ZEIGE_ADRESSE) + "\n" + shareUrl();
+  if (format === "foto") fotoVorladen(id);
+  shareKnoepfe(format);
+
   el("sharePrivacyNote").textContent = ZEIGE_ADRESSE
     ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
     : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
@@ -2850,7 +2918,7 @@ function shareTexteZeigen() {
   if (!saetze) return;
   box.innerHTML = saetze
     .map((s, i) => '<button type="button" role="radio" aria-checked="' + (i === SHARE_WAHL) +
-      '" class="ghost' + (i === SHARE_WAHL ? " on" : "") + '" data-i="' + i + '">' + s + "</button>")
+      '" class="ghost' + (i === SHARE_WAHL ? " on" : "") + '" data-i="' + i + '">' + esc(s[1]) + "</button>")
     .join("");
 }
 
@@ -2859,8 +2927,15 @@ function shareDialogOeffnen() {
   SHARE_FREMD = null;
   el("shareTitel").textContent = "📢 Share your rank";
   el("sharePrivat").hidden = false;
+  el("shareFormat").hidden = false;
   el("shareHideAddr").checked = !ZEIGE_ADRESSE;
-  SHARE_WAHL = Math.floor(Math.random() * (SHARE_SAETZE[CUR_WALLET.tier]?.length ?? 1));
+  // Vorgewaehlt ist ein Satz mit Bild - der faellt im Feed am meisten auf.
+  const saetze = SHARE_SAETZE[CUR_WALLET.tier] ?? [];
+  const alle = saetze.map((s, i) => i);
+  const mitBild = alle.filter((i) => SHARE_BILDER.has(CUR_WALLET.tier + "-" + saetze[i][0]));
+  const auswahl = mitBild.length ? mitBild : alle;
+  SHARE_WAHL = auswahl.length ? auswahl[Math.floor(Math.random() * auswahl.length)] : 0;
+  SHARE_FORMAT = "karte";
   shareTexteZeigen();
   shareVorschau();
   el("shareModal").classList.add("on");
@@ -2873,19 +2948,58 @@ function shareTextOeffnen(fremd) {
   el("shareTitel").textContent = fremd.titel;
   el("sharePrivat").hidden = true;
   el("shareTexte").hidden = true;
+  el("shareFormat").hidden = true;
+  el("shareBild").hidden = true;
   shareVorschau();
   el("shareModal").classList.add("on");
 }
 
-function shareOeffnen(plattform) {
-  if (!SHARE_FREMD && !CUR_WALLET) return;
-  const text = SHARE_FREMD ? SHARE_FREMD.text : buildShareText(CUR_WALLET, ZEIGE_ADRESSE);
-  const url = SHARE_FREMD ? SHARE_FREMD.url : shareUrl();
+function shareOeffnen(plattform, { text, url }) {
   const zielUrl = plattform === "x"
-    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(url)
-    : "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+    ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + (url ? "&url=" + encodeURIComponent(url) : "")
+    : "https://t.me/share/url?url=" + encodeURIComponent(url || location.origin) + "&text=" + encodeURIComponent(text);
   window.open(zielUrl, "_blank", "noopener,width=600,height=560");
   shareDialogSchliessen();
+}
+
+async function textKopieren(knopf, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const vorher = knopf.innerHTML;
+    knopf.textContent = "✓ Copied";
+    setTimeout(() => { knopf.innerHTML = vorher; }, 1800);
+  } catch {
+    prompt("Copy this text:", text);
+  }
+}
+
+async function shareAktion(knopf) {
+  const aktion = knopf.dataset.aktion;
+  const inhalt = shareInhalt();
+  if (aktion === "x" || aktion === "tg") return shareOeffnen(aktion, inhalt);
+  if (aktion === "kopieren") return textKopieren(knopf, inhalt.url ? inhalt.text + "\n" + inhalt.url : inhalt.text);
+  const id = shareBildId();
+  if (!id) return;
+  if (aktion === "foto-speichern") {
+    const a = document.createElement("a");
+    a.href = shareBildUrl(id, "square");
+    a.download = "etn-radar-" + id + ".jpg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+  if (aktion === "foto-teilen") {
+    const datei = SHARE_FOTO.id === id ? SHARE_FOTO.datei : null;
+    if (!datei) {
+      // Noch nicht geladen: nachladen, dann muss ein zweiter Tipp teilen.
+      knopf.textContent = "⏳ Loading photo…";
+      await fotoVorladen(id);
+      shareKnoepfe("foto");
+      return;
+    }
+    try { await navigator.share({ files: [datei], text: inhalt.text }); } catch { /* abgebrochen */ }
+  }
 }
 
 // ---------- Money flow (Sankey) ----------
@@ -3236,8 +3350,16 @@ el("shareTexte").addEventListener("click", (e) => {
   shareTexteZeigen();
   shareVorschau();
 });
-el("shareGoX").onclick = () => shareOeffnen("x");
-el("shareGoTG").onclick = () => shareOeffnen("tg");
+el("shareFormat").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-format]");
+  if (!b || b.disabled) return;
+  SHARE_FORMAT = b.dataset.format;
+  shareVorschau();
+});
+el("shareFoot").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-aktion]");
+  if (b) shareAktion(b);
+});
 
 // ---------- Rechtsklick-Menue: "Investigate" auf jeder Wallet-Adresse ----------
 //

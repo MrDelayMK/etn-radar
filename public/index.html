@@ -756,6 +756,18 @@
       <button class="x" id="shareClose" aria-label="Close">&times;</button>
     </div>
 
+    <div class="sharetexte" id="shareTexte" role="radiogroup" aria-label="Pick a line" hidden></div>
+
+    <div class="shareformat" id="shareFormat" role="radiogroup" aria-label="How to share" hidden>
+      <button type="button" class="ghost" role="radio" data-format="karte">🔗 Link preview</button>
+      <button type="button" class="ghost" role="radio" data-format="foto">🖼️ Photo</button>
+      <button type="button" class="ghost" role="radio" data-format="text">✍️ Text only</button>
+    </div>
+
+    <div class="sharebild" id="shareBild" hidden><img id="shareBildImg" alt="Image that goes out with the post"></div>
+
+    <div class="sharepreview" id="sharePreview"></div>
+
     <div id="sharePrivat">
       <label class="switchrow">
         <input type="checkbox" id="shareHideAddr" checked>
@@ -764,14 +776,7 @@
       <div class="dim3" id="sharePrivacyNote" style="font-size:12px;margin-top:7px"></div>
     </div>
 
-    <div class="sharetexte" id="shareTexte" role="radiogroup" hidden></div>
-
-    <div class="sharepreview" id="sharePreview"></div>
-
-    <div class="modalfoot">
-      <button id="shareGoX">𝕏&nbsp; Post on X</button>
-      <button class="ghost" id="shareGoTG">✈️ Send on Telegram</button>
-    </div>
+    <div class="modalfoot" id="shareFoot"></div>
   </div>
 </div>
 

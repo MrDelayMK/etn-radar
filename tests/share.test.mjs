@@ -37,6 +37,17 @@ for (const id of Object.keys(SHARE_BILDER)) {
   pruef(existsSync(card) && existsSync(square), id + ": Vorschau- und 1:1-Bild liegen in public/assets/share");
 }
 
+// Seite und Worker muessen dieselben Bilder und Saetze kennen - sonst waehlt
+// jemand im Dialog einen Satz und die Vorschau zeigt kein oder ein fremdes Bild.
+const appJs = readFileSync(join(REPO, "public/app.js"), "utf8");
+const liste = appJs.match(/const SHARE_BILDER = new Set\(\[([^\]]*)\]\)/);
+const seitenIds = liste ? [...liste[1].matchAll(/"([a-z]+-[a-z]+)"/g)].map((m) => m[1]).sort() : [];
+pruef(JSON.stringify(seitenIds) === JSON.stringify(Object.keys(SHARE_BILDER).sort()), "Teilen-Dialog und Worker kennen dieselben Bilder");
+for (const [id, satz] of Object.entries(SHARE_BILDER)) {
+  const ton = id.split("-")[1];
+  pruef(appJs.includes('["' + ton + '", ' + JSON.stringify(satz) + "]"), id + ": derselbe Satz im Dialog wie im Bild");
+}
+
 const start = readFileSync(join(REPO, "public/index.html"), "utf8");
 const banner = start.match(/property="og:image" content="https:\/\/etn-radar\.galacticsl\.com(\/assets\/[^"]+)"/);
 pruef(banner && existsSync(join(REPO, "public", banner[1])), "Startseite: og:image zeigt auf eine vorhandene Datei");
