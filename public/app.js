@@ -2752,6 +2752,7 @@ const SHARE_SAETZE = {
 // Saetze, deren Bilder schon fertig sind. Muss zu SHARE_BILDER in src/share.js
 // passen, sonst zeigt die Link-Vorschau ein fremdes Bild - tests/share.test.mjs
 // prueft das.
+const SHARE_TON = { proud: "😎 Proud", funny: "😂 Funny", calm: "😌 Calm" };
 const SHARE_BILDER = new Set(["whale-funny", "crab-funny", "humpback-calm"]);
 let SHARE_WAHL = 0;
 
@@ -3006,9 +3007,11 @@ function shareTexteZeigen() {
   const box = el("shareTexte");
   box.hidden = !saetze;
   if (!saetze) return;
+  // Nur die Stimmung als Knopf - der Satz selbst steht im Bild bzw. in der Vorschau darunter.
   box.innerHTML = saetze
     .map((s, i) => '<button type="button" role="radio" aria-checked="' + (i === SHARE_WAHL) +
-      '" class="ghost' + (i === SHARE_WAHL ? " on" : "") + '" data-i="' + i + '">' + esc(s[1]) + "</button>")
+      '" class="ghost' + (i === SHARE_WAHL ? " on" : "") + '" data-i="' + i + '" title="' + esc(s[1]) + '">' +
+      (SHARE_TON[s[0]] ?? esc(s[1])) + "</button>")
     .join("");
 }
 

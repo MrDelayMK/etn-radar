@@ -388,9 +388,9 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .modal .x:hover{color:var(--tx)}
 .switchrow{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:var(--tx);user-select:none}
 .switchrow input{width:17px;height:17px;accent-color:var(--acc);cursor:pointer;flex-shrink:0}
-.sharetexte{display:flex;flex-direction:column;gap:6px;margin-top:16px}
+.sharetexte{display:flex;gap:6px;margin-top:14px}
 .sharetexte[hidden]{display:none}
-.sharetexte button{text-align:left;padding:8px 12px;font:500 13px/1.4 var(--sans);border-radius:9px}
+.sharetexte button{flex:1;justify-content:center;padding:7px 6px;font:500 12.5px/1.3 var(--sans);border-radius:9px}
 .sharetexte button.ghost.on{background:var(--card3);color:var(--tx);border-color:var(--acc)}
 .modal .mhead + .sharetexte,.modal .mhead + .shareformat{margin-top:0}
 .switchrow[hidden]{display:none}
