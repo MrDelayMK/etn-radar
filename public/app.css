@@ -399,6 +399,8 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .shareformat button{flex:1;padding:7px 6px;font-size:12.5px;justify-content:center;border-radius:9px}
 .shareformat button.ghost.on{background:var(--card3);color:var(--tx);border-color:var(--acc)}
 .shareformat button:disabled{opacity:.4;cursor:not-allowed}
+/* Das ⓘ in der Reihe behaelt seine runde Form statt wie ein Formatknopf zu wachsen */
+.shareformat .infoBtn{flex:0 0 auto;align-self:center;width:18px;height:18px;padding:0;border-radius:50%;font:700 10.5px var(--sans)}
 .sharebild{margin-top:14px}
 .sharebild[hidden]{display:none}
 .sharebild img{display:block;width:100%;height:auto;aspect-ratio:1200/630;border-radius:10px;border:1px solid var(--line);background:#0a0f1b}
@@ -477,7 +479,7 @@ tbody tr.rowhit{background:#5b9cff26;transition:background 1.8s ease-out}
 }
 .infoBtn:hover{color:var(--tx);border-color:var(--acc)}
 .infopop{
-  position:fixed;z-index:60;background:var(--card2);border:1px solid var(--line2);
+  position:fixed;z-index:90;background:var(--card2);border:1px solid var(--line2);
   border-radius:10px;padding:12px 14px;box-shadow:0 12px 32px #000a;max-width:300px;
   font-size:12.5px;line-height:1.55;color:var(--tx2)
 }

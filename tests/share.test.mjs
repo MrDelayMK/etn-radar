@@ -26,10 +26,8 @@ const adresse = "0x" + "ab".repeat(20);
 const fremdeSeite = await (await holen("/s/whale-funny?w=" + adresse)).text();
 pruef(fremdeSeite.includes('location.replace("/wallet/' + adresse + '")'), "fremdes Wallet: Besucher landen direkt beim Wallet");
 pruef(fremdeSeite.includes('og:title" content="Look this wallet up on ETN Radar"'), "fremdes Wallet: Titel laedt zum Nachschauen ein");
-const fotoSeite = await (await holen("/s/whale-funny?f=foto&w=" + adresse)).text();
-pruef(fotoSeite.includes('og:image" content="https://etn-radar.galacticsl.com/assets/share/whale-funny-square.jpg"') &&
-  fotoSeite.includes('og:image:width" content="1080"'), "?f=foto: Vorschau ist das quadratische Foto");
-pruef(fotoSeite.includes('og:url" content="https://etn-radar.galacticsl.com/s/whale-funny?f=foto&amp;w=' + adresse + '"'), "?f=foto mit Wallet: beide Angaben bleiben im Link");
+const fotoSeite = await (await holen("/s/whale-funny?f=foto")).text();
+pruef(fotoSeite.includes("whale-funny-card.jpg") && !fotoSeite.includes("square"), "Vorschau ist immer das breite Bild - ein Quadrat schnitte die Karte ab");
 const boese = await (await holen("/s/whale-funny?w=%22)%3Balert(1)%2F%2F")).text();
 pruef(boese.includes('location.replace("/")') && !boese.includes("alert"), "ungueltiges ?w= wird ignoriert, nichts davon landet im Skript");
 const unbekanntFremd = await holen("/s/whale-rocket?w=" + adresse);

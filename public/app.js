@@ -2847,9 +2847,10 @@ function shareBlock(addr) {
 // Darunter entscheidet das Geraet den Hauptweg, ohne dass jemand waehlen muss:
 //   Handy  - "Share" oeffnet das Teilen-Menue des Geraets; Bild und Text landen
 //            zusammen in X, Telegram & Co., ganz ohne Link.
-//   PC     - "Post on X" / "Telegram" fuer beide Bilder. X und Telegram lassen
-//            eine Webseite kein Bild mitschicken - beide Bilder gehen darum als
-//            Link, und X/Telegram holen sich das gewaehlte Bild als Vorschau.
+//   PC     - X und Telegram lassen eine Webseite kein Bild mitschicken. Die
+//            karte geht darum als Link, X/Telegram holen sie als Vorschau.
+//            Das foto nicht: eine Vorschaukarte ist immer breit und schnitte das
+//            Quadrat ab - also "Save photo" und "Copy text", posten per Hochladen.
 // Klein darunter liegen die anderen Wege, falls die Erkennung danebenliegt.
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
@@ -2880,12 +2881,8 @@ const istHandy = () => {
 };
 const hauptWeg = () => (istHandy() && aktivesFormat() !== "text" ? "datei" : "link");
 
-// Link, dessen Vorschau das gewaehlte Bild zeigt (src/share.js): ?f=foto fuer das
-// 1:1-Foto, ?w= fuer ein fremdes Wallet.
-const shareLink = (format, wallet) => {
-  const abfrage = [format === "foto" && "f=foto", wallet && "w=" + wallet].filter(Boolean).join("&");
-  return location.origin + "/s/" + shareBildId() + (abfrage ? "?" + abfrage : "");
-};
+// Link mit dem breiten Bild als Vorschau (src/share.js); ?w= fuer ein fremdes Wallet.
+const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet ? "?w=" + wallet : "");
 
 // Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
 function shareInhalt(weg) {
@@ -2894,11 +2891,11 @@ function shareInhalt(weg) {
   if (SHARE_WER === "fremd") {
     const text = fremdText(CUR_WALLET, format);
     // Die Vorschau fuehrt ueber ?w= direkt zum Wallet statt zur Startseite.
-    if (format !== "text" && weg === "link") return { text, url: shareLink(format, CUR_WALLET.address) };
+    if (format === "karte" && weg === "link") return { text, url: shareLink(CUR_WALLET.address) };
     return { text, url: location.origin + "/wallet/" + CUR_WALLET.address };
   }
-  if (format !== "text" && weg === "link") {
-    return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, format, true), url: shareLink(format) };
+  if (format === "karte" && weg === "link") {
+    return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte", true), url: shareLink() };
   }
   if (format !== "text") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, format, false), url: "" };
   return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "text", true), url: shareUrl() };
@@ -2919,20 +2916,42 @@ function fotoVorladen(id, art) {
   return eintrag.laden;
 }
 
+// Text fuer das ⓘ neben der Bildwahl - je Bild und Geraet, weil sich die Wege unterscheiden.
+function shareInfoText(format) {
+  const handy = istHandy();
+  if (format === "karte") {
+    return handy
+      ? "Image + text: the picture with your line next to it. Share sends it straight into X, Telegram & co. together with the text. \"as link\" posts a link instead, and X or Telegram show this picture as its preview."
+      : "Image + text: posts a link. X and Telegram show this picture as the link preview, and a click on it opens ETN Radar.";
+  }
+  if (format === "foto") {
+    return handy
+      ? "Photo 1:1: the square picture as a real photo. Share sends it straight into X, Telegram & co. together with the text."
+      : "Photo 1:1: the square picture as a real photo. X and Telegram don't take photos from a website, so save the photo, copy the text and upload both in your post. A link can't do this: link previews are always wide and would cut the square.";
+  }
+  return "Text only: just the text with a link. X and Telegram show the ETN Radar banner as the link preview.";
+}
+
 function shareKnoepfe() {
   const format = aktivesFormat();
   const k = (aktion, text, klasse = "") =>
     '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>";
   let gross, klein = [];
-  // Gleiche Knoepfe fuer beide Bilder - nur was sie mitschicken, unterscheidet sich.
   if (istHandy() && !SHARE_FREMD) {
     gross = k("teilen", "📤 Share");
-    if (format !== "text") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
+    // Als Link nur das breite Bild - ein Quadrat schnitte die Vorschaukarte ab.
+    if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
+    if (format !== "text") klein.push(k("speichern", "⬇️ Save image"));
+    klein.push(k("kopieren", "📋 Copy text"));
+  } else if (format === "foto") {
+    // Ein echtes Foto nehmen X und Telegram am PC nur per Hochladen an.
+    gross = k("speichern", "⬇️ Save photo") + k("kopieren", "📋 Copy text", "ghost");
+    klein.push(k("x", "𝕏 Open X"), k("tg", "✈️ Open Telegram"));
   } else {
     gross = k("x", "𝕏&nbsp; Post on X") + k("tg", "✈️ Telegram", "ghost");
+    if (format === "karte") klein.push(k("speichern", "⬇️ Save image"));
+    klein.push(k("kopieren", "📋 Copy text"));
   }
-  if (format !== "text") klein.push(k("speichern", "⬇️ Save image"));
-  klein.push(k("kopieren", "📋 Copy text"));
   el("shareFoot").innerHTML = gross;
   el("shareMehr").innerHTML = klein.join("");
 }
@@ -2954,7 +2973,8 @@ function shareVorschau() {
   el("shareHideRow").hidden = fremd;
   const id = shareBildId();
   const format = aktivesFormat();
-  el("shareFormat").querySelectorAll("button").forEach((b) => {
+  el("shareInfoKnopf").dataset.info = shareInfoText(format);
+  el("shareFormat").querySelectorAll("button[data-format]").forEach((b) => {
     const an = b.dataset.format === format;
     b.classList.toggle("on", an);
     b.setAttribute("aria-checked", String(an));
@@ -3074,7 +3094,9 @@ async function shareAktion(knopf) {
 
   if (aktion === "x" || aktion === "tg") {
     shareOeffnen(aktion, shareInhalt("link"));
-    return shareDialogSchliessen();
+    // Beim Foto bleibt der Dialog offen - das Foto speichert man hier noch.
+    if (format !== "foto") shareDialogSchliessen();
+    return;
   }
 
   if (aktion === "teilen") {
