@@ -14,6 +14,7 @@ import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api,
 import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, job_trigger } from "./api/betreiber.js";
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
+import { shareSeite } from "./share.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
@@ -26,6 +27,9 @@ export default {
     const pfad = u.pathname;
 
     if (!pfad.startsWith("/api/")) {
+      // Geteilte Saetze: eigene Vorschau je Satz, siehe src/share.js
+      const geteilt = pfad.match(/^\/s\/([a-z]+-[a-z]+)\/?$/);
+      if (geteilt) return shareSeite(u, geteilt[1]);
       if (SEITEN_PFAD.test(pfad)) return env.ASSETS.fetch(new Request(new URL("/", u), request));
       return env.ASSETS.fetch(request);
     }

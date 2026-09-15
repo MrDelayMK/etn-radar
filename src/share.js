@@ -1,0 +1,78 @@
+// Teilen-Seiten: /s/<bild> liefert die Vorschau fuer X und Telegram (Titel,
+// Satz, Bild) und schickt Menschen sofort auf die Startseite weiter.
+//
+// Warum eigene Adressen: X und Telegram haengen beim Teilen kein Bild an, sie
+// holen es aus den og:-Tags der geteilten Adresse. Jeder Satz braucht also
+// seine eigene Adresse, damit er sein eigenes Bild bekommt.
+//
+// Weitergeleitet wird per JavaScript, nicht per <meta refresh>: manche
+// Vorschau-Crawler folgen einem Meta-Refresh und lesen dann die Tags der
+// Startseite statt die des Satzes. JavaScript fuehren sie nicht aus.
+
+const TIERS = {
+  humpback: ["\u{1F40B}", "Humpback Whale"],
+  whale: ["\u{1F433}", "Whale"],
+  shark: ["\u{1F988}", "Shark"],
+  dolphin: ["\u{1F42C}", "Dolphin"],
+  fish: ["\u{1F41F}", "Fish"],
+  octopus: ["\u{1F419}", "Octopus"],
+  crab: ["\u{1F980}", "Crab"],
+  shrimp: ["\u{1F990}", "Shrimp"],
+  plankton: ["\u{1F9A0}", "Plankton"],
+  microbe: ["\u{1F9EB}", "Microbe"],
+  dust: ["\u{1F4A8}", "Dust"],
+};
+
+// Nur Saetze, deren Bilder in public/assets/share/ wirklich liegen
+// (<id>-card.jpg fuer die Vorschau, <id>-square.jpg zum Posten).
+export const SHARE_BILDER = {
+  "whale-funny": "relax, I didn't sell. I just rolled over in my sleep.",
+  "crab-funny": "sideways market? Crabs were literally built for this.",
+  "humpback-calm": "deep water, long breath, zero rush.",
+};
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+export function shareSeite(u, id) {
+  const satz = SHARE_BILDER[id];
+  const tier = TIERS[id.split("-")[0]];
+  if (!satz || !tier) return Response.redirect(new URL("/", u).href, 302);
+
+  const [emoji, name] = tier;
+  const artikel = ["Plankton", "Dust"].includes(name) ? "" : /^[aeiou]/i.test(name) ? "an " : "a ";
+  const titel = emoji + " I'm " + artikel + name + " on the Electroneum Smart Chain";
+  const beschreibung = satz.charAt(0).toUpperCase() + satz.slice(1) + " What are you? Find your tier on ETN Radar.";
+  const bild = u.origin + "/assets/share/" + id + "-card.jpg";
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${esc(titel)} · ETN Radar</title>
+<meta name="description" content="${esc(beschreibung)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ETN Radar">
+<meta property="og:url" content="${esc(u.origin + "/s/" + id)}">
+<meta property="og:title" content="${esc(titel)}">
+<meta property="og:description" content="${esc(beschreibung)}">
+<meta property="og:image" content="${esc(bild)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(name + ": " + satz)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(titel)}">
+<meta name="twitter:description" content="${esc(beschreibung)}">
+<meta name="twitter:image" content="${esc(bild)}">
+<script>location.replace("/");</script>
+</head>
+<body><a href="/">ETN Radar</a></body>
+</html>`;
+
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=3600",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}

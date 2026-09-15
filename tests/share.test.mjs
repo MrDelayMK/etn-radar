@@ -1,0 +1,44 @@
+// Teilen-Seiten /s/<bild>: richtige Vorschau-Tags, Bilder vorhanden,
+// unbekannte Adressen landen auf der Startseite.
+
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { REPO, repoUrl, ctx, pruefer } from "./hilfen.mjs";
+
+const { SHARE_BILDER } = await import(repoUrl("src/share.js"));
+const { default: worker } = await import(repoUrl("src/index.js"));
+const { pruef, ende } = pruefer();
+
+const env = { ASSETS: { fetch: () => new Response("asset") } };
+const holen = (pfad) => worker.fetch(new Request("https://etn-radar.galacticsl.com" + pfad), env, ctx);
+
+const r = await holen("/s/whale-funny");
+const html = await r.text();
+pruef(r.status === 200 && /text\/html/.test(r.headers.get("content-type")), "/s/whale-funny liefert eine HTML-Seite");
+pruef(html.includes('property="og:image" content="https://etn-radar.galacticsl.com/assets/share/whale-funny-card.jpg"'), "og:image zeigt auf das Vorschaubild des Satzes");
+pruef(html.includes('name="twitter:card" content="summary_large_image"'), "X bekommt die grosse Bildkarte");
+pruef(html.includes("I&#39;m a Whale on the Electroneum Smart Chain"), "Titel nennt die Stufe, Apostroph maskiert");
+pruef(html.includes("Relax, I didn&#39;t sell."), "Beschreibung enthaelt den Satz");
+pruef(!/http-equiv="refresh"/i.test(html) && html.includes('location.replace("/")'), "Weiterleitung nur per JavaScript, nicht per Meta-Refresh");
+
+const mitSchraegstrich = await holen("/s/crab-funny/");
+pruef(mitSchraegstrich.status === 200, "Schraegstrich am Ende wird akzeptiert");
+
+const unbekannt = await holen("/s/whale-rocket");
+pruef(unbekannt.status === 302 && unbekannt.headers.get("location") === "https://etn-radar.galacticsl.com/", "unbekannter Satz leitet auf die Startseite");
+
+const fremd = await holen("/s/<script>");
+pruef(await fremd.text() === "asset", "Adressen ausserhalb des Musters gehen an die statischen Dateien");
+
+for (const id of Object.keys(SHARE_BILDER)) {
+  const card = join(REPO, "public/assets/share", id + "-card.jpg");
+  const square = join(REPO, "public/assets/share", id + "-square.jpg");
+  pruef(existsSync(card) && existsSync(square), id + ": Vorschau- und 1:1-Bild liegen in public/assets/share");
+}
+
+const start = readFileSync(join(REPO, "public/index.html"), "utf8");
+const banner = start.match(/property="og:image" content="https:\/\/etn-radar\.galacticsl\.com(\/assets\/[^"]+)"/);
+pruef(banner && existsSync(join(REPO, "public", banner[1])), "Startseite: og:image zeigt auf eine vorhandene Datei");
+pruef(start.includes('name="twitter:card" content="summary_large_image"'), "Startseite: grosse Bildkarte fuer X");
+
+ende();
