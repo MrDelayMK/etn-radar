@@ -2847,10 +2847,10 @@ function shareBlock(addr) {
 // Darunter entscheidet das Geraet den Hauptweg, ohne dass jemand waehlen muss:
 //   Handy  - "Share" oeffnet das Teilen-Menue des Geraets; Bild und Text landen
 //            zusammen in X, Telegram & Co., ganz ohne Link.
-//   PC     - X und Telegram lassen eine Webseite kein Bild mitschicken: die
-//            karte geht darum per "Post on X" / "Telegram" als Link mit
-//            Vorschau; beim foto sind "Save image" und "Copy text" die
-//            Hauptknoepfe, posten muss man selbst.
+//   PC     - "Post on X" / "Telegram" fuer beide Bilder. X und Telegram lassen
+//            eine Webseite kein Bild mitschicken: die karte geht darum als Link
+//            mit Vorschau; beim foto oeffnet sich das Fenster mit dem Text, das
+//            Bild holt man ueber "Save image" und haengt es selbst an.
 // Klein darunter liegen die anderen Wege, falls die Erkennung danebenliegt.
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
@@ -2920,19 +2920,15 @@ function shareKnoepfe() {
   const k = (aktion, text, klasse = "") =>
     '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>";
   let gross, klein = [];
+  // Gleiche Knoepfe fuer beide Bilder - nur was sie mitschicken, unterscheidet sich.
   if (istHandy() && !SHARE_FREMD) {
     gross = k("teilen", "📤 Share");
     if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
-    if (format === "foto") klein.push(k("speichern", "⬇️ Save image"));
-    klein.push(k("kopieren", "📋 Copy text"));
-  } else if (format === "foto") {
-    gross = k("speichern", "⬇️ Save image") + k("kopieren", "📋 Copy text", "ghost");
-    klein.push(k("x", "𝕏 Open X"), k("tg", "✈️ Open Telegram"));
   } else {
     gross = k("x", "𝕏&nbsp; Post on X") + k("tg", "✈️ Telegram", "ghost");
-    if (format === "karte") klein.push(k("speichern", "⬇️ Save image"));
-    klein.push(k("kopieren", "📋 Copy text"));
   }
+  if (format !== "text") klein.push(k("speichern", "⬇️ Save image"));
+  klein.push(k("kopieren", "📋 Copy text"));
   el("shareFoot").innerHTML = gross;
   el("shareMehr").innerHTML = klein.join("");
 }
