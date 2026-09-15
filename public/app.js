@@ -788,7 +788,7 @@ function migSchalter() {
 function alleChartsNachziehen() {
   if (el("prChart")._punkte) zeichnePreisChart();
   if (MIG.punkte.length) zeichneMigration();
-  if (el("invChart")._punkte) zeichneChart(el("invChart"));
+  if (el("invChart")?._punkte) zeichneChart(el("invChart"));
   if (TIER_VERLAUF.tage) zeichneTierVerlauf();
   if (CHAIN.daten) zeichneChainKacheln();
   if (VIS.daten) zeichneBesucherChart();
@@ -806,7 +806,9 @@ beobachte("tierVerlauf", () => { if (TIER_VERLAUF.tage) zeichneTierVerlauf(); })
 beobachte("chainKacheln", () => { if (CHAIN.daten) zeichneChainKacheln(); });
 beobachte("visHolder", () => { if (VIS.daten) zeichneBesucherChart(); });
 beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
-beobachte("invChartHolder", () => { if (el("invChart")._punkte) zeichneChart(el("invChart")); });
+// #invChart fehlt, solange ein Wallet ohne genug Verlauf offen ist: dann steht
+// statt des Diagramms nur der Hinweis im Holder (renderWalletDetail).
+beobachte("invChartHolder", () => { if (el("invChart")?._punkte) zeichneChart(el("invChart")); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) alleChartsNachziehen(); });
 window.addEventListener("resize", alleChartsNachziehen);
 
@@ -3343,6 +3345,9 @@ function renderWalletDetail(d) {
   // Chart
   if (d.verlauf && d.verlauf.length >= 2) {
     wrap.chart.style.display = "";
+    // Das vorige Wallet hatte vielleicht zu wenig Verlauf - dann hat der Hinweis
+    // unten das Diagramm ersetzt, und es muss erst wieder hinein.
+    if (!el("invChart")) el("invChartHolder").innerHTML = '<svg class="chart" id="invChart"></svg><div class="tip"></div>';
     zeichneChart(el("invChart"), d.verlauf);
   } else {
     wrap.chart.style.display = "";
