@@ -38,17 +38,19 @@ export function shareSeite(u, id) {
   const tier = TIERS[id.split("-")[0]];
   if (!satz || !tier) return Response.redirect(new URL("/", u).href, 302);
 
+  // Jedes Teil sagt etwas anderes, sonst steht derselbe Satz dreimal da:
+  // der Post nennt die Stufe, das Bild bringt den Satz, der Titel (bei X ueber
+  // dem Bild eingeblendet) laedt zum Mitmachen ein.
   const [emoji, name] = tier;
-  const artikel = ["Plankton", "Dust"].includes(name) ? "" : /^[aeiou]/i.test(name) ? "an " : "a ";
-  const titel = emoji + " I'm " + artikel + name + " on the Electroneum Smart Chain";
-  const beschreibung = satz.charAt(0).toUpperCase() + satz.slice(1) + " What are you? Find your tier on ETN Radar.";
+  const titel = "What's your tier? Find out on ETN Radar";
+  const beschreibung = "Whale and migration tracker for the Electroneum Smart Chain.";
   const bild = u.origin + "/assets/share/" + id + "-card.jpg";
 
   const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(titel)} · ETN Radar</title>
+<title>${esc(emoji + " " + name + " · ETN Radar")}</title>
 <meta name="description" content="${esc(beschreibung)}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ETN Radar">

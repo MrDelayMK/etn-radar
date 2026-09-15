@@ -17,8 +17,9 @@ const html = await r.text();
 pruef(r.status === 200 && /text\/html/.test(r.headers.get("content-type")), "/s/whale-funny liefert eine HTML-Seite");
 pruef(html.includes('property="og:image" content="https://etn-radar.galacticsl.com/assets/share/whale-funny-card.jpg"'), "og:image zeigt auf das Vorschaubild des Satzes");
 pruef(html.includes('name="twitter:card" content="summary_large_image"'), "X bekommt die grosse Bildkarte");
-pruef(html.includes("I&#39;m a Whale on the Electroneum Smart Chain"), "Titel nennt die Stufe, Apostroph maskiert");
-pruef(html.includes("Relax, I didn&#39;t sell."), "Beschreibung enthaelt den Satz");
+pruef(html.includes('property="og:title" content="What&#39;s your tier? Find out on ETN Radar"'), "Titel laedt zum Mitmachen ein, Apostroph maskiert");
+pruef(!/og:(title|description)" content="[^"]*didn&#39;t sell/.test(html), "der Satz steht nur im Bild, nicht nochmal in Titel oder Beschreibung");
+pruef(html.includes('og:image:alt" content="Whale: relax, I didn&#39;t sell.'), "Bildbeschreibung fuer Screenreader enthaelt den Satz");
 pruef(!/http-equiv="refresh"/i.test(html) && html.includes('location.replace("/")'), "Weiterleitung nur per JavaScript, nicht per Meta-Refresh");
 
 const mitSchraegstrich = await holen("/s/crab-funny/");
