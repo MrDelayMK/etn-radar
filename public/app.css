@@ -402,6 +402,10 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .sharebild[hidden]{display:none}
 .sharebild img{display:block;width:100%;height:auto;aspect-ratio:1200/630;border-radius:10px;border:1px solid var(--line);background:#0a0f1b}
 .sharebild.foto img{aspect-ratio:1/1;max-width:300px;margin:0 auto}
+.sharemehr{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px;margin-top:12px}
+.sharemehr:empty{display:none}
+.sharemehr button{background:none;border:0;padding:4px 2px;font:500 12.5px/1.3 var(--sans);color:var(--tx2);cursor:pointer}
+.sharemehr button:hover{color:var(--tx);text-decoration:underline}
 #sharePrivat{margin-bottom:17px}
 #sharePrivat[hidden]{display:none}
 .sharepreview{

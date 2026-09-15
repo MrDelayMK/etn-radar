@@ -2759,24 +2759,26 @@ const ichBin = (d) =>
   d.tier_name + " on the Electroneum Smart Chain";
 
 /**
- * Post-Text je Weg (siehe Share-Dialog):
- *   karte - der Satz steht schon im Vorschaubild, im Post nicht nochmal
- *   foto  - der Satz kommt in den Text, dazu nur die kurze Domain statt Link
- *   text  - Satz und Link zur Seite bzw. zum Wallet
+ * Post-Text je Bild und Weg (siehe Share-Dialog):
+ *   karte - der Satz steht schon im Bild, im Text nicht nochmal
+ *   foto  - der Satz kommt in den Text
+ *   text  - Satz im Text
+ * mitLink: der Link wird angehaengt (X/Telegram per Adresse) - sonst steht nur
+ * die kurze Domain im Text, etwa wenn das Bild als Foto rausgeht.
+ * Die Vorschaukarte bringt ihren Aufruf ("What's your tier?") selbst mit, darum
+ * bleibt der Text bei karte + Link am kuerzesten.
  */
-function buildShareText(d, zeigeAdresse, format = "text") {
+function buildShareText(d, zeigeAdresse, format = "text", mitLink = true) {
   const s = SHARE_SAETZE[d.tier]?.[SHARE_WAHL];
   const kopf = d.tier_emoji + " " + ichBin(d);
-  const schluss = format === "foto" ? ": " + location.host : ":";
-  if (format === "karte") {
-    if (!zeigeAdresse) return kopf + ". What are you?";
-    return [kopf + ".", "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
+  const satz = format === "karte" || !s ? kopf + "." : kopf + " — " + s[1];
+  if (format === "karte" && mitLink) {
+    if (!zeigeAdresse) return satz + " What are you?";
+    return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
   }
-  const satz = kopf + (s ? " — " + s[1] : ".");
-  if (!zeigeAdresse) {
-    return satz + "\n\nWhat are you? Find your tier on ETN Radar" + schluss;
-  }
-  return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand? Check yours on ETN Radar" + schluss].join("\n");
+  const verweis = mitLink ? ":" : ": " + location.host;
+  if (!zeigeAdresse) return satz + "\n\nWhat are you? Find your tier on ETN Radar" + verweis;
+  return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand? Check yours on ETN Radar" + verweis].join("\n");
 }
 
 // Rang, Bestand, naechste Stufe, Adresse - nur wenn die Adresse mitgehen darf.
@@ -2819,20 +2821,24 @@ function shareBlock(addr) {
 }
 
 // ---------- Share-Dialog ----------
-// Drei Wege, weil nicht jeder gleich teilt:
-//   karte - Link mit Vorschaubild (Bild + Satz), X oder Telegram mit einem Klick
-//   foto  - das gerahmte 1:1-Bild als Foto posten: ueber das Teilen-Menue des
-//           Geraets, oder speichern und selbst anhaengen. X und Telegram lassen
-//           eine Webseite kein Bild direkt mitschicken.
-//   text  - nur Text, mit Link zur Seite bzw. zum Wallet
-// Saetze ohne fertiges Bild gehen nur als Text.
+// Oben waehlt man Satz und Bild: karte (Bild + Satz), foto (gerahmtes 1:1)
+// oder text. Saetze ohne fertiges Bild gehen nur als Text.
+//
+// Darunter entscheidet das Geraet den Hauptweg, ohne dass jemand waehlen muss:
+//   Handy  - "Share" oeffnet das Teilen-Menue des Geraets; Bild und Text landen
+//            zusammen in X, Telegram & Co., ganz ohne Link.
+//   PC     - "Post on X" / "Telegram" per Adresse. X und Telegram lassen eine
+//            Webseite kein Bild mitschicken: die karte kommt darum als Link mit
+//            Vorschau, das foto wird gespeichert und das Fenster mit dem Text
+//            geoeffnet - anhaengen muss man es selbst.
+// Klein darunter liegen die anderen Wege, falls die Erkennung danebenliegt.
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
-// Chain-Reiter: dann ohne Adress-Schalter, Satz- und Formatwahl.
+// Chain-Reiter: dann ohne Adress-Schalter, Satz- und Bildwahl.
 // SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
 let SHARE_FREMD = null;
 let SHARE_FORMAT = "karte";
-let SHARE_FOTO = { id: null, datei: null, laden: null };
+let SHARE_FOTO = { schluessel: null, datei: null, laden: null };
 
 const shareBildId = () => {
   const s = SHARE_SAETZE[CUR_WALLET?.tier]?.[SHARE_WAHL];
@@ -2840,51 +2846,70 @@ const shareBildId = () => {
   return id && SHARE_BILDER.has(id) ? id : null;
 };
 const shareBildUrl = (id, art) => location.origin + "/assets/share/" + id + "-" + art + ".jpg";
+const bildArt = (format) => (format === "foto" ? "square" : "card");
+const aktivesFormat = () => (SHARE_FREMD || !shareBildId() ? "text" : SHARE_FORMAT);
 const kannFotoTeilen = () => {
   try { return !!navigator.canShare?.({ files: [new File([""], "x.jpg", { type: "image/jpeg" })] }); } catch { return false; }
 };
+// Handy = mit dem Finger bedient UND der Browser kann Bilder an Apps geben.
+// Manche PC-Browser koennen Letzteres auch, das Teilen-Menue bringt dort aber nichts.
+const istHandy = () => {
+  try { return matchMedia("(pointer: coarse)").matches && kannFotoTeilen(); } catch { return false; }
+};
+const hauptWeg = () => (istHandy() && aktivesFormat() !== "text" ? "datei" : "link");
 
-// Was gerade rausgehen wuerde: { text, url }. Ohne url (Foto) steht die Domain im Text.
-function shareInhalt() {
+// Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
+function shareInhalt(weg) {
   if (SHARE_FREMD) return { text: SHARE_FREMD.text, url: SHARE_FREMD.url };
-  const id = shareBildId();
-  if (id && SHARE_FORMAT === "karte") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte"), url: location.origin + "/s/" + id };
-  if (id && SHARE_FORMAT === "foto") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "foto"), url: "" };
-  return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "text"), url: shareUrl() };
+  const format = aktivesFormat();
+  if (format === "karte" && weg === "link") {
+    return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte", true), url: location.origin + "/s/" + shareBildId() };
+  }
+  if (format !== "text") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, format, false), url: "" };
+  return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "text", true), url: shareUrl() };
 }
 
-// Das Foto schon beim Umschalten laden: das Teilen-Menue muss direkt im Klick
+// Das Bild schon beim Umschalten laden: das Teilen-Menue muss direkt im Klick
 // aufgehen, sonst verweigert es der Browser (vor allem Safari).
-function fotoVorladen(id) {
-  if (SHARE_FOTO.id === id) return SHARE_FOTO.laden;
-  const eintrag = { id, datei: null, laden: null };
+function fotoVorladen(id, art) {
+  const schluessel = id + "-" + art;
+  if (SHARE_FOTO.schluessel === schluessel) return SHARE_FOTO.laden;
+  const eintrag = { schluessel, datei: null, laden: null };
   SHARE_FOTO = eintrag;
-  eintrag.laden = fetch(shareBildUrl(id, "square"))
+  eintrag.laden = fetch(shareBildUrl(id, art))
     .then((r) => (r.ok ? r.blob() : null))
-    .then((b) => { if (b) eintrag.datei = new File([b], "etn-radar-" + id + ".jpg", { type: "image/jpeg" }); })
+    .then((b) => { if (b) eintrag.datei = new File([b], "etn-radar-" + schluessel + ".jpg", { type: "image/jpeg" }); })
     .catch(() => {})
-    .finally(() => { if (!eintrag.datei) eintrag.id = null; });
+    .finally(() => { if (!eintrag.datei) eintrag.schluessel = null; });
   return eintrag.laden;
 }
 
-function shareKnoepfe(format) {
-  const foto = kannFotoTeilen();
-  const knoepfe = format === "foto"
-    ? [foto && ["foto-teilen", "📤 Share photo", ""], ["foto-speichern", "⬇️ Save image", foto ? "ghost" : ""], ["kopieren", "📋 Copy text", "ghost"]]
-    : [["x", "𝕏&nbsp; Post on X", ""], ["tg", "✈️ Telegram", "ghost"], ["kopieren", "📋 Copy text", "ghost"]];
-  el("shareFoot").innerHTML = knoepfe.filter(Boolean)
-    .map(([aktion, text, klasse]) => '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>")
-    .join("");
+function shareKnoepfe() {
+  const format = aktivesFormat();
+  const k = (aktion, text, klasse = "") =>
+    '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>";
+  let gross, klein = [];
+  if (istHandy() && !SHARE_FREMD) {
+    gross = k("teilen", "📤 Share");
+    if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
+  } else {
+    gross = k("x", "𝕏&nbsp; Post on X") + k("tg", "✈️ Telegram", "ghost");
+  }
+  if (format !== "text") klein.push(k("speichern", "⬇️ Save image"));
+  klein.push(k("kopieren", "📋 Copy text"));
+  el("shareFoot").innerHTML = gross;
+  el("shareMehr").innerHTML = klein.join("");
 }
 
 function shareVorschau() {
   if (!SHARE_FREMD && !CUR_WALLET) return;
-  const inhalt = shareInhalt();
+  const inhalt = shareInhalt(hauptWeg());
   el("sharePreview").textContent = inhalt.text + (inhalt.url ? "\n" + inhalt.url : "");
-  if (SHARE_FREMD) { shareKnoepfe("text"); return; }
+  shareKnoepfe();
+  if (SHARE_FREMD) return;
 
   const id = shareBildId();
-  const format = id ? SHARE_FORMAT : "text";
+  const format = aktivesFormat();
   el("shareFormat").querySelectorAll("button").forEach((b) => {
     const an = b.dataset.format === format;
     b.classList.toggle("on", an);
@@ -2895,11 +2920,10 @@ function shareVorschau() {
   bild.hidden = format === "text";
   bild.classList.toggle("foto", format === "foto");
   if (!bild.hidden) {
-    const src = shareBildUrl(id, format === "foto" ? "square" : "card");
+    const src = shareBildUrl(id, bildArt(format));
     if (el("shareBildImg").getAttribute("src") !== src) el("shareBildImg").src = src;
+    if (istHandy()) fotoVorladen(id, bildArt(format));
   }
-  if (format === "foto") fotoVorladen(id);
-  shareKnoepfe(format);
 
   el("sharePrivacyNote").textContent = ZEIGE_ADRESSE
     ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
@@ -2955,50 +2979,81 @@ function shareTextOeffnen(fremd) {
 }
 
 function shareOeffnen(plattform, { text, url }) {
+  // Telegram verlangt eine Adresse; ohne Link geht der Text selbst als "url" mit.
   const zielUrl = plattform === "x"
     ? "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + (url ? "&url=" + encodeURIComponent(url) : "")
-    : "https://t.me/share/url?url=" + encodeURIComponent(url || location.origin) + "&text=" + encodeURIComponent(text);
+    : url
+      ? "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text)
+      : "https://t.me/share/url?url=" + encodeURIComponent(text);
   window.open(zielUrl, "_blank", "noopener,width=600,height=560");
-  shareDialogSchliessen();
+}
+
+function knopfMeldung(knopf, text, ms = 1800) {
+  const vorher = knopf.innerHTML;
+  knopf.textContent = text;
+  setTimeout(() => { knopf.innerHTML = vorher; }, ms);
 }
 
 async function textKopieren(knopf, text) {
   try {
     await navigator.clipboard.writeText(text);
-    const vorher = knopf.innerHTML;
-    knopf.textContent = "✓ Copied";
-    setTimeout(() => { knopf.innerHTML = vorher; }, 1800);
+    knopfMeldung(knopf, "✓ Copied");
   } catch {
     prompt("Copy this text:", text);
   }
 }
 
+function bildSpeichern(id, art) {
+  const a = document.createElement("a");
+  a.href = shareBildUrl(id, art);
+  a.download = "etn-radar-" + id + (art === "square" ? "-photo" : "") + ".jpg";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 async function shareAktion(knopf) {
   const aktion = knopf.dataset.aktion;
-  const inhalt = shareInhalt();
-  if (aktion === "x" || aktion === "tg") return shareOeffnen(aktion, inhalt);
-  if (aktion === "kopieren") return textKopieren(knopf, inhalt.url ? inhalt.text + "\n" + inhalt.url : inhalt.text);
+  const format = aktivesFormat();
   const id = shareBildId();
-  if (!id) return;
-  if (aktion === "foto-speichern") {
-    const a = document.createElement("a");
-    a.href = shareBildUrl(id, "square");
-    a.download = "etn-radar-" + id + ".jpg";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
+
+  if (aktion === "kopieren") {
+    const i = shareInhalt(hauptWeg());
+    return textKopieren(knopf, i.url ? i.text + "\n" + i.url : i.text);
   }
-  if (aktion === "foto-teilen") {
-    const datei = SHARE_FOTO.id === id ? SHARE_FOTO.datei : null;
-    if (!datei) {
-      // Noch nicht geladen: nachladen, dann muss ein zweiter Tipp teilen.
-      knopf.textContent = "⏳ Loading photo…";
-      await fotoVorladen(id);
-      shareKnoepfe("foto");
+  if (aktion === "speichern") return id && bildSpeichern(id, bildArt(format));
+
+  if (aktion === "x" || aktion === "tg") {
+    const inhalt = shareInhalt("link");
+    shareOeffnen(aktion, inhalt);
+    if (format === "foto") {
+      // Das Bild nimmt X/Telegram nicht an - gespeichert ist es, anhaengen muss man selbst.
+      bildSpeichern(id, "square");
+      knopfMeldung(knopf, "✓ Image saved – add it to your post", 4000);
       return;
     }
-    try { await navigator.share({ files: [datei], text: inhalt.text }); } catch { /* abgebrochen */ }
+    return shareDialogSchliessen();
+  }
+
+  if (aktion === "teilen") {
+    if (format === "text") {
+      const i = shareInhalt("link");
+      try { await navigator.share({ text: i.text + "\n" + i.url }); shareDialogSchliessen(); } catch { /* abgebrochen */ }
+      return;
+    }
+    const art = bildArt(format);
+    const datei = SHARE_FOTO.schluessel === id + "-" + art ? SHARE_FOTO.datei : null;
+    if (!datei) {
+      // Noch nicht geladen: nachladen, dann teilt der naechste Tipp.
+      knopf.textContent = "⏳ Loading image…";
+      await fotoVorladen(id, art);
+      shareKnoepfe();
+      return;
+    }
+    try {
+      await navigator.share({ files: [datei], text: shareInhalt("datei").text });
+      shareDialogSchliessen();
+    } catch { /* abgebrochen */ }
   }
 }
 
@@ -3356,10 +3411,12 @@ el("shareFormat").addEventListener("click", (e) => {
   SHARE_FORMAT = b.dataset.format;
   shareVorschau();
 });
-el("shareFoot").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-aktion]");
-  if (b) shareAktion(b);
-});
+for (const leiste of ["shareFoot", "shareMehr"]) {
+  el(leiste).addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-aktion]");
+    if (b) shareAktion(b);
+  });
+}
 
 // ---------- Rechtsklick-Menue: "Investigate" auf jeder Wallet-Adresse ----------
 //
