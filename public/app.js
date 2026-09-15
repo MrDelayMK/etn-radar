@@ -225,7 +225,7 @@ async function hole(pfad, bust) {
   if (r.status === 429) {
     // Das Minutenbudget fuer Explorer-Abrufe ist aufgebraucht - kein Fehler,
     // sondern ein "gleich nochmal".
-    const e = new Error("The explorer is busy right now — try again in a minute.");
+    const e = new Error("The explorer is busy right now - try again in a minute.");
     e.beschaeftigt = true;
     throw e;
   }
@@ -406,7 +406,7 @@ function zeichneTempoChart(svg, punkte, opts) {
     const tage = Math.max(1, Math.round((bisZeit - ab.getTime()) / 86400000) + 1);
     const kurzDatum = (d) => d.toLocaleDateString(LOC, { month: "short", day: "numeric" });
     tip.innerHTML = "<b>" + kurz(w.etn) + " ETN</b><span>" +
-      kurzDatum(ab) + " – " + (laeuft ? "today" : kurzDatum(new Date(bisZeit))) +
+      kurzDatum(ab) + " - " + (laeuft ? "today" : kurzDatum(new Date(bisZeit))) +
       " · " + kurz(w.etn / tage) + "/day</span>";
     tip.classList.add("on");
 
@@ -907,7 +907,7 @@ function zeichneBurnKarte(d, m) {
   el("burnEtn").innerHTML = kurz(rest) +
     ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would miss the deadline</span>';
   el("burnSub").innerHTML =
-    "At today's pace that's what is still waiting on " + deadline + " — <b>" +
+    "At today's pace that's what is still waiting on " + deadline + " - <b>" +
     nf(anteil, 1) + "%</b> of every ETN in existence, held by people who never made the move.";
 
   // Balken: geretteter Anteil vs. verbrennender Anteil, gemessen an der
@@ -1314,7 +1314,7 @@ function migVerlaufBeschriften() {
   if (!m || v.length < 2) return;
 
   el("chartRange").textContent =
-    new Date(v[0].day).toLocaleDateString(LOC) + " – " +
+    new Date(v[0].day).toLocaleDateString(LOC) + " - " +
     new Date(v[v.length - 1].day).toLocaleDateString(LOC) +
     (Date.now() < Date.parse(m.deadline + "T00:00:00Z") + 86400000
       ? " · deadline " + new Date(m.deadline).toLocaleDateString(LOC)
@@ -1442,7 +1442,7 @@ function zeichneChainWoche() {
   const d = CHAIN.daten;
   const box = el("chainWoche");
   if (!d) return;
-  el("chainWocheRange").textContent = chainDatum(d.woche.von) + " – " + chainDatum(d.woche.bis);
+  el("chainWocheRange").textContent = chainDatum(d.woche.von) + " - " + chainDatum(d.woche.bis);
   const mit = (p) => (p == null ? "" : " · " + chainProzent(p));
   // [Emoji, HTML fuer die Seite, Klartext fuer den geteilten Post]
   const fakten = [];
@@ -1640,7 +1640,7 @@ async function ladeBilanz() {
       ' <span style="font-size:.4em;color:var(--tx2);font-weight:500">ETN lost for good</span>';
     el("bridgeSub").innerHTML =
       "<b>" + nf((vl.anteil_supply ?? 0) * 100, 1) + "%</b> of every ETN there has ever been " +
-      "never crossed the bridge — held by people who did not make the move in time";
+      "never crossed the bridge - held by people who did not make the move in time";
 
     // Countdown und noetiges Tempo sind gegenstandslos, sobald der Termin
     // vorbei ist. An ihrer Stelle steht, was die Frist gekostet hat.
@@ -1706,7 +1706,7 @@ async function ladeBilanz() {
       ? "All migrations since " +
         new Date(d.transfers_ab).toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric" }) + "."
       : "Checked back to " + new Date(d.transfers_ab).toLocaleDateString(LOC) +
-        " so far — the scan works further back with every run, so this ranking can still change."
+        " so far - the scan works further back with every run, so this ranking can still change."
     : "";
 
   // --- Wallets, die es vorher nicht gab ---
@@ -1778,7 +1778,7 @@ function zeichneTiers(tiers, zirkulierend, tierInfo) {
     // keine sinnvolle Untergrenze — "0 – 100K" liest sich falsch, "< 100K" nicht.
     const bereich =
       t.min === 0 ? "< " + kurz(t.max) + " ETN"
-      : t.max ? kurz(t.min) + " – " + kurz(t.max) + " ETN"
+      : t.max ? kurz(t.min) + " - " + kurz(t.max) + " ETN"
       : "≥ " + kurz(t.min) + " ETN";
 
     if (nochNichtGezaehlt) {
@@ -2109,7 +2109,7 @@ function zeileMerkliste(e, vergleich) {
       "</div>" +
       '<div class="sub">rank ' + (e.rank_pos ?? "—") + " · " +
         (d == null ? kurz(e.etn) : kurz(e.etn - d) + " → " + kurz(e.etn)) + " ETN</div>" +
-      notizBox(e.address, "+ add a note — why are you watching this one?") +
+      notizBox(e.address, "+ add a note - why are you watching this one?") +
     "</div>" +
     '<div class="val"><b class="num ' + klasse + '">' + betrag + "</b>" +
       '<span class="num">' + (d == null ? "" : pctSafe(e.delta_pct, e.etn - d)) + "</span></div>" +
@@ -2246,8 +2246,8 @@ async function ladeWatchlist() {
     zeichneWatchChips(null);
     el("watchBody").innerHTML =
       '<div class="watchempty"><span class="gross">☆</span><div>' +
-      "Tap the <b>star</b> next to any wallet — in the leaderboard, in the top movers, " +
-      "or on its profile — and it shows up here with what it did since your last visit. " +
+      "Tap the <b>star</b> next to any wallet - in the leaderboard, in the top movers, " +
+      "or on its profile - and it shows up here with what it did since your last visit. " +
       "Saved in this browser only." +
       "</div></div>";
     el("watchMiss").style.display = "none";
@@ -2491,7 +2491,7 @@ async function ladeExchangeFlow() {
   n.textContent = kurz(netto, true) + " ETN";
   n.className = "v num " + (rein ? "down" : "up");
   el("flowDir").textContent = Math.abs(netto) < 1
-    ? "balanced — nothing worth reading into"
+    ? "balanced - nothing worth reading into"
     : rein
       ? "net movement ONTO exchanges"
       : "net movement OFF exchanges, into private wallets";
@@ -2510,7 +2510,7 @@ async function ladeExchangeFlow() {
   el("flowCoverage").textContent =
     d.boersen_gezaehlt + " wallet(s) counted" +
     (d.inkl_auto ? ", including behaviour-detected candidates" : ", confirmed exchanges only") +
-    " — exchanges we haven't labelled are not in these numbers.";
+    " - exchanges we haven't labelled are not in these numbers.";
   el("flowAuto").textContent = d.inkl_auto ? "− Confirmed exchanges only" : "+ Include detected candidates";
   el("flowAuto").classList.toggle("on", !!d.inkl_auto);
 }
@@ -2576,7 +2576,7 @@ async function ladeEvents(bust) {
       "<div>" + esc(e.anzeige ?? kurzAdr(e.address)) +
       (e.tier_from ? " · " + e.tier_from + " → " + e.tier_to : "") + "</div></div>" +
       '<div class="when">' + zeitHer(e.detected_at) + "</div></a>";
-  }).join("") : '<div class="empty">No events yet — they appear from the second snapshot onwards</div>';
+  }).join("") : '<div class="empty">No events yet - they appear from the second snapshot onwards</div>';
 }
 
 // ---------- Cluster guesses (experimental) ----------
@@ -2586,7 +2586,7 @@ async function ladeClusters() {
   el("clustersNote").textContent = d.stand
     ? "Last computed " + new Date(d.stand).toLocaleString(LOC) +
       " · only among the individually-tracked (fast-tier) wallets"
-    : "No analysis has run yet — click \"Run cluster analysis now\" below, " +
+    : "No analysis has run yet - click \"Run cluster analysis now\" below, " +
       "or wait for the weekly run.";
 
   if (!d.gruppen.length) {
@@ -2773,7 +2773,7 @@ const ichBin = (d) => "I'm " + mitArtikel(d) + " on the Electroneum Smart Chain"
 function buildShareText(d, zeigeAdresse, format = "text", mitLink = true) {
   const s = SHARE_SAETZE[d.tier]?.[SHARE_WAHL];
   const kopf = d.tier_emoji + " " + ichBin(d);
-  const satz = format === "karte" || !s ? kopf + "." : kopf + " — " + s[1];
+  const satz = format === "karte" || !s ? kopf + "." : kopf + " - " + s[1];
   if (format === "karte" && mitLink) {
     if (!zeigeAdresse) return satz + "\n\nWhat are you?";
     return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
@@ -2810,9 +2810,9 @@ function shareFakten(d) {
     // Kein "Only" und kein "I'll make it!": bei Fish -> Dolphin fehlen schnell
     // eine Million, und ein Versprechen gehoert nicht in einen fremden Post.
     fakten.push("Next stop: " + [d.naechster_tier, TIER_EMOJI[d.naechster_tier]].filter(Boolean).join(" ") +
-      " — " + kurz(d.bis_naechster_tier) + " ETN to go");
+      " - " + kurz(d.bis_naechster_tier) + " ETN to go");
   } else {
-    fakten.push("Top tier reached — nowhere left to climb 🎉");
+    fakten.push("Top tier reached - nowhere left to climb 🎉");
   }
   fakten.push("Wallet: " + d.address);
   return fakten;
@@ -2992,8 +2992,8 @@ function shareVorschau() {
   el("sharePrivacyNote").textContent = fremd
     ? "The address goes out with the post."
     : ZEIGE_ADRESSE
-      ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
-      : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
+      ? "Your address and rank go out with the post - anyone can look up this wallet's full balance and history."
+      : "Only your tier goes out. No address, no rank - nothing that could be traced back to your wallet.";
   el("sharePrivacyNote").style.color = fremd ? "var(--tx2)" : ZEIGE_ADRESSE ? "var(--warn)" : "var(--acc2)";
 }
 // Der Link verraet die Wallet nur, wenn die Adresse ohnehin mitgeht - sonst
@@ -3311,9 +3311,9 @@ async function ladeWalletFlows(adresse) {
 
 function hypeText(progress) {
   const p = progress * 100;
-  if (p >= 95) return "So close — will you make it? 🚀";
-  if (p >= 75) return "Almost there — keep stacking! 💪";
-  if (p >= 40) return "Making progress — halfway up the ladder.";
+  if (p >= 95) return "So close - will you make it? 🚀";
+  if (p >= 75) return "Almost there - keep stacking! 💪";
+  if (p >= 40) return "Making progress - halfway up the ladder.";
   return "Long way up, but every ETN counts. 🐾";
 }
 
@@ -3342,9 +3342,9 @@ function renderWalletDetail(d) {
         '<div style="font-size:13.5px;color:var(--tx2)">' + esc(d.tier_name) + ' → <b>' + esc(d.naechster_tier) +
         '</b> · another <b class="num" style="color:var(--acc)">' + nf(bis) + " ETN</b> to go</div>" +
         '<div style="font-size:12.5px;color:var(--acc2);margin-top:4px;font-weight:560">' + hypeText(d.tier_progress) + "</div>"
-      : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉 — nowhere left to climb.</div>') +
+      : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉 - nowhere left to climb.</div>') +
     (liveOnly
-      ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer — this wallet is outside the tracked top N, so no history/events/cluster data exists here.</div>'
+      ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer - this wallet is outside the tracked top N, so no history/events/cluster data exists here.</div>'
       : "") +
     shareBlock(d.address);
 
@@ -3415,7 +3415,7 @@ function renderWalletDetail(d) {
           (e.tier_from ? "<div>" + e.tier_from + " → " + e.tier_to + "</div>" : "") + "</div>" +
           '<div class="when">' + zeitHer(e.detected_at) + "</div></div>";
       }).join("")
-    : '<div class="empty">Nothing flagged yet — this wallet has not moved 100,000 ETN or more ' +
+    : '<div class="empty">Nothing flagged yet - this wallet has not moved 100,000 ETN or more ' +
       'in one go since tracking started.</div>';
 }
 
@@ -3590,7 +3590,7 @@ async function suchen() {
           nf(bis) + " ETN</b> to reach <b>" + esc(d.naechster_tier) + "</b></div>"
         : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉</div>') +
       (d.quelle === "explorer"
-        ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer — this wallet is outside the tracked top N.</div>'
+        ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer - this wallet is outside the tracked top N.</div>'
         : "") +
       // Statt hier alles zu wiederholen: rueber zur vollen Profilseite, wo
       // Chart, Ereignisse, Cluster und der Share-Dialog ohnehin schon leben.
@@ -3788,14 +3788,14 @@ function wireJobButton(job, btnId) {
       const r = await fetch("/api/" + job + "/trigger", { method: "POST", headers: adminKopf() });
       const d = await r.json();
       btn.textContent = d.ok
-        ? "✓ Started — takes ~15-30 min"
+        ? "✓ Started - takes ~15-30 min"
         : d.grund === "nicht_konfiguriert"
-        ? "Not configured — see Actions tab"
+        ? "Not configured - see Actions tab"
         : d.grund === "kein_zugriff"
         ? "Operator only"
-        : "Failed — try again later";
+        : "Failed - try again later";
     } catch {
-      btn.textContent = "Failed — try again later";
+      btn.textContent = "Failed - try again later";
     }
     setTimeout(() => ladeJobStatus(job, btnId), 4000);
   };
@@ -3949,7 +3949,7 @@ async function lbSpringeZuWallet() {
     if (d.treffer) {
       if (!d.treffer.length) { msg.textContent = "No match found."; return; }
       if (d.treffer.length > 1) {
-        msg.textContent = d.treffer.length + " matches for \"" + q + "\" — be more specific, or use one address.";
+        msg.textContent = d.treffer.length + " matches for \"" + q + "\" - be more specific, or use one address.";
         return;
       }
       return lbSpringeZuRang(d.treffer[0].rank_pos, d.treffer[0].address, msg);
@@ -4428,7 +4428,7 @@ async function fbSenden() {
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error ?? "Could not send.");
     el("fbText").value = "";
-    status.textContent = "Thanks — that landed. 🙏";
+    status.textContent = "Thanks - that landed. 🙏";
     status.style.color = "var(--up)";
   } catch (e) {
     status.textContent = e.message;
@@ -4482,10 +4482,10 @@ el("spendeCopy").onclick = async () => {
   const st = el("spendeStatus");
   try {
     await navigator.clipboard.writeText(SPENDE_ADRESSE);
-    st.textContent = "Copied — thank you! 💛";
+    st.textContent = "Copied - thank you! 💛";
     st.style.color = "var(--acc2)";
   } catch {
-    st.textContent = "Copying is blocked in this browser — select the address above instead.";
+    st.textContent = "Copying is blocked in this browser - select the address above instead.";
     st.style.color = "var(--warn)";
   }
 };

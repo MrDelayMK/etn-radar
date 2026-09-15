@@ -95,17 +95,17 @@ async function befehlAusfuehren(db, chatId, text) {
     }
     return "👋 Welcome to the ETN Radar wake-up alarm.\n\n" +
       "I'll ping you here when a wallet you're watching moves after being dormant a long time.\n\n" +
-      "<b>/watch 0xAddress</b> — start watching a wallet\n" +
-      "<b>/unwatch 0xAddress</b> — stop watching it\n" +
-      "<b>/mywatch</b> — list what you're watching\n" +
-      "<b>/stop</b> — remove everything";
+      "<b>/watch 0xAddress</b> - start watching a wallet\n" +
+      "<b>/unwatch 0xAddress</b> - stop watching it\n" +
+      "<b>/mywatch</b> - list what you're watching\n" +
+      "<b>/stop</b> - remove everything";
   }
 
   if (befehl === "/watch") {
     const adr = (teile[1] ?? "").toLowerCase();
     if (!ADRESSE_RE.test(adr)) return "That doesn't look like a wallet address. Usage: <b>/watch 0x…</b>";
     const bisher = await anzahlAbos(db, chatId);
-    if (bisher >= MAX_JE_CHAT) return "You're already watching " + MAX_JE_CHAT + " wallets — that's the limit. Use /unwatch to free up a slot.";
+    if (bisher >= MAX_JE_CHAT) return "You're already watching " + MAX_JE_CHAT + " wallets - that's the limit. Use /unwatch to free up a slot.";
     await db
       .prepare(
         "INSERT INTO telegram_subscriptions (chat_id, address, created_at) VALUES (?,?,?)" +
@@ -113,7 +113,7 @@ async function befehlAusfuehren(db, chatId, text) {
       )
       .bind(chatId, adr, new Date().toISOString())
       .run();
-    return "🔔 Watching <code>" + kurzAdr(adr) + "</code> — you'll hear from me if it wakes up from a long sleep.";
+    return "🔔 Watching <code>" + kurzAdr(adr) + "</code> - you'll hear from me if it wakes up from a long sleep.";
   }
 
   if (befehl === "/unwatch") {
