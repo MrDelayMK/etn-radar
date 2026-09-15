@@ -392,7 +392,8 @@ button.ghost.on{background:var(--acc);color:#04101f;border-color:var(--acc)}
 .sharetexte[hidden]{display:none}
 .sharetexte button{text-align:left;padding:8px 12px;font:500 13px/1.4 var(--sans);border-radius:9px}
 .sharetexte button.ghost.on{background:var(--card3);color:var(--tx);border-color:var(--acc)}
-.modal .mhead + .sharetexte{margin-top:0}
+.modal .mhead + .sharetexte,.modal .mhead + .shareformat{margin-top:0}
+.switchrow[hidden]{display:none}
 .shareformat{display:flex;gap:6px;margin-top:14px}
 .shareformat[hidden]{display:none}
 .shareformat button{flex:1;padding:7px 6px;font-size:12.5px;justify-content:center;border-radius:9px}

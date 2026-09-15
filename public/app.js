@@ -1494,7 +1494,7 @@ el("chainWoche").addEventListener("click", (e) => {
     return;
   }
   if (!e.target.closest("[data-teilen]") || !CHAIN.text) return;
-  // Derselbe Dialog wie "Share my rank": Vorschau, dann X oder Telegram.
+  // Derselbe Dialog wie "Share" beim Wallet: Vorschau, dann X oder Telegram.
   shareTextOeffnen({ titel: "📢 Share this week", text: CHAIN.text, url: location.origin + "/chain" });
 });
 
@@ -2754,9 +2754,9 @@ const SHARE_BILDER = new Set(["whale-funny", "crab-funny", "humpback-calm"]);
 let SHARE_WAHL = 0;
 
 // "I'm a Whale", "I'm an Octopus" - Plankton und Dust ohne Artikel.
-const ichBin = (d) =>
-  "I'm " + (d.tier === "plankton" || d.tier === "dust" ? "" : /^[aeiou]/i.test(d.tier_name) ? "an " : "a ") +
-  d.tier_name + " on the Electroneum Smart Chain";
+const mitArtikel = (d) =>
+  (d.tier === "plankton" || d.tier === "dust" ? "" : /^[aeiou]/i.test(d.tier_name) ? "an " : "a ") + d.tier_name;
+const ichBin = (d) => "I'm " + mitArtikel(d) + " on the Electroneum Smart Chain";
 
 /**
  * Post-Text je Bild und Weg (siehe Share-Dialog):
@@ -2779,6 +2779,24 @@ function buildShareText(d, zeigeAdresse, format = "text", mitLink = true) {
   const verweis = mitLink ? ":" : ": " + location.host;
   if (!zeigeAdresse) return satz + "\n\nWhat are you? Find your tier on ETN Radar" + verweis;
   return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand? Check yours on ETN Radar" + verweis].join("\n");
+}
+
+/**
+ * Post-Text fuer ein fremdes Wallet ("Someone else's"): dritte Person, die
+ * Adresse geht immer mit - man zeigt ja bewusst auf dieses Wallet. Der Satz
+ * wird zum Zitat des Wallets, so passen dieselben Bilder, ohne dass der Post
+ * behauptet, es sei das eigene. Bei karte steht der Satz schon im Bild.
+ */
+function fremdText(d, format) {
+  const s = SHARE_SAETZE[d.tier]?.[SHARE_WAHL];
+  const wer = d.anzeige
+    ? d.anzeige + ", " + mitArtikel(d) + " " + d.tier_emoji + ","
+    : mitArtikel(d) + " " + d.tier_emoji;
+  const fakten = [d.in_top_n && d.rank_pos ? "Rank #" + nf(d.rank_pos) : null, "Holding " + kurz(d.etn) + " ETN"]
+    .filter(Boolean).join(" · ");
+  const zeilen = ["👀 Spotted " + wer + " on ETN Radar.", fakten];
+  if (format !== "karte" && s) zeilen.push("", "Its message: “" + s[1].charAt(0).toUpperCase() + s[1].slice(1) + "”");
+  return zeilen.join("\n");
 }
 
 // Rang, Bestand, naechste Stufe, Adresse - nur wenn die Adresse mitgehen darf.
@@ -2813,7 +2831,7 @@ function shareBlock(addr) {
     : "";
   const drin = watchHat(addr);
   return '<div class="sharebar">' +
-    '<button id="shareOpen">📢 Share my rank</button>' +
+    '<button id="shareOpen">📢 Share</button>' +
     '<button class="watchbtn' + (drin ? " on" : "") + '" data-watchbtn="' +
       String(addr).toLowerCase() + '">' + (drin ? "★ Watching" : "☆ Watch this wallet") + "</button>" +
     alarm +
@@ -2838,6 +2856,9 @@ function shareBlock(addr) {
 // SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
 let SHARE_FREMD = null;
 let SHARE_FORMAT = "karte";
+// Wessen Wallet: "fremd" ist vorgewaehlt - wer ein Wallet oeffnet, will meist
+// genau dieses zeigen. "mein" spricht in der ersten Person.
+let SHARE_WER = "fremd";
 let SHARE_FOTO = { schluessel: null, datei: null, laden: null };
 
 const shareBildId = () => {
@@ -2862,6 +2883,14 @@ const hauptWeg = () => (istHandy() && aktivesFormat() !== "text" ? "datei" : "li
 function shareInhalt(weg) {
   if (SHARE_FREMD) return { text: SHARE_FREMD.text, url: SHARE_FREMD.url };
   const format = aktivesFormat();
+  if (SHARE_WER === "fremd") {
+    const text = fremdText(CUR_WALLET, format);
+    // Die Vorschaukarte fuehrt ueber ?w= direkt zum Wallet statt zur Startseite.
+    if (format === "karte" && weg === "link") {
+      return { text, url: location.origin + "/s/" + shareBildId() + "?w=" + CUR_WALLET.address };
+    }
+    return { text, url: location.origin + "/wallet/" + CUR_WALLET.address };
+  }
   if (format === "karte" && weg === "link") {
     return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte", true), url: location.origin + "/s/" + shareBildId() };
   }
@@ -2908,6 +2937,14 @@ function shareVorschau() {
   shareKnoepfe();
   if (SHARE_FREMD) return;
 
+  const fremd = SHARE_WER === "fremd";
+  el("shareTitel").textContent = fremd ? "📢 Share this wallet" : "📢 Share your rank";
+  el("shareWer").querySelectorAll("button").forEach((b) => {
+    const an = b.dataset.wer === SHARE_WER;
+    b.classList.toggle("on", an);
+    b.setAttribute("aria-checked", String(an));
+  });
+  el("shareHideRow").hidden = fremd;
   const id = shareBildId();
   const format = aktivesFormat();
   el("shareFormat").querySelectorAll("button").forEach((b) => {
@@ -2925,10 +2962,12 @@ function shareVorschau() {
     if (istHandy()) fotoVorladen(id, bildArt(format));
   }
 
-  el("sharePrivacyNote").textContent = ZEIGE_ADRESSE
-    ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
-    : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
-  el("sharePrivacyNote").style.color = ZEIGE_ADRESSE ? "var(--warn)" : "var(--acc2)";
+  el("sharePrivacyNote").textContent = fremd
+    ? "The address goes out with the post."
+    : ZEIGE_ADRESSE
+      ? "Your address and rank go out with the post — anyone can look up this wallet's full balance and history."
+      : "Only your tier goes out. No address, no rank — nothing that could be traced back to your wallet.";
+  el("sharePrivacyNote").style.color = fremd ? "var(--tx2)" : ZEIGE_ADRESSE ? "var(--warn)" : "var(--acc2)";
 }
 // Der Link verraet die Wallet nur, wenn die Adresse ohnehin mitgeht - sonst
 // stuende sie seit den sauberen Pfaden (/wallet/0x...) im geteilten Link.
@@ -2949,9 +2988,10 @@ function shareTexteZeigen() {
 function shareDialogOeffnen() {
   if (!CUR_WALLET) return;
   SHARE_FREMD = null;
-  el("shareTitel").textContent = "📢 Share your rank";
+  SHARE_WER = "fremd";
   el("sharePrivat").hidden = false;
   el("shareFormat").hidden = false;
+  el("shareWer").hidden = false;
   el("shareHideAddr").checked = !ZEIGE_ADRESSE;
   // Vorgewaehlt ist ein Satz mit Bild - der faellt im Feed am meisten auf.
   const saetze = SHARE_SAETZE[CUR_WALLET.tier] ?? [];
@@ -2973,6 +3013,7 @@ function shareTextOeffnen(fremd) {
   el("sharePrivat").hidden = true;
   el("shareTexte").hidden = true;
   el("shareFormat").hidden = true;
+  el("shareWer").hidden = true;
   el("shareBild").hidden = true;
   shareVorschau();
   el("shareModal").classList.add("on");
@@ -3051,7 +3092,8 @@ async function shareAktion(knopf) {
       return;
     }
     try {
-      await navigator.share({ files: [datei], text: shareInhalt("datei").text });
+      const i = shareInhalt("datei");
+      await navigator.share({ files: [datei], text: i.url ? i.text + "\n" + i.url : i.text });
       shareDialogSchliessen();
     } catch { /* abgebrochen */ }
   }
@@ -3403,6 +3445,12 @@ el("shareTexte").addEventListener("click", (e) => {
   if (!b) return;
   SHARE_WAHL = Number(b.dataset.i);
   shareTexteZeigen();
+  shareVorschau();
+});
+el("shareWer").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-wer]");
+  if (!b) return;
+  SHARE_WER = b.dataset.wer;
   shareVorschau();
 });
 el("shareFormat").addEventListener("click", (e) => {

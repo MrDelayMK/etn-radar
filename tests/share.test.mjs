@@ -22,6 +22,15 @@ pruef(!/og:(title|description)" content="[^"]*didn&#39;t sell/.test(html), "der 
 pruef(html.includes('og:image:alt" content="Whale: relax, I didn&#39;t sell.'), "Bildbeschreibung fuer Screenreader enthaelt den Satz");
 pruef(!/http-equiv="refresh"/i.test(html) && html.includes('location.replace("/")'), "Weiterleitung nur per JavaScript, nicht per Meta-Refresh");
 
+const adresse = "0x" + "ab".repeat(20);
+const fremdeSeite = await (await holen("/s/whale-funny?w=" + adresse)).text();
+pruef(fremdeSeite.includes('location.replace("/wallet/' + adresse + '")'), "fremdes Wallet: Besucher landen direkt beim Wallet");
+pruef(fremdeSeite.includes('og:title" content="Look this wallet up on ETN Radar"'), "fremdes Wallet: Titel laedt zum Nachschauen ein");
+const boese = await (await holen("/s/whale-funny?w=%22)%3Balert(1)%2F%2F")).text();
+pruef(boese.includes('location.replace("/")') && !boese.includes("alert"), "ungueltiges ?w= wird ignoriert, nichts davon landet im Skript");
+const unbekanntFremd = await holen("/s/whale-rocket?w=" + adresse);
+pruef(unbekanntFremd.status === 302 && unbekanntFremd.headers.get("location").endsWith("/wallet/" + adresse), "unbekannter Satz mit Wallet leitet zum Wallet");
+
 const mitSchraegstrich = await holen("/s/crab-funny/");
 pruef(mitSchraegstrich.status === 200, "Schraegstrich am Ende wird akzeptiert");
 

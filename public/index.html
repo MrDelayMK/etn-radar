@@ -756,6 +756,11 @@
       <button class="x" id="shareClose" aria-label="Close">&times;</button>
     </div>
 
+    <div class="shareformat" id="shareWer" role="radiogroup" aria-label="Whose wallet" hidden>
+      <button type="button" class="ghost" role="radio" data-wer="mein">🙋 My wallet</button>
+      <button type="button" class="ghost" role="radio" data-wer="fremd">👀 Someone else's</button>
+    </div>
+
     <div class="sharetexte" id="shareTexte" role="radiogroup" aria-label="Pick a line" hidden></div>
 
     <div class="shareformat" id="shareFormat" role="radiogroup" aria-label="How to share" hidden>
@@ -769,7 +774,7 @@
     <div class="sharepreview" id="sharePreview"></div>
 
     <div id="sharePrivat">
-      <label class="switchrow">
+      <label class="switchrow" id="shareHideRow">
         <input type="checkbox" id="shareHideAddr" checked>
         <span>Keep my wallet address private</span>
       </label>
