@@ -48,7 +48,10 @@ export function shareSeite(u, id) {
   const [emoji, name] = tier;
   const titel = wallet ? "Look this wallet up on ETN Radar" : "What's your tier? Find out on ETN Radar";
   const beschreibung = "Whale and migration tracker for the Electroneum Smart Chain.";
-  const bild = u.origin + "/assets/share/" + id + "-card.jpg";
+  // ?f=foto: Vorschau ist das gerahmte 1:1-Foto statt des breiten Bildes mit Satz.
+  const foto = u.searchParams.get("f") === "foto";
+  const bild = u.origin + "/assets/share/" + id + (foto ? "-square.jpg" : "-card.jpg");
+  const abfrage = [foto && "f=foto", wallet && "w=" + wallet].filter(Boolean).join("&");
 
   const html = `<!doctype html>
 <html lang="en">
@@ -58,12 +61,12 @@ export function shareSeite(u, id) {
 <meta name="description" content="${esc(beschreibung)}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ETN Radar">
-<meta property="og:url" content="${esc(u.origin + "/s/" + id + (wallet ? "?w=" + wallet : ""))}">
+<meta property="og:url" content="${esc(u.origin + "/s/" + id + (abfrage ? "?" + abfrage : ""))}">
 <meta property="og:title" content="${esc(titel)}">
 <meta property="og:description" content="${esc(beschreibung)}">
 <meta property="og:image" content="${esc(bild)}">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image:width" content="${foto ? 1080 : 1200}">
+<meta property="og:image:height" content="${foto ? 1080 : 630}">
 <meta property="og:image:alt" content="${esc(name + ": " + satz)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(titel)}">

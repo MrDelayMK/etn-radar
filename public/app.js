@@ -2848,9 +2848,8 @@ function shareBlock(addr) {
 //   Handy  - "Share" oeffnet das Teilen-Menue des Geraets; Bild und Text landen
 //            zusammen in X, Telegram & Co., ganz ohne Link.
 //   PC     - "Post on X" / "Telegram" fuer beide Bilder. X und Telegram lassen
-//            eine Webseite kein Bild mitschicken: die karte geht darum als Link
-//            mit Vorschau; beim foto oeffnet sich das Fenster mit dem Text, das
-//            Bild holt man ueber "Save image" und haengt es selbst an.
+//            eine Webseite kein Bild mitschicken - beide Bilder gehen darum als
+//            Link, und X/Telegram holen sich das gewaehlte Bild als Vorschau.
 // Klein darunter liegen die anderen Wege, falls die Erkennung danebenliegt.
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
@@ -2881,20 +2880,25 @@ const istHandy = () => {
 };
 const hauptWeg = () => (istHandy() && aktivesFormat() !== "text" ? "datei" : "link");
 
+// Link, dessen Vorschau das gewaehlte Bild zeigt (src/share.js): ?f=foto fuer das
+// 1:1-Foto, ?w= fuer ein fremdes Wallet.
+const shareLink = (format, wallet) => {
+  const abfrage = [format === "foto" && "f=foto", wallet && "w=" + wallet].filter(Boolean).join("&");
+  return location.origin + "/s/" + shareBildId() + (abfrage ? "?" + abfrage : "");
+};
+
 // Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
 function shareInhalt(weg) {
   if (SHARE_FREMD) return { text: SHARE_FREMD.text, url: SHARE_FREMD.url };
   const format = aktivesFormat();
   if (SHARE_WER === "fremd") {
     const text = fremdText(CUR_WALLET, format);
-    // Die Vorschaukarte fuehrt ueber ?w= direkt zum Wallet statt zur Startseite.
-    if (format === "karte" && weg === "link") {
-      return { text, url: location.origin + "/s/" + shareBildId() + "?w=" + CUR_WALLET.address };
-    }
+    // Die Vorschau fuehrt ueber ?w= direkt zum Wallet statt zur Startseite.
+    if (format !== "text" && weg === "link") return { text, url: shareLink(format, CUR_WALLET.address) };
     return { text, url: location.origin + "/wallet/" + CUR_WALLET.address };
   }
-  if (format === "karte" && weg === "link") {
-    return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "karte", true), url: location.origin + "/s/" + shareBildId() };
+  if (format !== "text" && weg === "link") {
+    return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, format, true), url: shareLink(format) };
   }
   if (format !== "text") return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, format, false), url: "" };
   return { text: buildShareText(CUR_WALLET, ZEIGE_ADRESSE, "text", true), url: shareUrl() };
@@ -2923,7 +2927,7 @@ function shareKnoepfe() {
   // Gleiche Knoepfe fuer beide Bilder - nur was sie mitschicken, unterscheidet sich.
   if (istHandy() && !SHARE_FREMD) {
     gross = k("teilen", "📤 Share");
-    if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
+    if (format !== "text") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
   } else {
     gross = k("x", "𝕏&nbsp; Post on X") + k("tg", "✈️ Telegram", "ghost");
   }
@@ -3070,9 +3074,7 @@ async function shareAktion(knopf) {
 
   if (aktion === "x" || aktion === "tg") {
     shareOeffnen(aktion, shareInhalt("link"));
-    // Beim Foto bleibt der Dialog offen - das Bild speichert man hier noch.
-    if (format !== "foto") shareDialogSchliessen();
-    return;
+    return shareDialogSchliessen();
   }
 
   if (aktion === "teilen") {
