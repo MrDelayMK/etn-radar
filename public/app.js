@@ -1680,6 +1680,11 @@ function wiRechnung() {
   return { coin: c, preis: neu, faktor: neu / preis, menge };
 }
 
+// Kuerzel im farbigen Kreis statt Logo - fremde Logos hiessen eine Anfrage
+// an einen fremden Server je Coin.
+const wiMarke = (text, farbe) =>
+  '<span class="wimarke" style="--f:' + farbe + '">' + esc(text) + "</span>";
+
 function wiErgebnisZeigen() {
   const r = wiRechnung();
   const box = el("wiErgebnis");
@@ -1687,27 +1692,52 @@ function wiErgebnisZeigen() {
     box.innerHTML = '<div class="empty">Pick a coin to see the number.</div>';
     return;
   }
+  const farbe = wiBereich(r.coin.r)[2];
+  box.style.setProperty("--f", farbe);
   const stand = WI.daten.stand
     ? new Date(WI.daten.stand).toLocaleDateString(LOC, { day: "numeric", month: "short", year: "numeric" })
     : "—";
+  const etnPreis = WI.daten.etn.preis;
+  const etnCap = etnPreis * r.menge;
+  // Linear, bewusst: zwei Balken nebeneinander liest jeder als Verhaeltnis.
+  // Auf log-Skala saehe ETN wie ein Drittel von Stellar aus, obwohl Stellar
+  // 300-mal so gross ist. Der duenne Strich IST hier die Aussage.
+  const groesster = Math.max(r.coin.c, etnCap);
+  const balken = (cap) => Math.max(0.8, (cap / groesster) * 100);
+  const symbol = r.coin.s.length > 4 ? r.coin.s.slice(0, 4) : r.coin.s;
+
   box.innerHTML =
-    '<div class="wifrage">ETN with <b>' + esc(r.coin.n) + "</b>'s market cap of " + wiCap(r.coin.c) + "</div>" +
-    '<div class="wizahl"><div><div class="v num">' + wiPreis(r.preis) + "</div>" +
-      '<div class="k">per ETN</div></div>' +
-    '<div><div class="v num acc">×' + wiFaktor(r.faktor) + "</div>" +
-      '<div class="k">from ' + wiPreis(WI.daten.etn.preis) + " today</div></div></div>" +
-    '<div class="wiumschalter" role="radiogroup" aria-label="Which ETN supply to divide by">' +
-      '<button type="button" role="radio" aria-checked="' + !WI.nurMigriert + '" class="ghost' + (WI.nurMigriert ? "" : " on") +
-        '" data-menge="gesamt">All ' + kurz(WI.daten.etn.gesamt) + " ETN</button>" +
-      '<button type="button" role="radio" aria-checked="' + WI.nurMigriert + '" class="ghost' + (WI.nurMigriert ? " on" : "") +
-        '" data-menge="migriert">Migrated only ' + kurz(WI.daten.etn.migriert) + " ETN</button>" +
+    '<div class="widuell">' +
+      '<div class="wiseite">' + wiMarke("ETN", "#5b9cff") +
+        '<div><b>Electroneum</b><span class="num">' + wiPreis(etnPreis) + '</span><span class="num">cap ' + wiCap(etnCap) + "</span></div></div>" +
+      '<span class="wipfeil" aria-hidden="true">⇢</span>' +
+      '<div class="wiseite">' + wiMarke(symbol, farbe) +
+        "<div><b>" + esc(r.coin.n) + '</b><span class="num">#' + nf(r.coin.r) + " · " + esc(r.coin.s) + '</span><span class="num">cap ' + wiCap(r.coin.c) + "</span></div></div>" +
+    "</div>" +
+    '<div class="wihaupt">' +
+      '<div class="wifrage">If ETN had <b>' + esc(r.coin.n) + "</b>'s market cap</div>" +
+      '<div class="wizahl"><span class="v num">' + wiPreis(r.preis) + '</span><span class="k">per ETN</span></div>' +
+      '<span class="wifaktor num">×' + wiFaktor(r.faktor) + '</span> <span class="k">from ' + wiPreis(etnPreis) + " today</span>" +
+    "</div>" +
+    '<div class="wigroesse" aria-label="Market cap comparison">' +
+      '<div class="wibalkenzeile"><span class="nm">ETN today</span><i><b style="width:' + balken(etnCap).toFixed(1) +
+        '%;background:#5b9cff"></b></i><span class="num">' + wiCap(etnCap) + "</span></div>" +
+      '<div class="wibalkenzeile"><span class="nm">' + esc(r.coin.n) + '</span><i><b style="width:' + balken(r.coin.c).toFixed(1) +
+        '%"></b></i><span class="num">' + wiCap(r.coin.c) + "</span></div>" +
+    "</div>" +
+    '<div class="wiumschalter"><span class="k">Count</span>' +
+      '<div class="wisegment" role="radiogroup" aria-label="Which ETN supply to divide by">' +
+        '<button type="button" role="radio" aria-checked="' + !WI.nurMigriert + '" class="' + (WI.nurMigriert ? "" : "on") +
+          '" data-menge="gesamt">All ' + kurz(WI.daten.etn.gesamt) + "</button>" +
+        '<button type="button" role="radio" aria-checked="' + WI.nurMigriert + '" class="' + (WI.nurMigriert ? "on" : "") +
+          '" data-menge="migriert">Migrated ' + kurz(WI.daten.etn.migriert) + "</button>" +
+      "</div>" +
       '<button type="button" class="infoBtn" data-info="' +
-        esc('Every ETN in existence is counted by default. "Migrated only" leaves out the coins that are still sitting in the ' +
+        esc('Every ETN in existence is counted by default. "Migrated" leaves out the coins that are still sitting in the ' +
           "migration bridge. That is an estimate: nobody knows how many of them will ever be claimed, and each one that is claimed " +
           "later lowers the price per ETN again.") + '">ⓘ</button></div>' +
-    '<div class="sharebar"><button data-teilen>📢 Share this</button></div>' +
-    '<div class="wiquelle dim3">Market caps: CoinGecko, ' + esc(stand) +
-      ". Division, not a forecast.</div>";
+    '<div class="wifuss"><button data-teilen>📢 Share this</button>' +
+      '<span class="dim3">Market caps: CoinGecko, ' + esc(stand) + ". Division, not a forecast.</span></div>";
   // Neuer Coin oder andere Menge: der eigene Wert rechnet mit.
   wiWertZeigen();
 }
