@@ -1665,7 +1665,10 @@ function wiTrefferZeigen() {
     .slice(0, 12);
   box.innerHTML = treffer.length
     ? treffer.map(wiZeile).join("")
-    :'<div class="wihinweis dim3">Nothing found. Only the top 300 by market cap are listed.</div>';
+    : /^(etn|electr)/.test(q)
+      ? '<div class="wihinweis dim3">That\'s ETN itself' +
+        (WI.daten?.etn.rang ? " - rank #" + nf(WI.daten.etn.rang) + " by market cap" : "") + ". Pick another coin to compare.</div>"
+      : '<div class="wihinweis dim3">Nothing found. Only the top 300 by market cap are listed.</div>';
 }
 
 // Menge, durch die geteilt wird: alles, oder nur was die Bridge verlassen hat.
@@ -1699,6 +1702,9 @@ function wiErgebnisZeigen() {
     : "—";
   const etnPreis = WI.daten.etn.preis;
   const etnCap = etnPreis * r.menge;
+  // Rang bei CoinGecko - gilt fuer die ganze Menge, beim Umschalter auf
+  // "Migrated" waere er eine andere Zahl und bleibt darum weg.
+  const etnRang = WI.nurMigriert ? null : WI.daten.etn.rang;
   // Linear, bewusst: zwei Balken nebeneinander liest jeder als Verhaeltnis.
   // Auf log-Skala saehe ETN wie ein Drittel von Stellar aus, obwohl Stellar
   // 300-mal so gross ist. Der duenne Strich IST hier die Aussage.
@@ -1709,7 +1715,8 @@ function wiErgebnisZeigen() {
   box.innerHTML =
     '<div class="widuell">' +
       '<div class="wiseite">' + wiMarke("ETN", "#5b9cff") +
-        '<div><b>Electroneum</b><span class="num">' + wiPreis(etnPreis) + '</span><span class="num">cap ' + wiCap(etnCap) + "</span></div></div>" +
+        '<div><b>Electroneum</b><span class="num">' + (etnRang ? "#" + nf(etnRang) + " · " : "") + "ETN</span>" +
+        '<span class="num">cap ' + wiCap(etnCap) + "</span></div></div>" +
       '<span class="wipfeil" aria-hidden="true">⇢</span>' +
       '<div class="wiseite">' + wiMarke(symbol, farbe) +
         "<div><b>" + esc(r.coin.n) + '</b><span class="num">#' + nf(r.coin.r) + " · " + esc(r.coin.s) + '</span><span class="num">cap ' + wiCap(r.coin.c) + "</span></div></div>" +
@@ -1717,7 +1724,8 @@ function wiErgebnisZeigen() {
     '<div class="wihaupt">' +
       '<div class="wifrage">If ETN had <b>' + esc(r.coin.n) + "</b>'s market cap</div>" +
       '<div class="wizahl"><span class="v num">' + wiPreis(r.preis) + '</span><span class="k">per ETN</span></div>' +
-      '<span class="wifaktor num">×' + wiFaktor(r.faktor) + '</span> <span class="k">from ' + wiPreis(etnPreis) + " today</span>" +
+      '<span class="wifaktor num">×' + wiFaktor(r.faktor) + '</span> <span class="k">from ' + wiPreis(etnPreis) + " today" +
+        (etnRang ? " · rank #" + nf(etnRang) + " → #" + nf(r.coin.r) : "") + "</span>" +
     "</div>" +
     '<div class="wigroesse" aria-label="Market cap comparison">' +
       '<div class="wibalkenzeile"><span class="nm">ETN today</span><i><b style="width:' + balken(etnCap).toFixed(1) +

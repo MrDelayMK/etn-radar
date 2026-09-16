@@ -4,6 +4,8 @@
 // Die Coins kommen aus coin_caps - einmal taeglich vom Snapshot-Lauf gefuellt
 // (src/marketcaps.js). Hier wird nichts nach draussen gefragt.
 
+import { ETN_ID } from "../marketcaps.js";
+
 // Stablecoins und verpackte Formen anderer Coins: "ETN mit der
 // Marktkapitalisierung von Tether" ist zwar rechenbar, sagt aber nichts. Die
 // Liste deckt die ueblichen Verdaechtigen der Top 300 ab und darf wachsen.
@@ -48,8 +50,10 @@ export async function whatif(db, env) {
 
   const gesamt = Number(snap?.total_supply ?? 0);
   const bridge = snap?.bridge_wei ? Number(BigInt(snap.bridge_wei) / 10n ** 12n) / 1e6 : 0;
+  // ETN selbst ist kein Vergleichspartner - sein Rang steht beim ETN-Kaertchen.
+  const etnZeile = zeilen.find((z) => z.id === ETN_ID);
   const coins = zeilen
-    .filter((z) => !RAUS.has(z.id) && Number(z.market_cap) > 0)
+    .filter((z) => z.id !== ETN_ID && !RAUS.has(z.id) && Number(z.market_cap) > 0)
     .map((z) => ({ i: z.id, s: z.symbol, n: z.name, r: z.rang, c: Number(z.market_cap) }));
 
   const schnell = [];
@@ -66,9 +70,11 @@ export async function whatif(db, env) {
       // Standard: die ganze Menge. Umschalter: nur, was die Bridge verlassen hat.
       gesamt,
       migriert: gesamt ? gesamt - bridge : 0,
+      // Platz nach Marktkapitalisierung bei CoinGecko
+      rang: etnZeile?.rang ?? null,
     },
     coins,
     schnell,
-    stand: zeilen[0]?.abgerufen ?? null,
+    stand: coins.length ? zeilen[0]?.abgerufen ?? null : null,
   };
 }
