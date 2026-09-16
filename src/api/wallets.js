@@ -113,46 +113,197 @@ export async function leaderboard(db, env, u) {
   if (tierDecke != null && (maxEtn == null || tierDecke <= maxEtn)) darueber = [" AND c.etn >= ?", tierDecke];
   else if (maxEtn != null) darueber = [" AND c.etn > ?", maxEtn];
 
-  const gesamtAbfrage = bereich
-    ? zaehlen(bereich, bereichArgs)
-    : nurEcht
-      ? // Alle minus die ausgeblendeten - beides ohne Durchlauf durch die Liste.
-        Promise.all([
-          kennzahlGesamt(db, bridge),
-          db
-            .prepare(
-              "SELECT COUNT(*) n FROM current_balances c WHERE c.in_top_n = 1 AND c.address != ?" +
-                " AND c.address IN (" + NICHT_ECHT_SQL + ")"
-            )
-            .bind(bridge)
-            .first(),
-        ]).then(([alle, weg]) => ({ n: (alle?.n ?? 0) - (weg?.n ?? 0) }))
-      : nurDienste
-        ? zaehlen("", [])
-        : kennzahlGesamt(db, bridge);
+  // Alle der Basis - ohne Durchlauf durch die Liste, wo es geht.
+  const basisAbfrage = nurEcht
+    ? Promise.all([
+        kennzahlGesamt(db, bridge),
+        db
+          .prepare(
+            "SELECT COUNT(*) n FROM current_balances c WHERE c.in_top_n = 1 AND c.address != ?" +
+              " AND c.address IN (" + NICHT_ECHT_SQL + ")"
+          )
+          .bind(bridge)
+          .first(),
+      ]).then(([alle, weg]) => ({ n: (alle?.n ?? 0) - (weg?.n ?? 0) }))
+    : nurDienste
+      ? zaehlen("", [])
+      : kennzahlGesamt(db, bridge);
+  const gesamtAbfrage = bereich ? zaehlen(bereich, bereichArgs) : basisAbfrage;
 
-  const [res, gesamt, ueber] = await Promise.all([
-    db
-      .prepare(
-        "SELECT " + WALLET_FELDER + LB_VERGANGENHEIT +
-          " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
-          basis + bereich +
-          " ORDER BY c.etn DESC LIMIT ? OFFSET ?"
-      )
-      .bind(...lbStichtage(), bridge, ...bereichArgs, limit, offset)
-      .all(),
+  const [gesamt, basisGesamt, ueber] = await Promise.all([
     gesamtAbfrage,
+    bereich ? basisAbfrage : gesamtAbfrage,
     darueber ? zaehlen(darueber[0], [darueber[1]]) : null,
   ]);
+  const n1 = gesamt?.n ?? 0;
+
+  // Erst die Top N, dann - wenn die Seite dort nicht voll wird - die Wallets
+  // aus dem woechentlichen Census (censusTeil).
+  const res =
+    offset < n1
+      ? await db
+          .prepare(
+            "SELECT " + WALLET_FELDER + LB_VERGANGENHEIT +
+              " FROM current_balances c LEFT JOIN addresses a ON a.hash = c.address" +
+              basis + bereich +
+              " ORDER BY c.etn DESC LIMIT ? OFFSET ?"
+          )
+          .bind(...lbStichtage(), bridge, ...bereichArgs, limit, offset)
+          .all()
+      : { results: [] };
 
   const jetzt = Date.now();
   const vorher = ueber?.n ?? 0;
+  const eintraege = res.results.map((r, i) => lbZeile(r, vorher + offset + i + 1, jetzt));
+
+  const census = await censusTeil(db, {
+    nurEcht, nurDienste,
+    von: Math.min(maxEtn ?? Infinity, tierDecke ?? Infinity),
+    vonInklusiv: maxEtn != null && (tierDecke == null || maxEtn < tierDecke),
+    bis: Math.max(minEtn ?? 0, tier?.min ?? 0),
+    offset: Math.max(0, offset - n1),
+    limit: limit - eintraege.length,
+    platzAb: basisGesamt?.n ?? 0,
+  }).catch(() => null);
+
+  if (census) {
+    for (const r of census.zeilen) {
+      const stand = [census.stand, r.gesehen, r.aktualisiert].filter(Boolean).sort().pop() ?? null;
+      eintraege.push({ ...lbZeile(r, r.platz, jetzt), census: 1, stand });
+    }
+  }
+
   return {
-    gesamt: gesamt?.n ?? 0,
+    gesamt: n1 + (census?.anzahl ?? 0),
     offset,
     limit,
-    eintraege: res.results.map((r, i) => lbZeile(r, vorher + offset + i + 1, jetzt)),
+    census_stand: census?.stand ?? null,
+    // Ab diesem Index (0-basiert, im gefilterten Ergebnis) kommen die Census-Zeilen.
+    census_ab: census?.anzahl ? n1 : null,
+    eintraege,
   };
+}
+
+/*
+ * Leaderboard nach den Top N: die Wallets aus dem woechentlichen Census
+ * (census_wallets). Blaettern und Filter gehen ueber die gespeicherte
+ * Position statt ueber OFFSET - eine Seite liest so nur ihre eigenen Zeilen,
+ * auch ganz hinten in der Liste. Die Stellen der Bestandsgrenzen hat der
+ * Census in census_grenzen abgelegt.
+ *
+ * Die Zeilen stehen in der Reihenfolge des Census. Wer seither live
+ * aufgefrischt wurde, behaelt seinen Platz, zeigt aber den neuen Bestand.
+ */
+const CW_FELDER =
+  "w.address, w.rank_pos, w.balance_wei, w.etn, NULL AS tier, w.tx_count, NULL AS updated_at, 0 AS in_top_n," +
+  " a.checksum_hash, a.label, a.label_type, a.label_source," +
+  " COALESCE(a.ens_name, CASE WHEN w.is_contract = 0 THEN w.name END) AS ens_name," +
+  " COALESCE(a.contract_name, CASE WHEN w.is_contract = 1 THEN w.name END) AS contract_name," +
+  " a.impl_name, COALESCE(a.is_contract, w.is_contract) AS is_contract, a.exchange_score, a.is_excluded," +
+  " w.pos, w.gesehen, w.aktualisiert," +
+  " NULL AS vorher_d24h, w.etn_vorher AS vorher_d7d, NULL AS vorher_d6m, NULL AS etn_erster, NULL AS tag_erster";
+const CW_VON = " FROM census_wallets w LEFT JOIN addresses a ON a.hash = w.address";
+
+async function censusTeil(db, o) {
+  const erste = await db.prepare("SELECT pos FROM census_wallets ORDER BY pos LIMIT 1").first();
+  if (!erste) return null;
+  const letzte = await db.prepare("SELECT pos FROM census_wallets ORDER BY pos DESC LIMIT 1").first();
+  const lauf = await db
+    .prepare("SELECT taken_at FROM census_runs WHERE status = 'ok' ORDER BY taken_at DESC LIMIT 1")
+    .first()
+    .catch(() => null);
+
+  // Position, ab der der Bestand unter (bzw. bis) `wert` liegt.
+  const grenzPos = async (wert, inklusiv) => {
+    if (wert === Infinity) return erste.pos;
+    if (wert <= 0) return letzte.pos + 1;
+    const g = await db.prepare("SELECT pos_unter, pos_bis FROM census_grenzen WHERE grenze = ?").bind(wert).first();
+    let p;
+    if (g) {
+      p = inklusiv ? g.pos_bis : g.pos_unter;
+    } else {
+      // Unbekannter Wert: binaere Suche ueber den Positionsindex, ~15 Zeilen.
+      let lo = Math.max(1, erste.pos), hi = letzte.pos + 1;
+      while (lo < hi) {
+        const mitte = Math.floor((lo + hi) / 2);
+        const z = await db
+          .prepare("SELECT pos, etn FROM census_wallets WHERE pos >= ? ORDER BY pos LIMIT 1")
+          .bind(mitte)
+          .first();
+        if (!z) { hi = mitte; continue; }
+        if (inklusiv ? z.etn <= wert : z.etn < wert) hi = mitte;
+        else lo = z.pos + 1;
+      }
+      p = lo;
+    }
+    if (p <= 1 && erste.pos < 1) {
+      // Aus den Top N gefallene Wallets stehen vor Position 1 und kommen in
+      // keiner gespeicherten Grenze vor - es sind wenige, direkt nachsehen.
+      const m = await db
+        .prepare("SELECT MIN(pos) AS m FROM census_wallets WHERE pos < 1 AND etn " + (inklusiv ? "<=" : "<") + " ?")
+        .bind(wert)
+        .first();
+      return m?.m ?? 1;
+    }
+    return p;
+  };
+
+  const start = await grenzPos(o.von, o.vonInklusiv);
+  const ende = await grenzPos(o.bis, false); // exklusiv
+  const stand = lauf?.taken_at ?? null;
+  const platz = (pos) => o.platzAb + (pos - erste.pos) + 1;
+  const leer = { zeilen: [], anzahl: 0, stand };
+  if (ende <= start) return leer;
+
+  // Dienste unter den Census-Wallets: Contracts (Teilindex) und markierte
+  // Adressen (die rund zwanzig aus addresses, von dort aus gesucht). Ein OR
+  // in einer Abfrage liesse SQLite den ganzen Positionsbereich lesen.
+  const DIENST_TEILE = [
+    "SELECT " + CW_FELDER + " FROM census_wallets w INDEXED BY idx_census_wallets_contract" +
+      " LEFT JOIN addresses a ON a.hash = w.address" +
+      " WHERE w.is_contract = 1 AND w.pos >= ? AND w.pos < ?",
+    "SELECT " + CW_FELDER + " FROM (" + DIENSTE_SQL + ") d CROSS JOIN census_wallets w ON w.address = d.hash" +
+      " LEFT JOIN addresses a ON a.hash = w.address" +
+      " WHERE w.is_contract = 0 AND w.pos >= ? AND w.pos < ?",
+  ];
+  const dienstZahl = () =>
+    Promise.all(
+      DIENST_TEILE.map((sql) =>
+        db.prepare("SELECT COUNT(*) n FROM (" + sql + ")").bind(start, ende).first()
+      )
+    ).then((r) => r.reduce((s, x) => s + (x?.n ?? 0), 0));
+
+  if (o.nurDienste) {
+    const [n, zeilen] = await Promise.all([
+      dienstZahl(),
+      o.limit > 0
+        ? db
+            .prepare(DIENST_TEILE.join(" UNION ALL ") + " ORDER BY pos LIMIT ? OFFSET ?")
+            .bind(start, ende, start, ende, o.limit, o.offset)
+            .all()
+        : { results: [] },
+    ]);
+    return { zeilen: zeilen.results.map((r) => ({ ...r, platz: platz(r.pos) })), anzahl: n, stand };
+  }
+
+  let anzahl = ende - start;
+  if (o.nurEcht) anzahl -= await dienstZahl();
+  if (o.limit <= 0) return { zeilen: [], anzahl, stand };
+
+  // Seite als Positionsbereich: eine Luecke (aufgestiegenes Wallet) macht die
+  // Seite hoechstens eine Zeile kuerzer, verschiebt aber nichts.
+  const ab = start + o.offset;
+  const bisPos = Math.min(ende, ab + o.limit);
+  if (ab >= ende) return { zeilen: [], anzahl, stand };
+  const zeilen = await db
+    .prepare(
+      "SELECT " + CW_FELDER + CW_VON + " WHERE w.pos >= ? AND w.pos < ?" +
+        (o.nurEcht ? " AND w.is_contract = 0 AND w.address NOT IN (" + NICHT_ECHT_SQL + ")" : "") +
+        " ORDER BY w.pos"
+    )
+    .bind(ab, bisPos)
+    .all();
+  return { zeilen: zeilen.results.map((r) => ({ ...r, platz: platz(r.pos) })), anzahl, stand };
 }
 
 /**
@@ -742,25 +893,28 @@ export async function suche(db, env, q) {
   if (/^0x[0-9a-f]{40}$/.test(adr)) {
     const lokal = await wallet(db, env, adr);
     if (lokal) return { quelle: "db", ...lokal };
-    // Nicht in den Top N - live beim Explorer holen, damit jedes Wallet
-    // seinen Tier sehen kann. Genau das macht das Tier-Feature nutzbar.
-    // Eine Anfrage beim Explorer - aus dem gemeinsamen Minutenbudget.
-    if (!(await liveBudget(db, "suche", 1))) return { beschaeftigt: true };
+    // Unterhalb der Top N: vielleicht aus dem woechentlichen Census bekannt.
+    const census = await censusWallet(db, adr);
+    // Live beim Explorer holen, damit jedes Wallet seinen Tier sehen kann.
+    // Eine Anfrage beim Explorer - aus dem gemeinsamen Minutenbudget. Ist es
+    // aufgebraucht, reicht fuer Census-Wallets der Wochenstand (mit Datum
+    // und Refresh-Knopf auf der Seite).
+    if (!(await liveBudget(db, "suche", 1))) {
+      return census ? walletOhneVerlauf(census, "census", census.stand) : { beschaeftigt: true };
+    }
     const live = await fetchAddress(env.EXPLORER_API, adr);
-    const p = tierProgress(live.etn);
-    return {
-      quelle: "explorer",
-      address: adr,
-      etn: live.etn,
-      balance_wei: live.balance_wei,
-      tier: p.tier.key,
-      tier_name: p.tier.name,
-      tier_emoji: p.tier.emoji,
-      tier_progress: p.progress,
-      bis_naechster_tier: p.isTop ? null : p.needed,
-      naechster_tier: p.next?.name ?? null,
-      in_top_n: 0,
-    };
+    const zeit = new Date().toISOString();
+    if (census) await censusAuffrischen(db, adr, live, zeit);
+    await db
+      .prepare("INSERT INTO live_abrufe (address, geholt_am) VALUES (?,?) ON CONFLICT(address) DO UPDATE SET geholt_am = excluded.geholt_am")
+      .bind(adr, zeit)
+      .run()
+      .catch(() => {});
+    return walletOhneVerlauf(
+      { ...census, address: adr, etn: live.etn, balance_wei: live.balance_wei },
+      census ? "census_live" : "explorer",
+      zeit
+    );
   }
   // Namenssuche ueber Labels und .etn-Namen
   const rows = (
@@ -780,4 +934,99 @@ export async function suche(db, env, q) {
       .all()
   ).results;
   return { quelle: "db", treffer: rows.map((r) => schmuecken(r)) };
+}
+
+// Ein Wallet ausserhalb der Top N: Tier und Fortschritt aus dem Bestand, ohne
+// Verlauf, Ereignisse und Cluster - die gibt es nur fuer die Top N.
+function walletOhneVerlauf(w, quelle, stand) {
+  const p = tierProgress(w.etn);
+  return {
+    quelle,
+    stand,
+    address: w.address,
+    etn: w.etn,
+    balance_wei: w.balance_wei,
+    tier: p.tier.key,
+    tier_name: p.tier.name,
+    tier_emoji: p.tier.emoji,
+    tier_progress: p.progress,
+    bis_naechster_tier: p.isTop ? null : p.needed,
+    naechster_tier: p.next?.name ?? null,
+    in_top_n: 0,
+    // Platz beim letzten Census - ungefaehr, weil sich seither alles bewegt haben kann.
+    census_rang: w.rank_pos ?? null,
+    anzeige: w.name ?? null,
+  };
+}
+
+async function censusWallet(db, adr) {
+  const w = await db
+    .prepare(
+      "SELECT address, rank_pos, balance_wei, etn, name, gesehen, aktualisiert," +
+        " (SELECT taken_at FROM census_runs WHERE status = 'ok' ORDER BY taken_at DESC LIMIT 1) AS lauf" +
+        " FROM census_wallets WHERE address = ?"
+    )
+    .bind(adr)
+    .first()
+    .catch(() => null);
+  if (!w) return null;
+  return { ...w, stand: [w.lauf, w.gesehen, w.aktualisiert].filter(Boolean).sort().pop() };
+}
+
+async function censusAuffrischen(db, adr, live, zeit) {
+  if (live?.balance_wei == null) return;
+  await db
+    .prepare("UPDATE census_wallets SET balance_wei = ?, etn = ?, aktualisiert = ? WHERE address = ?")
+    .bind(String(live.balance_wei), live.etn, zeit, adr)
+    .run()
+    .catch(() => {});
+}
+
+/*
+ * "Refresh" auf der Wallet-Seite: den Bestand eines Wallets ausserhalb der
+ * Top N jetzt live holen. Zwei Bremsen, damit niemand darueber den Explorer
+ * zuschuettet:
+ *
+ *   je Wallet   hoechstens alle REFRESH_SPERRE_MS (live_abrufe)
+ *   global      das gemeinsame Minutenbudget der Besucher-Abrufe (liveBudget)
+ *
+ * Die Top N brauchen das nicht - die frischt schon das Oeffnen der Seite auf.
+ */
+const REFRESH_SPERRE_MS = 10 * 60000;
+
+export async function walletRefresh(db, env, hash) {
+  const adr = String(hash ?? "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(adr)) return { status: 400, daten: { error: "Keine gueltige Adresse" } };
+  const jetzt = Date.now();
+  const letzte = await db
+    .prepare("SELECT geholt_am FROM live_abrufe WHERE address = ?")
+    .bind(adr)
+    .first()
+    .catch(() => null);
+  if (letzte && jetzt - Date.parse(letzte.geholt_am) < REFRESH_SPERRE_MS) {
+    const warten = Math.ceil((REFRESH_SPERRE_MS - (jetzt - Date.parse(letzte.geholt_am))) / 1000);
+    return { status: 429, daten: { error: "Refreshed just now - try again later.", warten_s: warten } };
+  }
+  if (!(await liveBudget(db, "refresh", 1))) {
+    return { status: 429, daten: { error: "The explorer is busy right now - try again in a minute.", warten_s: 60 } };
+  }
+  const live = await fetchAddress(env.EXPLORER_API, adr);
+  const zeit = new Date(jetzt).toISOString();
+  await db
+    .prepare(
+      "INSERT INTO live_abrufe (address, geholt_am) VALUES (?,?)" +
+        " ON CONFLICT(address) DO UPDATE SET geholt_am = excluded.geholt_am"
+    )
+    .bind(adr, zeit)
+    .run();
+  const census = await censusWallet(db, adr);
+  if (census) await censusAuffrischen(db, adr, live, zeit);
+  return {
+    status: 200,
+    daten: walletOhneVerlauf(
+      { ...census, address: adr, etn: live.etn, balance_wei: live.balance_wei },
+      census ? "census_live" : "explorer",
+      zeit
+    ),
+  };
 }

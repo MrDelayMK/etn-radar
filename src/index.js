@@ -10,7 +10,7 @@
 import { handleTelegramWebhook } from "./telegram.js";
 import { stand, overview, preisverlauf, tierVerlauf, network } from "./api/uebersicht.js";
 import { json, fehler, adminOk, cacheSchluessel, liveAntwort, notlaufSchreiben, notlaufLesen } from "./api/grundlagen.js";
-import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche } from "./api/wallets.js";
+import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche, walletRefresh } from "./api/wallets.js";
 import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, job_trigger } from "./api/betreiber.js";
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
@@ -43,6 +43,19 @@ export default {
     if (pfad === "/api/telegram/webhook") {
       if (request.method !== "POST") return new Response("POST erforderlich", { status: 405 });
       return handleTelegramWebhook(request, env, env.DB);
+    }
+
+    // Refresh-Knopf auf der Wallet-Seite: nie aus dem Cache, nur POST - die
+    // Bremsen (je Wallet, global) stecken in walletRefresh.
+    const refresh = pfad.match(/^\/api\/refresh\/(0x[0-9a-fA-F]{40})$/);
+    if (refresh) {
+      if (request.method !== "POST") return new Response("POST erforderlich", { status: 405 });
+      try {
+        const r = await walletRefresh(env.DB, env, refresh[1]);
+        return json(r.daten, r.status, 0);
+      } catch (e) {
+        return json({ error: "Could not reach the explorer - try again later." }, 502, 0);
+      }
     }
 
     // Besuch melden: offen (jeder Besucher meldet seinen eigenen), Auswertung

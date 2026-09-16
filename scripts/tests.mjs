@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const ORDNER = fileURLToPath(new URL("../tests/", import.meta.url));
 // Diese Tests gehen durch die echte Explorer-Drossel (hoechstens 1,5 Anfragen
 // pro Sekunde) und brauchen darum jeweils Sekunden bis eine Minute.
-const LANGSAM = ["drossel", "sicherheit", "bridge-historie", "scanfehler"];
+const LANGSAM = ["drossel", "sicherheit", "bridge-historie", "scanfehler", "census-wallets"];
 const schnell = process.argv.includes("--schnell");
 
 const dateien = readdirSync(ORDNER)

@@ -365,6 +365,45 @@ export async function runIngest(env, db, opts = {}) {
       " gefallen, " + events.length + " Ereignisse"
   );
 
+  // --- 5b. Wechsel zur Census-Liste (census_wallets) ---------------------
+  //
+  // Das Leaderboard geht nach den Top N mit den Wallets aus dem woechentlichen
+  // Census weiter. Wer aufsteigt, darf dort nicht doppelt stehen; wer
+  // herausfaellt, soll nicht bis zum naechsten Census ganz verschwinden - er
+  // kommt mit seinem letzten Bestand oben an die Census-Liste. Wenige Zeilen
+  // je Lauf, in eigenem try: die Tabelle darf auch (noch) fehlen.
+  if (!bootstrap && listeGlaubhaft) {
+    try {
+      const aufsteiger = rows.filter((r) => { const p = prev.get(r.hash); return !p || p.in_top_n === 0; });
+      const census = aufsteiger.map((r) => db.prepare("DELETE FROM census_wallets WHERE address = ?").bind(r.hash));
+      if (dropped.length) {
+        const oben = await db.prepare("SELECT MIN(pos) AS m FROM census_wallets").first();
+        let pos = (oben?.m ?? 1) - 1;
+        // Groesster zuerst, also mit der kleinsten Position.
+        const nachBestand = [...dropped].sort((a, b) => prev.get(b).etn - prev.get(a).etn);
+        for (let i = nachBestand.length - 1; i >= 0; i--) {
+          const a = nachBestand[i];
+          const p = prev.get(a);
+          census.push(
+            db
+              .prepare(
+                "INSERT INTO census_wallets (address, pos, rank_pos, balance_wei, etn, tx_count, is_contract, name, gesehen)" +
+                  " VALUES (?,?,?,?,?,?,?,?,?)" +
+                  " ON CONFLICT(address) DO UPDATE SET pos = excluded.pos, rank_pos = excluded.rank_pos," +
+                  "   balance_wei = excluded.balance_wei, etn = excluded.etn, gesehen = excluded.gesehen"
+              )
+              // Der Bestand wurde im vorigen Lauf bestaetigt, vor rund 30 Minuten.
+              .bind(a, pos--, p.rank_pos, p.balance_wei, p.etn, p.tx_count, p.is_contract ? 1 : 0,
+                p.ens_name ?? p.contract_name ?? null, takenAt)
+          );
+        }
+      }
+      if (census.length) await db.batch(census);
+    } catch (e) {
+      log("  Census-Liste nicht angepasst: " + e.message);
+    }
+  }
+
   // --- 6. Ereignisse schreiben -----------------------------------------
   const insEvent = db.prepare(
     "INSERT INTO events (detected_at, snapshot_id, type, address, delta_wei, delta_etn, delta_pct," +

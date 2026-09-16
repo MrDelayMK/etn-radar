@@ -2690,10 +2690,24 @@ async function ladeLeaderboard() {
   const d = await hole(url);
   LB.gesamt = d.gesamt;
 
-  el("lbBody").innerHTML = d.eintraege.map((e) => {
-    const tags = walletTags(e);
+  // Ab Platz ~3.000 kommen die Wallets aus dem woechentlichen Census - eine
+  // Trennzeile sagt, ab wo, und wie alt diese Bestaende sind.
+  const censusDatum = d.census_stand
+    ? new Date(d.census_stand).toLocaleDateString(LOC, { day: "numeric", month: "short" })
+    : null;
+  const trenner =
+    '<tr class="lbtrenner"><td colspan="8"><span>📅 From here on: balances from the weekly census' +
+    (censusDatum ? " of <b>" + censusDatum + "</b>" : "") +
+    " · open a wallet to see its live balance</span></td></tr>";
 
-    return "<tr>" +
+  el("lbBody").innerHTML = d.eintraege.map((e, i) => {
+    const tags = walletTags(e);
+    const censusStart = e.census && (i === 0 ? LB.offset === d.census_ab : !d.eintraege[i - 1].census);
+    const stand = e.census && e.stand
+      ? new Date(e.stand).toLocaleDateString(LOC, { day: "numeric", month: "short" })
+      : null;
+
+    return (censusStart ? trenner : "") + '<tr' + (e.census ? ' class="lbcensus"' : "") + ">" +
       '<td class="num dim3">' + e.platz + "</td>" +
       '<td><a class="addr" href="' + EXPLORER + e.address + '" target="_blank" rel="noopener">' +
         (e.anzeige ? "<b style='color:var(--tx)'>" + esc(e.anzeige) + "</b>" : kurzAdr(e.address)) +
@@ -2701,7 +2715,9 @@ async function ladeLeaderboard() {
       '<td class="tiercell">' + e.tier_emoji + "<span>" + esc(e.tier_name) + "</span></td>" +
       '<td class="r num"><b>' + kurz(e.etn) + "</b></td>" +
       deltaZelle(e.d24h, e.etn, 1) + deltaZelle(e.d7d, e.etn, 7) + deltaZelle(e.d6m, e.etn, 182) +
-      '<td class="r dim" style="font-size:12px">' + ruheText(e.ruhetage) + "</td>" +
+      (e.census
+        ? '<td class="r dim" style="font-size:12px" title="Balance as of ' + esc(stand ?? "") + '">📅 ' + esc(stand ?? "—") + "</td>"
+        : '<td class="r dim" style="font-size:12px">' + ruheText(e.ruhetage) + "</td>") +
       "</tr>";
   }).join("");
 
@@ -3913,10 +3929,59 @@ function hypeText(progress) {
   return "Long way up, but every ETN counts. 🐾";
 }
 
-function renderWalletDetail(d) {
+// Wallets ausserhalb der Top N: wie alt der Bestand ist, und ab einer halben
+// Stunde ein Knopf, der ihn live holt. Die Bremsen (10 Minuten je Wallet,
+// Minutenbudget fuer alle) sitzen auf dem Server (walletRefresh).
+const REFRESH_AB_MS = 30 * 60000;
+function walletStand(d) {
+  const zeit = d.stand ? Date.parse(d.stand) : null;
+  const alt = zeit == null || Date.now() - zeit > REFRESH_AB_MS;
+  const wann = zeit == null
+    ? ""
+    : Date.now() - zeit < 90000
+      ? "just now"
+      : new Date(zeit).toLocaleString(LOC, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const text = d.quelle === "census"
+    ? "📅 Balance from the weekly census" + (wann ? " of <b>" + esc(wann) + "</b>" : "")
+    : "⚡ Live balance from the explorer" + (wann ? ", fetched " + esc(wann) : "");
+  return '<div class="walletstand">' +
+    '<span>' + text + '<span class="dim3"> · no history for wallets outside the top 3,000</span></span>' +
+    (alt ? '<button type="button" class="ghost" id="walletRefresh" data-addr="' + esc(d.address) + '">🔄 Refresh</button>' : "") +
+    "</div>";
+}
+
+async function walletAuffrischen(knopf) {
+  knopf.disabled = true;
+  knopf.textContent = "Refreshing…";
+  try {
+    const r = await fetch("/api/refresh/" + knopf.dataset.addr, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      renderWalletDetail(d, { nurKopf: true });
+      return;
+    }
+    const minuten = d.warten_s ? Math.max(1, Math.ceil(d.warten_s / 60)) : null;
+    knopf.textContent = minuten ? "Try again in " + minuten + " min" : "Try again later";
+    wiederFrei(knopf, (d.warten_s ?? 60) * 1000);
+  } catch {
+    knopf.textContent = "Try again later";
+    wiederFrei(knopf, 60000);
+  }
+}
+// Nach der Wartezeit wieder anklickbar - sofern die Seite noch dasselbe Wallet zeigt.
+function wiederFrei(knopf, ms) {
+  setTimeout(() => {
+    if (!knopf.isConnected) return;
+    knopf.disabled = false;
+    knopf.textContent = "🔄 Refresh";
+  }, ms);
+}
+
+function renderWalletDetail(d, { nurKopf = false } = {}) {
   const wrap = { chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap"), fluss: el("invFlowWrap") };
   const bis = d.bis_naechster_tier;
-  const liveOnly = d.quelle === "explorer";
+  // Ausserhalb der Top N: kein Verlauf, keine Ereignisse, kein Cluster.
+  const liveOnly = d.quelle === "explorer" || d.quelle === "census" || d.quelle === "census_live";
 
   el("invHead").innerHTML =
     '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">' +
@@ -3932,16 +3997,18 @@ function renderWalletDetail(d) {
     '<div style="text-align:right"><div class="num" style="font-size:25px;font-weight:660">' +
     kurz(d.etn) + ' <span style="font-size:.5em;color:var(--tx2)">ETN</span></div>' +
     '<div class="dim3" style="font-size:12px">' +
-    (d.in_top_n ? "rank " + d.rank_pos : "outside the tracked list") + "</div></div></div>" +
+    (d.in_top_n
+      ? "rank " + d.rank_pos
+      : d.census_rang
+        ? "rank ~" + nf(d.census_rang) + " · weekly census"
+        : "outside the tracked list") + "</div></div></div>" +
     (bis != null
       ? '<div class="progress"><i style="width:' + (d.tier_progress * 100).toFixed(1) + '%"></i></div>' +
         '<div style="font-size:13.5px;color:var(--tx2)">' + esc(d.tier_name) + ' → <b>' + esc(d.naechster_tier) +
         '</b> · another <b class="num" style="color:var(--acc)">' + nf(bis) + " ETN</b> to go</div>" +
         '<div style="font-size:12.5px;color:var(--acc2);margin-top:4px;font-weight:560">' + hypeText(d.tier_progress) + "</div>"
       : '<div style="margin-top:11px;font-size:13.5px;color:var(--acc2)">Highest tier reached 🎉 - nowhere left to climb.</div>') +
-    (liveOnly
-      ? '<div class="dim3" style="font-size:11.5px;margin-top:9px">Fetched live from the explorer - this wallet is outside the tracked top N, so no history/events/cluster data exists here.</div>'
-      : "") +
+    (liveOnly ? walletStand(d) : "") +
     shareBlock(d.address);
 
   CUR_WALLET = d;
@@ -3951,7 +4018,8 @@ function renderWalletDetail(d) {
   // Die Fluss-Diagramme kommen live vom Explorer, nicht aus der Datenbank -
   // sie funktionieren deshalb auch fuer Wallets ausserhalb der verfolgten
   // Top N, wo es sonst nichts zu zeigen gaebe.
-  ladeWalletFlows(d.address).catch((e) => console.error("flows:", e));
+  // Beim Auffrischen nicht: der Fluss kostet bis zu zwanzig Explorer-Anfragen.
+  if (!nurKopf) ladeWalletFlows(d.address).catch((e) => console.error("flows:", e));
 
   if (liveOnly) {
     wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
@@ -4048,6 +4116,8 @@ el("invHead").addEventListener("click", (e) => {
   const kopie = e.target.closest("#walletLink");
   if (kopie && CUR_WALLET) { linkKopieren(kopie, location.origin + "/wallet/" + CUR_WALLET.address); return; }
   if (e.target.closest("#shareOpen")) { shareDialogOeffnen(); return; }
+  const neu = e.target.closest("#walletRefresh");
+  if (neu && !neu.disabled) { walletAuffrischen(neu); return; }
 });
 
 // Share-Dialog: ein Knopf, darin die Wahl der Plattform und der Sichtbarkeit.
@@ -4552,8 +4622,10 @@ async function lbSpringeZuWallet() {
       }
       return lbSpringeZuRang(d.treffer[0].rank_pos, d.treffer[0].address, msg);
     }
+    // Census-Wallets stehen auch in der Liste - mit ihrem Platz vom letzten Census.
+    if (d.census_rang) return lbSpringeZuRang(d.census_rang, d.address, msg);
     if (d.quelle === "explorer" || !d.in_top_n) {
-      msg.textContent = "Found, but outside the tracked leaderboard (rank too low to appear here).";
+      msg.textContent = "Found, but below 25K ETN - too small to appear in the leaderboard.";
       return;
     }
     return lbSpringeZuRang(d.rank_pos, d.address, msg);

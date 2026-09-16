@@ -217,3 +217,32 @@ CREATE TABLE IF NOT EXISTS coin_caps (
   abgerufen   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_coin_caps_rang ON coin_caps(rang);
+
+-- Wallets unterhalb der Top N, die der woechentliche Census mitliest (bis zur
+-- Plankton-Grenze). Eigene Tabelle, damit der 30-Minuten-Snapshot sie nicht
+-- mitlesen muss. pos = Reihenfolge nach Bestand beim Census (1 = groesstes);
+-- aus den Top N gefallene Wallets kommen mit kleinerem pos oben dazu.
+CREATE TABLE IF NOT EXISTS census_wallets (
+  address      TEXT PRIMARY KEY,
+  pos          INTEGER NOT NULL,
+  rank_pos     INTEGER,                      -- Platz in der ganzen Liste beim Census
+  balance_wei  TEXT NOT NULL,
+  etn          REAL NOT NULL,
+  etn_vorher   REAL,                         -- Bestand beim vorigen Census
+  tx_count     INTEGER,
+  is_contract  INTEGER NOT NULL DEFAULT 0,
+  name         TEXT,                         -- .etn-Name oder Contract-Name
+  gesehen      TEXT NOT NULL,                -- Census bzw. Abgang aus den Top N
+  aktualisiert TEXT                          -- letzter Live-Abruf
+);
+CREATE INDEX IF NOT EXISTS idx_census_wallets_pos ON census_wallets(pos);
+-- Contracts unter den Census-Wallets, fuer "Services only" ohne Volldurchlauf.
+CREATE INDEX IF NOT EXISTS idx_census_wallets_contract ON census_wallets(pos) WHERE is_contract = 1;
+-- Wo in census_wallets eine Bestandsgrenze liegt: erste Position mit etn < grenze
+-- (pos_unter) bzw. etn <= grenze (pos_bis). Vom Census geschrieben, damit das
+-- Leaderboard Filter und Seiten ohne Suche ueber alle Zeilen findet.
+CREATE TABLE IF NOT EXISTS census_grenzen (
+  grenze     REAL PRIMARY KEY,
+  pos_unter  INTEGER NOT NULL,
+  pos_bis    INTEGER NOT NULL
+);
