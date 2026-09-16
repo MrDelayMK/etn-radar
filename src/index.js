@@ -14,12 +14,13 @@ import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api,
 import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, job_trigger } from "./api/betreiber.js";
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
+import { whatif } from "./api/whatif.js";
 import { shareSeite } from "./share.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
 // des Pfads.
-const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|clusters|investigate|about|wallet\/[^/]+)\/?$/;
+const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|whatif|clusters|investigate|about|wallet\/[^/]+)\/?$/;
 
 export default {
   async fetch(request, env, ctx) {
@@ -136,6 +137,8 @@ export default {
       // Neue Werte kommen hoechstens alle sechs Stunden (Tokens) oder einmal am
       // Tag (Tageswerte) - eine Stunde reicht dicke.
       else if (pfad === "/api/chain") antwort = json(await chain(db, env), 200, 3600);
+      // Die Marktkapitalisierungen kommen einmal am Tag herein.
+      else if (pfad === "/api/whatif") antwort = json(await whatif(db, env), 200, 3600);
       // Neue Zeilen kommen einmal am Tag mit dem ersten Snapshot.
       else if (pfad === "/api/tier-verlauf") antwort = json(await tierVerlauf(db), 200, 1800);
       else if (pfad === "/api/leaderboard") antwort = json(await leaderboard(db, env, u));

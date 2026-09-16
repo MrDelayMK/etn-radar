@@ -1,13 +1,17 @@
-// Prototyp: aus den Grok-Bildern in Bilder/share-roh/ die Share-Bilder bauen.
-//   <name>-card.jpg    Link-Vorschau 1200x630: Bild links, Satz rechts
-//   <name>-square.jpg  gerahmtes 1:1-Bild 1080x1080 zum direkten Posten
-//   banner.jpg         Startseite 1200x630 mit Rahmen
+// Baut aus den Grok-Rohbildern in Bilder/share-roh/ die Bilder der Seite:
+//   public/assets/share/<name>-card.jpg    Link-Vorschau 1200x630: Bild links, Satz rechts
+//   public/assets/share/<name>-square.jpg  gerahmtes 1:1-Bild 1080x1080 zum Posten
+//   public/assets/share/banner.jpg         Startseite 1200x630 mit Rahmen
+//
+// Laeuft nur lokal (Windows-Schriften, sharp als devDependency):
+//   node scripts/share-bilder.mjs
 import sharp from "sharp";
-import { mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const REPO = "C:/Users/der_m/OneDrive/00_PROGRAMMIEREN_KI/Blockchain_Wallet_Compare/";
+const REPO = fileURLToPath(new URL("../", import.meta.url));
 const ROH = REPO + "Bilder/share-roh/";
-const AUS = "C:/Users/der_m/AppData/Local/Temp/claude/C--Users-der-m-OneDrive-00-PROGRAMMIEREN-KI-Blockchain-Wallet-Compare/cc6c8491-faec-4182-87fb-d198c40d7e7b/scratchpad/share-vorschau/";
+const AUS = REPO + "public/assets/share/";
 const LOGO = REPO + "public/assets/logo-192.png";
 const FONTS = "C:/Windows/Fonts/";
 const NAVY = "#0d1526";
@@ -25,11 +29,35 @@ const TIERS = {
   microbe: ["Microbe", "5K+ ETN", "#64748b"],
   dust: ["Dust", "under 5K ETN", "#7b8aa3"],
 };
-const SAETZE = {
-  "humpback-calm": "deep water, long breath, zero rush.",
-  "whale-funny": "relax, I didn't sell. I just rolled over in my sleep.",
-  "crab-funny": "sideways market? Crabs were literally built for this.",
+// Bilder ohne Stufe: Kopfzeile, Unterzeile, Farbe und die Schlagzeile auf der
+// Karte. Die Woche wechselt jede Woche, das Bild aber nicht - deshalb steht
+// dort die Art der Nachricht und kein Datum.
+const SONDER = {
+  "week-bridge": ["This week", "Electroneum", "#5b9cff", "Busy week at the migration bridge."],
+  "week-whale": ["This week", "Electroneum", "#5b9cff", "A whale made waves this week."],
+  "week-busy": ["This week", "Electroneum", "#5b9cff", "Electroneum got busier this week."],
+  "week-radar": ["This week", "Electroneum", "#5b9cff", "The week in numbers."],
+  "whatif-scale": ["What if", "Market cap", "#fbbf24", "Not a forecast. Just math."],
+  "whatif-dream": ["What if", "Market cap", "#fbbf24", "What if ETN were that big?"],
+  "whatif-napkin": ["What if", "Market cap", "#fbbf24", "Napkin math for ETN."],
 };
+// Die Saetze kommen aus SHARE_SAETZE in public/app.js - so steht auf dem Bild
+// immer genau der Satz, den der Teilen-Dialog daneben anbietet.
+function saetzeLesen() {
+  const js = readFileSync(REPO + "public/app.js", "utf8");
+  const von = js.indexOf("const SHARE_SAETZE = {");
+  const block = js.slice(von, js.indexOf("const SHARE_TON", von));
+  const saetze = {};
+  let tier = null;
+  for (const zeile of block.split(/\r?\n/)) {
+    const t = zeile.match(/^\s{2}([a-z]+):\s*\[\s*$/);
+    if (t) { tier = t[1]; continue; }
+    const s = zeile.match(/^\s*\["([a-z]+)",\s*"(.*)"\],?\s*$/);
+    if (s && tier) saetze[tier + "-" + s[1]] = JSON.parse('"' + s[2] + '"');
+  }
+  return saetze;
+}
+const SAETZE = saetzeLesen();
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const hell = (hex, anteil = 0.45) => {
@@ -123,8 +151,7 @@ async function gerahmt(quelle, W, H, farbe, ziel) {
 }
 
 // Link-Vorschau: quadratisches Bild links, Satz rechts
-async function karte(quelle, tierKey, satz, ziel) {
-  const [tierName, ab, farbe] = TIERS[tierKey];
+async function karte(quelle, [tierName, ab, farbe], satz, ziel) {
   const W = 1200, H = 630, X = 630, rand = 54;
   const kunst = await sharp(quelle).resize(H, H, { fit: "cover" }).toBuffer();
   const logo = await sharp(LOGO).resize(50, 50).toBuffer();
@@ -173,17 +200,20 @@ async function karte(quelle, tierKey, satz, ziel) {
 }
 
 mkdirSync(AUS, { recursive: true });
-for (const datei of readdirSync(ROH)) {
+const fertig = [];
+for (const datei of readdirSync(ROH).sort()) {
   const name = datei.replace(/\.(jpe?g|png|webp)$/i, "");
   const quelle = ROH + datei;
   if (name === "banner") {
     await gerahmt(quelle, 1200, 630, "#8b8cf8", AUS + "banner.jpg");
-    console.log("banner");
+    fertig.push("banner");
     continue;
   }
   const tierKey = name.split("-")[0];
-  if (!TIERS[tierKey] || !SAETZE[name]) { console.log("uebersprungen", name); continue; }
-  await karte(quelle, tierKey, SAETZE[name], AUS + name + "-card.jpg");
-  await gerahmt(quelle, 1080, 1080, TIERS[tierKey][2], AUS + name + "-square.jpg");
-  console.log(name);
+  const kopf = SONDER[name] ?? (TIERS[tierKey] && SAETZE[name] ? [...TIERS[tierKey], SAETZE[name]] : null);
+  if (!kopf) { console.log("uebersprungen (kein Satz):", name); continue; }
+  await karte(quelle, kopf, kopf[3], AUS + name + "-card.jpg");
+  await gerahmt(quelle, 1080, 1080, kopf[2], AUS + name + "-square.jpg");
+  fertig.push(name);
 }
+console.log(fertig.length + " Bilder gebaut: " + fertig.join(", "));

@@ -13,7 +13,8 @@ const mk = () => ({ innerHTML: "", textContent: "", style: {}, dataset: {}, addE
 const document = { getElementById: (id) => (els[id] ??= mk()), querySelector: (s) => (els[s] ??= mk()),
   querySelectorAll: () => [], createElement: mk, body: mk() };
 const localStorage = { getItem: () => null, setItem() {} };
-new Function("document", "localStorage", "navigator", skript)(document, localStorage, {});
+class Image { constructor() { this.complete = false; } }
+new Function("document", "localStorage", "navigator", "Image", skript)(document, localStorage, {}, Image);
 
 if (!els.gruppen.innerHTML.includes("Prompt kopieren")) throw new Error("keine Karten erzeugt");
 html = html

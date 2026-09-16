@@ -408,6 +408,7 @@ function zeichneTempoChart(svg, punkte, opts) {
     tip.innerHTML = "<b>" + kurz(w.etn) + " ETN</b><span>" +
       kurzDatum(ab) + " - " + (laeuft ? "today" : kurzDatum(new Date(bisZeit))) +
       " · " + kurz(w.etn / tage) + "/day</span>";
+    tip.style.right = "auto";
     tip.classList.add("on");
 
     // Senkrecht an den Balken heften statt oben in der Ecke kleben: so ist
@@ -731,8 +732,12 @@ function zeichneMigration() {
   svg.onmousemove = null;
   const tip = el("chartTip");
   tip.classList.remove("on");
+  // Auch "right": der Bestands-Chart setzt es, der Balken-Chart nicht. Blieb es
+  // stehen, war der Hinweis in Per week/Per month zwischen links und rechts
+  // eingespannt - zu breit und bei jeder Mausbewegung springend.
   tip.style.top = "";
   tip.style.left = "";
+  tip.style.right = "";
   const takt = MIG_TAKTE[MIG.sicht];
   if (takt) {
     el("migTitel").textContent =
@@ -1536,6 +1541,178 @@ function zeichneChainNeu() {
       (g.tx > 0 ? "transactions" : "not used yet") + "</span></span></a>"
   ).join("") + (c.weitere ? '<div class="tokmehr dim3">+ ' + nf(c.weitere) + " more</div>" : "");
 }
+
+// ---------- What if (Marktkapitalisierung vergleichen) ----------
+//
+// Reine Division: fremde Marktkapitalisierung geteilt durch die ETN-Menge.
+// Keine Vorhersage, und nirgends steht "wird" - deshalb auch der Hinweis auf
+// Quelle und Stand direkt unter dem Ergebnis.
+//
+// Die Coins kommen einmal beim Oeffnen des Reiters (/api/whatif, aus der
+// eigenen Datenbank). Gesucht wird danach im Browser, ohne weitere Anfragen.
+const WI = { daten: null, coin: null, nurMigriert: false };
+
+// [Stimmung, Bild, Rechenzeile, Schlusszeile vor dem Link]
+const WI_TEXTE = [
+  ["calm", "whatif-scale", (c, p, x) => "📊 ETN with " + c + "'s market cap: " + p + " per ETN (×" + x + ").",
+    "Not a forecast, just math. Try any coin on ETN Radar:"],
+  ["proud", "whatif-dream", (c, p, x) => "🔭 If ETN were as big as " + c + ": " + p + " per ETN, ×" + x + " from today.",
+    "Dreaming is free, the math is on ETN Radar:"],
+  ["funny", "whatif-napkin", (c, p, x) => "🧮 Napkin math: ETN at " + c + "'s market cap = " + p + " per ETN.",
+    "My calculator needed a minute. Do yours:"],
+];
+
+// Kurse unter einem Cent brauchen mehr Stellen, sonst steht ueberall $0.00.
+function wiPreis(v) {
+  if (!isFinite(v) || v <= 0) return "—";
+  if (v >= 1000) return "$" + nf(v, 0);
+  if (v >= 1) return "$" + nf(v, 2);
+  if (v >= 0.01) return "$" + nf(v, 4);
+  return "$" + nf(v, 6);
+}
+const wiCap = (v) => (v >= 1e12 ? "$" + nf(v / 1e12, 2) + "T" : v >= 1e9 ? "$" + nf(v / 1e9, 2) + "B" : "$" + nf(v / 1e6, 0) + "M");
+const wiFaktor = (x) => (x >= 100 ? nf(x, 0) : x >= 10 ? nf(x, 1) : nf(x, 2));
+
+async function ladeWhatif() {
+  try {
+    WI.daten = await hole("/api/whatif");
+  } catch (e) {
+    el("wiErgebnis").innerHTML = '<div class="empty">' + esc(fehlerText(e)) + "</div>";
+    el("wiSchnell").innerHTML = "";
+    return;
+  }
+  wiSchnellZeigen();
+  // Vorgewaehlt der groesste Coin: das Ergebnis ist sofort da, ohne Klick.
+  wiWaehlen(WI.daten.schnell[0]?.ids[0] ?? WI.daten.coins[0]?.i);
+}
+
+const wiZeile = (c) =>
+  '<button type="button" class="wizeile' + (c.i === WI.coin?.i ? " on" : "") + '" data-coin="' + esc(c.i) + '">' +
+  '<span class="rang">#' + nf(c.r) + "</span>" +
+  '<span class="nm">' + esc(c.n) + " <small>" + esc(c.s) + "</small></span>" +
+  '<span class="cap num">' + wiCap(c.c) + "</span></button>";
+
+// Je Bereich (Top 10, Top 30 ...) die bekanntesten Namen - so sieht man auf
+// einen Blick, wie weit die Marktkapitalisierungen auseinanderliegen.
+function wiSchnellZeigen() {
+  const box = el("wiSchnell");
+  const gruppen = WI.daten.schnell
+    .map((g) => ({ titel: g.titel, coins: g.ids.map((id) => WI.daten.coins.find((c) => c.i === id)).filter(Boolean) }))
+    .filter((g) => g.coins.length);
+  if (!gruppen.length) {
+    box.innerHTML = '<div class="empty">No market caps yet.</div>';
+    return;
+  }
+  box.innerHTML = gruppen
+    .map((g) => '<div class="wigruppe">' + esc(g.titel) + "</div>" + g.coins.map(wiZeile).join(""))
+    .join("");
+}
+
+function wiWaehlen(id) {
+  const coin = WI.daten?.coins.find((c) => c.i === id);
+  if (!coin) return;
+  WI.coin = coin;
+  wiSchnellZeigen();
+  wiTrefferZeigen();
+  wiErgebnisZeigen();
+}
+
+function wiTrefferZeigen() {
+  const box = el("wiTreffer");
+  const q = el("wiQ").value.trim().toLowerCase();
+  el("wiQ").parentElement.querySelector(".leeren").hidden = !q;
+  if (!q) {
+    box.innerHTML = '<div class="wihinweis dim3">' + nf(WI.daten?.coins.length ?? 0) +
+      " coins, ranked by market cap. Type a name or symbol.</div>";
+    return;
+  }
+  const treffer = (WI.daten?.coins ?? [])
+    .filter((c) => c.n.toLowerCase().includes(q) || c.s.toLowerCase().includes(q))
+    // Wer "xrp" tippt, will XRP - Treffer im Symbol zuerst, dann nach Rang.
+    .sort((a, b) => {
+      const g = (c) => (c.s.toLowerCase() === q ? 0 : c.s.toLowerCase().startsWith(q) ? 1 : c.n.toLowerCase().startsWith(q) ? 2 : 3);
+      return g(a) - g(b) || a.r - b.r;
+    })
+    .slice(0, 12);
+  box.innerHTML = treffer.length
+    ? treffer.map(wiZeile).join("")
+    :'<div class="wihinweis dim3">Nothing found. Only the top 300 by market cap are listed.</div>';
+}
+
+// Menge, durch die geteilt wird: alles, oder nur was die Bridge verlassen hat.
+const wiMenge = () => (WI.nurMigriert ? WI.daten.etn.migriert : WI.daten.etn.gesamt);
+
+function wiRechnung() {
+  const c = WI.coin;
+  const menge = wiMenge();
+  const preis = WI.daten.etn.preis;
+  if (!c || !(menge > 0) || !(preis > 0)) return null;
+  const neu = c.c / menge;
+  return { coin: c, preis: neu, faktor: neu / preis, menge };
+}
+
+function wiErgebnisZeigen() {
+  const r = wiRechnung();
+  const box = el("wiErgebnis");
+  if (!r) {
+    box.innerHTML = '<div class="empty">Pick a coin to see the number.</div>';
+    return;
+  }
+  const stand = WI.daten.stand
+    ? new Date(WI.daten.stand).toLocaleDateString(LOC, { day: "numeric", month: "short", year: "numeric" })
+    : "—";
+  box.innerHTML =
+    '<div class="wifrage">ETN with <b>' + esc(r.coin.n) + "</b>'s market cap of " + wiCap(r.coin.c) + "</div>" +
+    '<div class="wizahl"><div><div class="v num">' + wiPreis(r.preis) + "</div>" +
+      '<div class="k">per ETN</div></div>' +
+    '<div><div class="v num acc">×' + wiFaktor(r.faktor) + "</div>" +
+      '<div class="k">from ' + wiPreis(WI.daten.etn.preis) + " today</div></div></div>" +
+    '<div class="wiumschalter" role="radiogroup" aria-label="Which ETN supply to divide by">' +
+      '<button type="button" role="radio" aria-checked="' + !WI.nurMigriert + '" class="ghost' + (WI.nurMigriert ? "" : " on") +
+        '" data-menge="gesamt">All ' + kurz(WI.daten.etn.gesamt) + " ETN</button>" +
+      '<button type="button" role="radio" aria-checked="' + WI.nurMigriert + '" class="ghost' + (WI.nurMigriert ? " on" : "") +
+        '" data-menge="migriert">Migrated only ' + kurz(WI.daten.etn.migriert) + " ETN</button>" +
+      '<button type="button" class="infoBtn" data-info="' +
+        esc('Every ETN in existence is counted by default. "Migrated only" leaves out the coins that are still sitting in the ' +
+          "migration bridge. That is an estimate: nobody knows how many of them will ever be claimed, and each one that is claimed " +
+          "later lowers the price per ETN again.") + '">ⓘ</button></div>' +
+    '<div class="sharebar"><button data-teilen>📢 Share this</button></div>' +
+    '<div class="wiquelle dim3">Market caps: CoinGecko, ' + esc(stand) +
+      ". Division, not a forecast.</div>";
+}
+
+el("wiQ").addEventListener("input", wiTrefferZeigen);
+el("wiQ").parentElement.querySelector(".leeren").addEventListener("click", () => {
+  el("wiQ").value = "";
+  wiTrefferZeigen();
+  el("wiQ").focus();
+});
+for (const id of ["wiSchnell", "wiTreffer"]) {
+  el(id).addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-coin]");
+    if (b) wiWaehlen(b.dataset.coin);
+  });
+}
+el("wiErgebnis").addEventListener("click", (e) => {
+  const m = e.target.closest("button[data-menge]");
+  if (m) {
+    WI.nurMigriert = m.dataset.menge === "migriert";
+    wiErgebnisZeigen();
+    return;
+  }
+  if (!e.target.closest("[data-teilen]")) return;
+  const r = wiRechnung();
+  if (!r) return;
+  // Der Hinweis gehoert zur Zahl, nicht hinter die Aufforderung vor dem Link.
+  const zusatz = WI.nurMigriert ? "\nCounting migrated ETN only - an estimate." : "";
+  const varianten = WI_TEXTE.map(([ton, bild, zahl, schluss]) =>
+    [ton, zahl(r.coin.n, wiPreis(r.preis), wiFaktor(r.faktor)) + zusatz + "\n\n" + schluss, bild]);
+  shareTextOeffnen({
+    titel: "📢 Share this comparison",
+    varianten,
+    url: location.origin + "/whatif",
+  });
+});
 
 // ---------- Groesste Migrationen ----------
 // "holds today" ist bewusst vorsichtig formuliert: ein Strich heisst nicht
@@ -2868,7 +3045,7 @@ let SHARE_WER = "fremd";
 let SHARE_FOTO = { schluessel: null, datei: null, laden: null };
 
 const shareBildId = () => {
-  if (SHARE_FREMD) return SHARE_FREMD.bild ?? null;
+  if (SHARE_FREMD) return SHARE_FREMD.varianten?.[SHARE_WAHL]?.[2] ?? SHARE_FREMD.bild ?? null;
   const s = SHARE_SAETZE[CUR_WALLET?.tier]?.[SHARE_WAHL];
   const id = s ? CUR_WALLET.tier + "-" + s[0] : null;
   return id && SHARE_BILDER.has(id) ? id : null;
@@ -2893,10 +3070,10 @@ const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet 
 function shareInhalt(weg) {
   const format = aktivesFormat();
   if (SHARE_FREMD) {
-    const text = SHARE_FREMD.text;
+    const text = SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
     // Als Karte fuehrt der Link ueber /s/<bild>, damit X und Telegram genau
     // dieses Bild als Vorschau zeigen; als Foto geht die Datei selbst raus.
-    if (format === "karte" && weg === "link") return { text, url: location.origin + "/s/" + SHARE_FREMD.bild };
+    if (format === "karte" && weg === "link") return { text, url: location.origin + "/s/" + shareBildId() };
     if (format !== "text") return { text, url: "" };
     return { text, url: SHARE_FREMD.url };
   }
@@ -3021,8 +3198,14 @@ function shareVorschau() {
 const shareUrl = () =>
   location.origin + (ZEIGE_ADRESSE && CUR_WALLET ? "/wallet/" + CUR_WALLET.address : "/");
 
+// Die Auswahl oben im Dialog: beim Rang die drei Saetze der Stufe, bei einem
+// fertigen Text die mitgegebenen Fassungen (Wochenrueckblick hat eine, der
+// What-if-Vergleich drei - je mit eigenem Bild).
+const shareVarianten = () =>
+  SHARE_FREMD ? SHARE_FREMD.varianten ?? null : SHARE_SAETZE[CUR_WALLET?.tier] ?? null;
+
 function shareTexteZeigen() {
-  const saetze = SHARE_SAETZE[CUR_WALLET?.tier];
+  const saetze = shareVarianten();
   const box = el("shareTexte");
   box.hidden = !saetze;
   if (!saetze) return;
@@ -3056,12 +3239,15 @@ function shareDialogOeffnen() {
 function shareDialogSchliessen() { el("shareModal").classList.remove("on"); }
 
 function shareTextOeffnen(fremd) {
-  if (!fremd?.text) return;
+  if (!fremd?.text && !fremd?.varianten?.length) return;
   SHARE_FREMD = fremd;
   el("shareTitel").textContent = fremd.titel;
   el("sharePrivat").hidden = true;
-  el("shareTexte").hidden = true;
   el("shareWer").hidden = true;
+  // Mehrere Fassungen: eine zufaellig vorwaehlen, damit nicht jeder denselben
+  // Post absetzt - genau wie beim Rang.
+  SHARE_WAHL = fremd.varianten ? Math.floor(Math.random() * fremd.varianten.length) : 0;
+  shareTexteZeigen();
   // Mit Bild faengt der Dialog bei der Karte an - so sieht man sofort, was rausgeht.
   SHARE_FORMAT = "karte";
   shareVorschau();
@@ -3651,6 +3837,7 @@ const LADER = {
   activity: () =>
     Promise.all([ladeWatchlist(), ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
   chain: () => chainDaten(),
+  whatif: () => ladeWhatif(),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
   // Wartet auf eine Suche - die Merkliste ist das einzige, was hier von
   // selbst etwas zu zeigen hat, und genau dort ist sie am nuetzlichsten.

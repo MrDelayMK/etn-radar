@@ -61,7 +61,7 @@ export const SHARE_BILDER = {
   "dust-calm": "dust today, a story tomorrow.",
 };
 
-// Bilder ohne Stufe: der Wochenrueckblick. Welches der vier Bilder es wird,
+// Bilder ohne Stufe: Wochenrueckblick und What-if-Vergleich. Beim Rueckblick
 // entscheidet die Seite an der groessten Nachricht der Woche (wocheBild in
 // public/app.js). Der Satz steht hier nur fuer die Bildbeschreibung.
 export const SHARE_SONDER = {
@@ -69,6 +69,14 @@ export const SHARE_SONDER = {
   "week-whale": "A whale made waves this week.",
   "week-busy": "Electroneum got busier this week.",
   "week-radar": "The week in numbers.",
+  "whatif-scale": "Not a forecast. Just math.",
+  "whatif-dream": "What if ETN were that big?",
+  "whatif-napkin": "Napkin math for ETN.",
+};
+// Emoji, Name, Titel und Ziel je Art der Sonderbilder.
+const SONDER_ART = {
+  week: ["\u{1F5D3}", "This week", "This week on Electroneum - the full recap on ETN Radar", "/"],
+  whatif: ["\u{1F9EE}", "What if", "What would one ETN cost? Do the math on ETN Radar", "/whatif"],
 };
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -77,18 +85,18 @@ export function shareSeite(u, id) {
   // ?w=0x... : jemand zeigt ein fremdes Wallet - Menschen landen dann direkt dort.
   const w = u.searchParams.get("w") ?? "";
   const wallet = /^0x[0-9a-fA-F]{40}$/.test(w) ? w : null;
-  const ziel = wallet ? "/wallet/" + wallet : "/";
-  const woche = SHARE_SONDER[id];
-  const satz = woche ?? SHARE_BILDER[id];
-  const tier = woche ? ["\u{1F5D3}", "This week"] : TIERS[id.split("-")[0]];
+  const sonder = SHARE_SONDER[id] ? SONDER_ART[id.split("-")[0]] : null;
+  const ziel = sonder ? sonder[3] : wallet ? "/wallet/" + wallet : "/";
+  const satz = SHARE_SONDER[id] ?? SHARE_BILDER[id];
+  const tier = sonder ?? TIERS[id.split("-")[0]];
   if (!satz || !tier) return Response.redirect(new URL(ziel, u).href, 302);
 
   // Jedes Teil sagt etwas anderes, sonst steht derselbe Satz dreimal da:
   // der Post nennt die Stufe, das Bild bringt den Satz, der Titel (bei X ueber
   // dem Bild eingeblendet) laedt zum Mitmachen bzw. Nachschauen ein.
   const [emoji, name] = tier;
-  const titel = woche
-    ? "This week on Electroneum - the full recap on ETN Radar"
+  const titel = sonder
+    ? sonder[2]
     : wallet ? "Look this wallet up on ETN Radar" : "What's your tier? Find out on ETN Radar";
   const beschreibung = "Whale and migration tracker for the Electroneum Smart Chain.";
   // Immer das breite Bild: eine Vorschaukarte ist breit, ein Quadrat wuerde abgeschnitten.

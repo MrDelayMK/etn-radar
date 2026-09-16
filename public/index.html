@@ -50,11 +50,12 @@
   <button data-p="board"><span class="ic">🏆</span>Leaderboard</button>
   <button data-p="activity"><span class="ic">⚡</span>Activity</button>
   <button data-p="chain"><span class="ic">⛓️</span>Chain</button>
+  <button data-p="whatif"><span class="ic">🧮</span>What if</button>
   <button data-p="clusters" class="labs" hidden><span class="ic">🔍</span>Clusters</button>
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
-  <button data-p="about"><span class="ic">📡</span>About</button>
   </div>
   <div class="navrechts">
+    <button data-p="about"><span class="ic">📡</span>About</button>
     <button data-feedback><span class="ic">💬</span>Feedback</button>
     <button data-spende hidden><span class="ic">💛</span>Donate</button>
   </div>
@@ -459,6 +460,29 @@
   <section>
     <h2>🧱 New on chain <span class="hint">verified contracts, last 7 days</span></h2>
     <div class="card tokliste" id="chainNeu"><div class="empty">Loading&hellip;</div></div>
+  </section>
+</div>
+
+<!-- ================= WHAT IF ================= -->
+<div class="page" id="page-whatif">
+  <section style="margin-top:22px">
+    <h2>🧮 What if <span class="hint">what one ETN would cost at another coin's market cap</span></h2>
+    <div class="whatif">
+      <div class="wilinks">
+        <div class="card wiergebnis" id="wiErgebnis"><div class="empty">Loading&hellip;</div></div>
+        <div class="card wisuche">
+          <div class="suchfeld">
+            <input type="text" id="wiQ" placeholder="Search a coin - name or symbol" spellcheck="false" autocomplete="off">
+            <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
+          </div>
+          <div class="witreffer" id="wiTreffer"></div>
+        </div>
+      </div>
+      <div class="card wischnell">
+        <div class="wikopf">Quick pick</div>
+        <div id="wiSchnell"><div class="empty">Loading&hellip;</div></div>
+      </div>
+    </div>
   </section>
 </div>
 

@@ -116,6 +116,26 @@
   .rahmen .marke img{width:8cqw;height:8cqw;border-radius:50%}
   .rahmen .domain{position:absolute;bottom:3.2%;right:8%;transform:translateY(50%);padding:0 2cqw;background:#15233a;
     font:500 2.9cqw/1 var(--mono);color:color-mix(in srgb,var(--c) 55%,white)}
+  /* Rahmen-Werkzeug */
+  .werkzeug{border-top:1px solid var(--line);margin-top:44px;padding-block:30px 0;display:grid;gap:16px}
+  .werkzeug h2{font-size:20px;margin-bottom:6px}
+  .werkzeug p{margin:0;color:var(--tx2);font-size:14px;max-width:70ch}
+  .wz{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:start}
+  @media (max-width:720px){.wz{grid-template-columns:1fr}}
+  .wzform{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .wzablage{display:block;border:1.5px dashed var(--line2);border-radius:8px;padding:18px;text-align:center;color:var(--tx2);cursor:pointer;font-size:14px;overflow-wrap:anywhere}
+  .wzablage.drueber{border-color:var(--acc);color:var(--tx)}
+  .wzablage input{display:none}
+  .wzfarben{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .wzfarben button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;padding:0;background:var(--c)}
+  .wzfarben button[aria-pressed="true"]{border-color:#fff}
+  .wzfarben input[type=color]{width:34px;height:30px;border:1px solid var(--line2);border-radius:6px;background:none;padding:0 2px}
+  .wzform select{background:var(--panel2);color:var(--tx);border:1px solid var(--line2);border-radius:6px;padding:6px 8px;font:inherit;max-width:100%}
+  .wzform .etikett{display:block;margin-bottom:6px}
+  .wzbild{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}
+  .wzbild img{display:block;width:100%;border-radius:6px}
+  .wzbild .leer{padding-block:60px}
+  .wzhinweis{font-size:13px;color:var(--tx3)}
   @media (max-width:520px){.gespeichert,.fortschritt{margin-left:0}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -137,7 +157,7 @@
   <div class="innen">
     <div class="filter" role="group" aria-label="Anzeige">
       <button type="button" id="fAlle" data-f="alle" aria-pressed="true">Alle · 41</button>
-      <button type="button" id="fTest" data-f="test" aria-pressed="false">Als Nächstes · 2</button>
+      <button type="button" id="fTest" data-f="test" aria-pressed="false" hidden>Als Nächstes</button>
       <button type="button" id="fOffen" data-f="offen" aria-pressed="false">Noch offen</button>
     </div>
     <div class="fortschritt"><span id="zaehler">0 / 41</span><span class="spur"><b id="balken" style="width:0"></b></span></div>
@@ -176,6 +196,37 @@
       </figure>
     </div>
   </section>
+
+  <section class="werkzeug" aria-labelledby="wzTitel">
+    <div>
+      <h2 id="wzTitel">Rahmen selbst setzen</h2>
+      <p>Eigenes Bild hineinziehen, Farbe und Format wählen. Alles passiert hier im Browser, nichts wird hochgeladen.</p>
+    </div>
+    <div class="wz">
+      <div class="wzform">
+        <label class="wzablage" id="wzAblage">
+          <input type="file" id="wzDatei" accept="image/*">
+          <span id="wzAblageText">Bild hierher ziehen oder klicken</span>
+        </label>
+        <div>
+          <span class="etikett">Farbe</span>
+          <div class="wzfarben" id="wzFarben"></div>
+        </div>
+        <div>
+          <span class="etikett">Format</span>
+          <select id="wzFormat" aria-label="Format">
+            <option value="1080x1080">Quadrat · 1080 × 1080</option>
+            <option value="1200x630">Breit · 1200 × 630</option>
+            <option value="1080x1350">Hochkant · 1080 × 1350</option>
+          </select>
+        </div>
+      </div>
+      <div class="wzbild">
+        <div id="wzErgebnis"><div class="leer">Noch kein Bild gewählt.</div></div>
+        <div class="wzhinweis" id="wzHinweis" hidden>Speichern: Rechtsklick aufs Bild → „Bild speichern unter“. Am Handy lange draufdrücken.</div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -195,7 +246,7 @@ const SCHLUSS = (wort, breit) =>
   (breit ? "Wide 16:9 format." : "Square 1:1 format, main subject large and centred.") +
   " No text, no letters, no logos, no watermark.";
 
-const TEST = new Set(["whale-proud", "whale-calm"]);
+const TEST = new Set([]);
 
 const artikel = (key, name) => (["plankton", "dust"].includes(key) ? "" : /^[aeiou]/i.test(name) ? "an " : "a ");
 const tier = (key, name, emoji, ab, hex, wort, ...drei) => ({
@@ -247,11 +298,11 @@ const GRUPPEN = [
 
   tier("fish", "Fish", "🐟", "ab 1 Mio. ETN", "#fbbf24", "warm golden sunlight",
     ["proud", "seven figures of ETN and still swimming upstream.",
-     "A wild salmon with a natural silver body leaps up a roaring waterfall at golden hour, side view, body arched with power, head pointing toward the top of the falls, mouth closed. Warm sunlight makes its wet scales shimmer with a hint of gold, water droplets sparkle around it, a rainbow glows in the spray.", true],
+     "A big sailfish races through bright sunlit open ocean water, side view, large in the foreground and filling most of the frame, its tall fan-shaped dorsal fin fully raised, vivid blue stripes on its silver body, mouth closed. Small fish scatter out of its way and sun rays cut through the water behind it. Photoreal like a nature documentary, full of speed.", true],
     ["funny", "officially a millionaire. In ETN. Please don't do the conversion.",
      "A small golden fish dressed as a tycoon, with a tiny top hat, a monocle and a pearl necklace, sits on a velvet throne in a sunken treasure room. But the treasure is a very modest little pile of coins, and a worried shrimp accountant next to it counts the coins on a tiny abacus. The fish poses proudly anyway.", true],
     ["calm", "one million reasons to keep swimming.",
-     "Sunlit clear blue water near a colourful reef: a mahi-mahi with its natural shimmering blue, green and gold colours glides calmly past in side view, seen from a little distance, mouth closed. A few other fish swim far behind it, small and blurred. Soft sun rays stream down from the surface.", true]),
+     "A bright sunlit coral reef in clear turquoise water: a large colourful parrotfish glides calmly over the corals in side view, seen from a little distance, mouth closed, its blue, green and orange scales catching the light. Two smaller reef fish drift along beside it and sun ripples dance over the reef. Photoreal like an underwater nature photo.", true]),
 
   tier("octopus", "Octopus", "🐙", "ab 500.000 ETN", "#fb923c", "orange",
     ["proud", "eight arms, zero paper hands.",
@@ -295,7 +346,7 @@ const GRUPPEN = [
 
   tier("dust", "Dust", "💨", "unter 5.000 ETN", "#7b8aa3", "dusky blue-grey",
     ["proud", "every whale started as a speck.",
-     "Forced perspective in sunlit water: in the foreground, magnified and in sharp focus, a single speck of dust glows like a tiny bright star, surrounded by a soft halo of light. Far behind it, softly out of focus, a majestic giant whale swims past in dramatic light, as if the speck is looking at its own future.", true],
+     "Extreme macro photo on a dark sea floor: a single glowing speck of dust rests on a dark pebble, sharp and bright like a small star with a soft halo, and fills a third of the frame. One narrow ray of light reaches down to it from far above. Up near the distant surface, tiny and no bigger than the speck itself, the silhouette of a whale glides past.", true],
     ["funny", "technically dust. Spiritually a whale.",
      "A tiny speck of dust sits on a rock on the sea floor, lit by a single spotlight from above. Its shadow on the sand behind it is the enormous, majestic silhouette of a whale. The speck looks extremely confident."],
     ["calm", "dust today, a story tomorrow.",
@@ -423,5 +474,140 @@ document.getElementById("sprung").addEventListener("click", (e) => {
   zeichnen();
 });
 
+// Der Filter "Als Naechstes" erscheint nur, wenn etwas ansteht.
+document.getElementById("fTest").hidden = !TEST.size;
+document.getElementById("fTest").textContent = "Als Nächstes · " + TEST.size;
+
 zeichnen();
+
+// ---------- Rahmen-Werkzeug ----------
+// Derselbe Rahmen wie im Bau-Skript (scripts/share-bilder.mjs): Linie in der
+// Farbe mit weichen Luecken oben links fuer Logo + Name und unten rechts fuer
+// die Domain, Schrift mit dunklem Halo. Ergebnis als <img>, weil diese Seite
+// selbst keine Downloads ausloesen darf.
+const WZ = { bild: null, farbe: "#5b9cff" };
+const WZ_FARBEN = GRUPPEN.filter((g) => g.hex)
+  .map((g) => [g.hex, g.titel])
+  .filter((f, i, a) => a.findIndex((x) => x[0] === f[0]) === i);
+
+function wzFarbenZeigen() {
+  document.getElementById("wzFarben").innerHTML =
+    WZ_FARBEN.map(([hex, name]) =>
+      '<button type="button" style="--c:' + hex + '" title="' + esc(name) + '" aria-label="' + esc(name) +
+      '" aria-pressed="' + (hex === WZ.farbe) + '" data-farbe="' + hex + '"></button>').join("") +
+    '<input type="color" id="wzEigene" value="' + WZ.farbe + '" title="Eigene Farbe" aria-label="Eigene Farbe">';
+}
+
+const wzHell = (hex, anteil) => {
+  const n = parseInt(hex.slice(1), 16);
+  const k = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => Math.round(c + (255 - c) * anteil));
+  return "rgb(" + k.join(",") + ")";
+};
+
+function wzBauen() {
+  if (!WZ.bild || !LOGO_BILD.complete) return;
+  const [W, H] = document.getElementById("wzFormat").value.split("x").map(Number);
+  // Wie im Skript: das breite Format bekommt die kleinere Variante.
+  const s = H < 1000 ? 0.8 : 1;
+  const i = Math.round(46 * s), r = Math.round(30 * s), logoS = Math.round(64 * s);
+  const luft = 16 * s, verlauf = 28 * s, zurEcke = 56 * s, abstand = Math.round(logoS * 0.25);
+
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const x = c.getContext("2d");
+
+  // Bild wie object-fit: cover
+  const b = WZ.bild;
+  const f = Math.max(W / b.naturalWidth, H / b.naturalHeight);
+  x.drawImage(b, (W - b.naturalWidth * f) / 2, (H - b.naturalHeight * f) / 2, b.naturalWidth * f, b.naturalHeight * f);
+
+  const nameFont = "700 " + Math.round(34 * s) + "px 'Segoe UI', system-ui, sans-serif";
+  const domFont = "700 " + Math.round(22 * s) + "px Consolas, ui-monospace, monospace";
+  const domText = "etn-radar.galacticsl.com";
+  x.font = nameFont; const nameW = x.measureText("ETN Radar").width;
+  x.font = domFont; const domW = x.measureText(domText).width;
+
+  const obenVon = i + r + zurEcke, obenBis = obenVon + logoS + abstand + nameW;
+  const untenBis = W - i - r - zurEcke, untenVon = untenBis - domW;
+
+  // Linie auf eigener Ebene, dann die Luecken mit weichem Verlauf herausnehmen
+  const l = document.createElement("canvas");
+  l.width = W; l.height = H;
+  const lx = l.getContext("2d");
+  const rahmen = (breite) => { lx.beginPath(); lx.roundRect(i, i, W - 2 * i, H - 2 * i, r); lx.lineWidth = breite; lx.stroke(); };
+  lx.save(); lx.filter = "blur(7px)"; lx.globalAlpha = 0.7; lx.strokeStyle = WZ.farbe; rahmen(8); lx.restore();
+  lx.strokeStyle = wzHell(WZ.farbe, 0.35); rahmen(3);
+  lx.globalCompositeOperation = "destination-out";
+  const luecke = (von, bis, y) => {
+    const x0 = von - luft - verlauf, x1 = bis + luft + verlauf;
+    const g = lx.createLinearGradient(x0, 0, x1, 0);
+    const t = verlauf / (x1 - x0);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(t, "rgba(0,0,0,1)");
+    g.addColorStop(1 - t, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    lx.fillStyle = g; lx.fillRect(x0, y - 30, x1 - x0, 60);
+  };
+  luecke(obenVon, obenBis, i);
+  luecke(untenVon, untenBis, H - i);
+
+  // Dunkle weiche Flaechen hinter Marke und Domain, dann die Linie darueber
+  x.save(); x.filter = "blur(16px)"; x.fillStyle = "rgba(6,16,31,.6)";
+  x.beginPath(); x.roundRect(obenVon - 12, i - logoS / 2 - 4, obenBis - obenVon + 24, logoS + 8, logoS / 2); x.fill();
+  x.beginPath(); x.roundRect(untenVon - 14, H - i - 20 * s, domW + 28, 40 * s, 20 * s); x.fill();
+  x.restore();
+  x.drawImage(l, 0, 0);
+
+  // Schrift mit Halo, zweimal gezeichnet wie im Skript
+  const text = (t, font, tx, ty) => {
+    x.save(); x.font = font; x.textBaseline = "middle";
+    x.shadowColor = "rgba(2,6,17,.95)"; x.shadowBlur = 10; x.fillStyle = "#fff";
+    x.fillText(t, tx, ty); x.fillText(t, tx, ty); x.restore();
+  };
+  x.drawImage(LOGO_BILD, obenVon, i - logoS / 2, logoS, logoS);
+  text("ETN Radar", nameFont, obenVon + logoS + abstand, i + 1);
+  text(domText, domFont, untenVon, H - i + 1);
+
+  const img = new Image();
+  img.alt = "Gerahmtes Bild";
+  img.src = c.toDataURL("image/jpeg", 0.9);
+  const box = document.getElementById("wzErgebnis");
+  box.innerHTML = "";
+  box.appendChild(img);
+  document.getElementById("wzHinweis").hidden = false;
+}
+
+const LOGO_BILD = new Image();
+LOGO_BILD.onload = () => wzBauen();
+LOGO_BILD.src = document.querySelector(".marke img")?.getAttribute?.("src") ?? "";
+
+function wzLaden(datei) {
+  if (!datei || !/^image\//.test(datei.type)) return;
+  const b = new Image();
+  b.onload = () => {
+    WZ.bild = b;
+    document.getElementById("wzAblageText").textContent = datei.name + " - anderes Bild? Einfach nochmal";
+    wzBauen();
+  };
+  b.src = URL.createObjectURL(datei);
+}
+
+wzFarbenZeigen();
+document.getElementById("wzFarben").addEventListener("click", (e) => {
+  const k = e.target.closest("[data-farbe]");
+  if (!k) return;
+  WZ.farbe = k.dataset.farbe;
+  wzFarbenZeigen();
+  wzBauen();
+});
+document.getElementById("wzFarben").addEventListener("input", (e) => {
+  if (e.target.id !== "wzEigene") return;
+  WZ.farbe = e.target.value;
+  document.querySelectorAll("#wzFarben [data-farbe]").forEach((k) => k.setAttribute("aria-pressed", "false"));
+  wzBauen();
+});
+document.getElementById("wzFormat").addEventListener("change", wzBauen);
+document.getElementById("wzDatei").addEventListener("change", (e) => wzLaden(e.target.files[0]));
+const ablage = document.getElementById("wzAblage");
+ablage.addEventListener("dragover", (e) => { e.preventDefault(); ablage.classList.add("drueber"); });
+ablage.addEventListener("dragleave", () => ablage.classList.remove("drueber"));
+ablage.addEventListener("drop", (e) => { e.preventDefault(); ablage.classList.remove("drueber"); wzLaden(e.dataTransfer.files[0]); });
 </script>

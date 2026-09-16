@@ -1,0 +1,782 @@
+<title>ETN Radar Share-Kit</title>
+<meta name="description" content="Share-Texte und Grok-Prompts für die Vorschaubilder von ETN Radar">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Bewusst nur dunkel: die Bilder, der Rahmen und die Seite selbst leben auf Navy. */
+  :root{
+    color-scheme:dark;
+    --bg:#080b12; --panel:#0f1522; --panel2:#141c2d; --line:#22324a; --line2:#34496a;
+    --tx:#e8eef8; --tx2:#a6b6cc; --tx3:#7f8ca6; --acc:#5b9cff; --ok:#22d3a7;
+    --display:"Chakra Petch", "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+    --sans:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--tx);font:15px/1.6 var(--sans);margin:0;padding-inline:20px;padding-block:0 80px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.01em;text-wrap:balance;margin:0}
+  code,.mono{font-family:var(--mono)}
+  button{font:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+  /* Kopf */
+  .kopf{padding-block:40px 24px;display:grid;gap:14px}
+  .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+  .kopf h1{font-size:clamp(30px,5vw,44px);line-height:1.05}
+  .kopf p{margin:0;max-width:66ch;color:var(--tx2)}
+  .schritte{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .schritte li{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;color:var(--tx2)}
+  .schritte b{display:block;color:var(--tx);font-weight:600;font-size:14px}
+  .schritte code{color:var(--tx);font-size:12.5px}
+  @media (max-width:640px){.schritte{grid-template-columns:1fr}}
+
+  /* Leiste */
+  .leiste{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);
+    border-block:1px solid var(--line);padding-block:10px;margin-inline:-20px;padding-inline:20px}
+  .leiste .innen{max-width:980px;margin:0 auto;display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+  .filter{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+  .filter button{background:none;border:0;padding:5px 12px;font-size:13px;color:var(--tx2)}
+  .filter button+button{border-left:1px solid var(--line2)}
+  .filter button[aria-pressed="true"]{background:var(--panel2);color:var(--tx)}
+  .fortschritt{font:500 13px/1 var(--mono);color:var(--tx2);display:flex;align-items:center;gap:10px;margin-left:auto}
+  .fortschritt .spur{width:120px;height:4px;border-radius:2px;background:var(--line)}
+  .fortschritt .spur b{display:block;height:100%;border-radius:2px;background:var(--ok);transition:width .25s}
+  .sprung{display:flex;gap:4px;overflow-x:auto;width:100%;scrollbar-width:none}
+  .sprung a{flex:0 0 auto;text-decoration:none;color:var(--tx2);font-size:12.5px;padding:3px 9px;border-radius:5px;white-space:nowrap}
+  .sprung a:hover{background:var(--panel2);color:var(--tx)}
+
+  /* Gruppen */
+  .gruppe{padding-block:34px 6px;scroll-margin-top:100px}
+  .gruppe > header{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;margin-bottom:16px}
+  .gruppe .emo{grid-row:span 2;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:24px;
+    background:color-mix(in srgb,var(--c) 14%,var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 45%,transparent)}
+  .gruppe h2{font-size:24px;line-height:1.1;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .gruppe h2 small{font:500 12.5px/1 var(--mono);color:var(--tx3);letter-spacing:.02em}
+  .gruppe .vorlage{font-size:13px;color:var(--tx3);margin:0}
+
+  .bilder{display:grid;gap:14px}
+  .bild{--c:#5b9cff;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px 22px}
+  .bild.fertig{border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+  .bild .zeile{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  @media (max-width:720px){.bild{grid-template-columns:1fr}}
+  .ton{font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:4px;
+    color:color-mix(in srgb,var(--c) 60%,white);background:color-mix(in srgb,var(--c) 16%,transparent)}
+  .datei{font:500 13px/1 var(--mono);color:var(--tx)}
+  .test{font:500 11px/1 var(--mono);letter-spacing:.06em;color:#fbbf24;border:1px solid rgba(251,191,36,.45);padding:3px 6px;border-radius:4px}
+  .neu{font:500 11px/1 var(--mono);letter-spacing:.06em;color:#9cc2ff;border:1px solid rgba(91,156,255,.5);padding:3px 6px;border-radius:4px}
+  .bedingung{font-size:12.5px;color:var(--tx3)}
+  .gespeichert{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--tx2);cursor:pointer;user-select:none}
+  .gespeichert input{accent-color:var(--ok);width:16px;height:16px;margin:0}
+  .spalte{display:grid;gap:8px;align-content:start}
+  .etikett{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--tx3)}
+  .post{margin:0;white-space:pre-wrap;font-size:15px;line-height:1.5;color:var(--tx);
+    border-left:2px solid color-mix(in srgb,var(--c) 70%,transparent);padding:2px 0 2px 12px}
+  .post b{font-weight:600;color:color-mix(in srgb,var(--c) 45%,white)}
+  .post mark{background:rgba(91,156,255,.16);color:#bcd5ff;border-radius:3px;padding:0 3px;font-family:var(--mono);font-size:.84em}
+  .szene{margin:0;color:var(--tx2);font-size:14px}
+  .aktionen{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .kopieren{background:var(--acc);color:#06101f;border:0;border-radius:6px;padding:7px 14px;font-weight:600;font-size:13.5px}
+  .kopieren.ok{background:var(--ok)}
+  details.voll summary{cursor:pointer;font-size:13px;color:var(--tx3);list-style:none}
+  details.voll summary::-webkit-details-marker{display:none}
+  details.voll summary::before{content:"▸ "}
+  details.voll[open] summary::before{content:"▾ "}
+  details.voll pre{white-space:pre-wrap;margin:8px 0 0;font:400 12.5px/1.55 var(--mono);color:var(--tx2);
+    background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px;max-height:260px;overflow:auto}
+  .leer{color:var(--tx3);padding-block:30px;text-align:center}
+
+  /* Die zwei Ausgaben ganz unten */
+  .rahmenteil{border-top:1px solid var(--line);margin-top:44px;padding-block:30px 0;display:grid;gap:18px}
+  .rahmenteil h2{font-size:20px;margin-bottom:6px}
+  .rahmenteil p{margin:0;color:var(--tx2);font-size:14px;max-width:70ch}
+  .muster{display:grid;grid-template-columns:minmax(0,1.905fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media (max-width:640px){.muster{grid-template-columns:1fr}}
+  .muster figure{margin:0;display:grid;gap:8px}
+  .muster figcaption{font:500 12px/1 var(--mono);color:var(--tx3);letter-spacing:.04em}
+  .platzhalter{background:repeating-linear-gradient(135deg,#1a2a44 0 14px,#15233a 14px 28px);display:grid;place-items:center;color:#8fa3c2;text-align:center}
+  .karte{--c:#5b9cff;container-type:inline-size;aspect-ratio:1200/630;max-width:100%;display:grid;grid-template-columns:52.5% 1fr;border-radius:8px;overflow:hidden}
+  .karte .platzhalter{font:500 2.2cqw/1.3 var(--sans)}
+  .karte .seite{display:flex;flex-direction:column;justify-content:space-between;padding:4.5cqw 4cqw;
+    background:radial-gradient(circle at 100% 0,color-mix(in srgb,var(--c) 26%,transparent),transparent 65%),#101a2e;
+    border-left:.3cqw solid var(--c)}
+  .karte .kmarke{display:flex;align-items:center;gap:1cqw;font:600 2.3cqw/1 var(--display);color:#fff}
+  .karte .kmarke img{width:3.8cqw;height:3.8cqw;border-radius:50%}
+  .karte .ktier{font:500 2cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--c) 55%,white);margin-bottom:1.6cqw}
+  .karte .ksatz{margin:0;font:600 3.9cqw/1.17 var(--display);color:#fff;text-wrap:balance}
+  .karte .kdomain{font:500 1.7cqw/1 var(--mono);color:#8fa3c2}
+  .rahmen{--c:#5b9cff;container-type:inline-size;position:relative;aspect-ratio:1/1;max-width:100%;border-radius:8px;overflow:hidden}
+  .rahmen .platzhalter{position:absolute;inset:0;font:500 4.2cqw/1.3 var(--sans)}
+  .rahmen .linie{position:absolute;inset:3.2%;border:max(1.5px,.32cqw) solid color-mix(in srgb,var(--c) 75%,white 10%);
+    border-radius:2.6cqw;box-shadow:0 0 2cqw color-mix(in srgb,var(--c) 45%,transparent)}
+  .rahmen .marke{position:absolute;top:3.2%;left:8%;transform:translateY(-50%);display:flex;align-items:center;gap:1.8cqw;
+    padding:0 2.2cqw;background:#15233a;font:600 4.8cqw/1 var(--display);color:#fff;letter-spacing:.02em}
+  .rahmen .marke img{width:8cqw;height:8cqw;border-radius:50%}
+  .rahmen .domain{position:absolute;bottom:3.2%;right:8%;transform:translateY(50%);padding:0 2cqw;background:#15233a;
+    font:500 2.9cqw/1 var(--mono);color:color-mix(in srgb,var(--c) 55%,white)}
+  /* Rahmen-Werkzeug */
+  .werkzeug{border-top:1px solid var(--line);margin-top:44px;padding-block:30px 0;display:grid;gap:16px}
+  .werkzeug h2{font-size:20px;margin-bottom:6px}
+  .werkzeug p{margin:0;color:var(--tx2);font-size:14px;max-width:70ch}
+  .wz{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:start}
+  @media (max-width:720px){.wz{grid-template-columns:1fr}}
+  .wzform{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .wzablage{display:block;border:1.5px dashed var(--line2);border-radius:8px;padding:18px;text-align:center;color:var(--tx2);cursor:pointer;font-size:14px;overflow-wrap:anywhere}
+  .wzablage.drueber{border-color:var(--acc);color:var(--tx)}
+  .wzablage input{display:none}
+  .wzfarben{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .wzfarben button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;padding:0;background:var(--c)}
+  .wzfarben button[aria-pressed="true"]{border-color:#fff}
+  .wzfarben input[type=color]{width:34px;height:30px;border:1px solid var(--line2);border-radius:6px;background:none;padding:0 2px}
+  .wzform select{background:var(--panel2);color:var(--tx);border:1px solid var(--line2);border-radius:6px;padding:6px 8px;font:inherit;max-width:100%}
+  .wzform .etikett{display:block;margin-bottom:6px}
+  .wzbild{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}
+  .wzbild img{display:block;width:100%;border-radius:6px}
+  .wzbild .leer{padding-block:60px}
+  .wzhinweis{font-size:13px;color:var(--tx3)}
+  @media (max-width:520px){.gespeichert,.fortschritt{margin-left:0}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="kopf">
+    <div class="eyebrow">ETN Radar · Teilen-Vorschau</div>
+    <h1>Share-Kit</h1>
+    <p>Jede Karte ist ein Bild: links der Post, der rausgeht, rechts die Bildidee dazu. Der blaue Knopf kopiert den fertigen Grok-Prompt.</p>
+    <ol class="schritte">
+      <li><b>Kopieren</b>„Prompt kopieren“ auf der Karte drücken</li>
+      <li><b>In Grok erzeugen</b>Format <code>1:1</code> wählen (nur Titelbild <code>16:9</code>), einfügen, beste Variante aussuchen</li>
+      <li><b>Speichern</b>unter dem Dateinamen der Karte in <code>Bilder/share-roh/</code>, dann abhaken</li>
+    </ol>
+  </header>
+</div>
+
+<nav class="leiste" aria-label="Filter und Sprungmarken">
+  <div class="innen">
+    <div class="filter" role="group" aria-label="Anzeige">
+      <button type="button" id="fAlle" data-f="alle" aria-pressed="true">Alle · 41</button>
+      <button type="button" id="fTest" data-f="test" aria-pressed="false" hidden>Als Nächstes</button>
+      <button type="button" id="fOffen" data-f="offen" aria-pressed="false">Noch offen</button>
+    </div>
+    <div class="fortschritt"><span id="zaehler">0 / 41 gespeichert</span><span class="spur"><b id="balken" style="width:0"></b></span></div>
+    <div class="sprung" id="sprung"><a href="#g-banner" data-ziel="banner">📡 Titelbild</a><a href="#g-humpback" data-ziel="humpback">🐋 Humpback Whale</a><a href="#g-whale" data-ziel="whale">🐳 Whale</a><a href="#g-shark" data-ziel="shark">🦈 Shark</a><a href="#g-dolphin" data-ziel="dolphin">🐬 Dolphin</a><a href="#g-fish" data-ziel="fish">🐟 Fish</a><a href="#g-octopus" data-ziel="octopus">🐙 Octopus</a><a href="#g-crab" data-ziel="crab">🦀 Crab</a><a href="#g-shrimp" data-ziel="shrimp">🦐 Shrimp</a><a href="#g-plankton" data-ziel="plankton">🦠 Plankton</a><a href="#g-microbe" data-ziel="microbe">🧫 Microbe</a><a href="#g-dust" data-ziel="dust">💨 Dust</a><a href="#g-week" data-ziel="week">🗓️ Wochenrückblick</a><a href="#g-whatif" data-ziel="whatif">🧮 Marketcap-Vergleich</a></div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <div id="gruppen"><section class="gruppe" id="g-banner" style="--c:#a78bfa"><header><div class="emo" aria-hidden="true">📡</div><h2>Titelbild <small>Startseite</small></h2><p class="vorlage">Vorschau für jeden Link ohne eigenes Bild.</p></header><div class="bilder"><article class="bild" style="--c:#a78bfa"><div class="zeile"><span class="ton">Titelbild</span><code class="datei">banner</code><label class="gespeichert" for="ok-banner"><input type="checkbox" id="ok-banner" data-ok="banner"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post"><b>ETN Radar – Electroneum whale &amp; migration tracker</b>
+Who holds the ETN, which whales wake up, and how much is still waiting in the migration bridge – live.</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A lone figure stands in a small boat on a dark, calm ocean at night, looking up at a huge glowing radar screen projected into the sky above the water. On the radar: blips shaped like a whale, sharks, dolphins and schools of fish. Below the surface, the real silhouettes of those animals glide through the dark water, lit in blue and violet. A small lightning-bolt glint pulses at the radar's centre.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-banner" data-kopie="banner">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A lone figure stands in a small boat on a dark, calm ocean at night, looking up at a huge glowing radar screen projected into the sky above the water. On the radar: blips shaped like a whale, sharks, dolphins and schools of fish. Below the surface, the real silhouettes of those animals glide through the dark water, lit in blue and violet. A small lightning-bolt glint pulses at the radar's centre.
+
+Epic cinematic concept art, glowing light, inviting and mysterious, highly detailed. Accent colour: electric blue and soft violet. Wide 16:9 format. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-humpback" style="--c:#a78bfa"><header><div class="emo" aria-hidden="true">🐋</div><h2>Humpback Whale <small>ab 25 Mio. ETN · als Buckelwal</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#a78bfa"><div class="zeile"><span class="ton">Stolz</span><code class="datei">humpback-proud</code><label class="gespeichert" for="ok-humpback-proud"><input type="checkbox" id="ok-humpback-proud" data-ok="humpback-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐋 I'm a Humpback Whale on the Electroneum Smart Chain - <b>only a handful of us live this deep. The ocean goes quiet when we move.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Deep ocean abyss, dramatic three-quarter side view from slightly below. A colossal humpback whale glides out of the darkness and fills about half of the frame, unmistakably a humpback: very long white-edged pectoral fins spread wide, knobbly head, grooved throat pleats, a huge tail fluke. Everything around it has stopped: a huge school of silver fish frozen mid-turn in a ring around it, jellyfish hanging motionless. Shafts of violet light fall from far above onto its scarred, barnacled skin. Far away in the dark, three other giant whale silhouettes are faintly visible.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-humpback-proud" data-kopie="humpback-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Deep ocean abyss, dramatic three-quarter side view from slightly below. A colossal humpback whale glides out of the darkness and fills about half of the frame, unmistakably a humpback: very long white-edged pectoral fins spread wide, knobbly head, grooved throat pleats, a huge tail fluke. Everything around it has stopped: a huge school of silver fish frozen mid-turn in a ring around it, jellyfish hanging motionless. Shafts of violet light fall from far above onto its scarred, barnacled skin. Far away in the dark, three other giant whale silhouettes are faintly visible.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: soft violet. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#a78bfa"><div class="zeile"><span class="ton">Lustig</span><code class="datei">humpback-funny</code><label class="gespeichert" for="ok-humpback-funny"><input type="checkbox" id="ok-humpback-funny" data-ok="humpback-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐋 I'm a Humpback Whale on the Electroneum Smart Chain - <b>I don't check the price. The price checks on me.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Bright violet-blue water just below the surface. A giant humpback whale drifts calmly in side view, its whole long streamlined body visible from its knobbly head to its tail fluke, eyes peacefully closed, a serene little smile, completely unbothered. The whale has exactly two long pectoral fins, both relaxed along its body, and nothing else sticks out of it. Right in front of the whale's face hovers a small silver-grey trading device with a tiny propeller on top and two thin metal robot arms of its own, so it clearly stands out from the purple whale. The device has a nervous cartoon face on its screen, is sweating drops of water, shows a bright green zigzag chart line going up with a green arrow, and taps the whale's cheek with one of its own metal arms to check whether it is awake. The whale does not react at all.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-humpback-funny" data-kopie="humpback-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Bright violet-blue water just below the surface. A giant humpback whale drifts calmly in side view, its whole long streamlined body visible from its knobbly head to its tail fluke, eyes peacefully closed, a serene little smile, completely unbothered. The whale has exactly two long pectoral fins, both relaxed along its body, and nothing else sticks out of it. Right in front of the whale's face hovers a small silver-grey trading device with a tiny propeller on top and two thin metal robot arms of its own, so it clearly stands out from the purple whale. The device has a nervous cartoon face on its screen, is sweating drops of water, shows a bright green zigzag chart line going up with a green arrow, and taps the whale's cheek with one of its own metal arms to check whether it is awake. The whale does not react at all.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: soft violet. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#a78bfa"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">humpback-calm</code><label class="gespeichert" for="ok-humpback-calm"><input type="checkbox" id="ok-humpback-calm" data-ok="humpback-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐋 I'm a Humpback Whale on the Electroneum Smart Chain - <b>deep water, long breath, zero rush.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Bright, clear sunlit water: a humpback whale mother glides slowly through wide beams of sunlight with her calf swimming close beside her, both large and clearly recognisable from the side, knobbly heads and long white-edged pectoral fins relaxed. A sea turtle and a loose school of silver fish drift along with them, and a few bubbles rise lazily toward the shimmering surface.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-humpback-calm" data-kopie="humpback-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Bright, clear sunlit water: a humpback whale mother glides slowly through wide beams of sunlight with her calf swimming close beside her, both large and clearly recognisable from the side, knobbly heads and long white-edged pectoral fins relaxed. A sea turtle and a loose school of silver fish drift along with them, and a few bubbles rise lazily toward the shimmering surface.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: soft violet. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-whale" style="--c:#5b9cff"><header><div class="emo" aria-hidden="true">🐳</div><h2>Whale <small>ab 10 Mio. ETN · als Blauwal</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Stolz</span><code class="datei">whale-proud</code><label class="gespeichert" for="ok-whale-proud"><input type="checkbox" id="ok-whale-proud" data-ok="whale-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐳 I'm a Whale on the Electroneum Smart Chain - <b>when I surface, the whole chain feels the wave.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Night ocean under breaking storm clouds. A massive blue whale surges up through the surface in a powerful lunge, its broad flat head and the front of its enormous sleek body rising out of the water, sheets of water pouring off its smooth mottled blue-grey skin, lit by electric-blue lightning. The force sends a giant ring wave racing across the sea, and along the horizon a long chain of glowing buoys lights up one after another as the wave reaches them. It is clearly a blue whale, not a humpback: smooth skin without knobs or barnacles, a wide U-shaped head, small pectoral fins.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whale-proud" data-kopie="whale-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Night ocean under breaking storm clouds. A massive blue whale surges up through the surface in a powerful lunge, its broad flat head and the front of its enormous sleek body rising out of the water, sheets of water pouring off its smooth mottled blue-grey skin, lit by electric-blue lightning. The force sends a giant ring wave racing across the sea, and along the horizon a long chain of glowing buoys lights up one after another as the wave reaches them. It is clearly a blue whale, not a humpback: smooth skin without knobs or barnacles, a wide U-shaped head, small pectoral fins.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Lustig</span><code class="datei">whale-funny</code><label class="gespeichert" for="ok-whale-funny"><input type="checkbox" id="ok-whale-funny" data-ok="whale-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐳 I'm a Whale on the Electroneum Smart Chain - <b>relax, I didn't sell. I just rolled over in my sleep.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">On the sea floor, a giant whale sleeps in an enormous bed, wearing a striped nightcap, blanket half kicked off, a stream of bubbles snoring from its mouth. It has just rolled over, and the wave from that tiny movement sends a whole village of little fish tumbling: some cling to seaweed, one faints dramatically, one drops its shopping. A small crab next to the bed holds a claw to its mouth: shhh.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whale-funny" data-kopie="whale-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>On the sea floor, a giant whale sleeps in an enormous bed, wearing a striped nightcap, blanket half kicked off, a stream of bubbles snoring from its mouth. It has just rolled over, and the wave from that tiny movement sends a whole village of little fish tumbling: some cling to seaweed, one faints dramatically, one drops its shopping. A small crab next to the bed holds a claw to its mouth: shhh.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">whale-calm</code><label class="gespeichert" for="ok-whale-calm"><input type="checkbox" id="ok-whale-calm" data-ok="whale-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐳 I'm a Whale on the Electroneum Smart Chain - <b>eight figures deep and in no hurry.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A blue whale glides slowly along a vast underwater cliff, large in the foreground and seen from the side, its extremely long, slender body stretching across most of the frame, the gigantic rock wall rising behind it. Bright sun rays stream down from the surface onto its back, and a school of silver fish and a manta ray glide along beside it. Quiet and patient. It is clearly a blue whale, not a humpback: smooth mottled blue-grey skin without knobs or barnacles, a wide flat U-shaped head, small pectoral fins and a tiny dorsal fin far back.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whale-calm" data-kopie="whale-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A blue whale glides slowly along a vast underwater cliff, large in the foreground and seen from the side, its extremely long, slender body stretching across most of the frame, the gigantic rock wall rising behind it. Bright sun rays stream down from the surface onto its back, and a school of silver fish and a manta ray glide along beside it. Quiet and patient. It is clearly a blue whale, not a humpback: smooth mottled blue-grey skin without knobs or barnacles, a wide flat U-shaped head, small pectoral fins and a tiny dorsal fin far back.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-shark" style="--c:#22d3a7"><header><div class="emo" aria-hidden="true">🦈</div><h2>Shark <small>ab 5 Mio. ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#22d3a7"><div class="zeile"><span class="ton">Stolz</span><code class="datei">shark-proud</code><label class="gespeichert" for="ok-shark-proud"><input type="checkbox" id="ok-shark-proud" data-ok="shark-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦈 I'm a Shark on the Electroneum Smart Chain - <b>calm on the surface, sharp underneath.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Dramatic underwater view in deep teal-blue water: far above, the sea surface is perfectly calm and glassy, with strong shafts of light cutting down through it. Just below, a sleek great white shark glides past in a powerful three-quarter side view, large and in razor-sharp focus, mouth closed, torpedo-shaped body with realistic proportions, tall dorsal fin and crescent tail, natural dark eye, every muscle tense. Photoreal like a nature documentary: no cartoon look, no glowing eyes, no open grin.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shark-proud" data-kopie="shark-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Dramatic underwater view in deep teal-blue water: far above, the sea surface is perfectly calm and glassy, with strong shafts of light cutting down through it. Just below, a sleek great white shark glides past in a powerful three-quarter side view, large and in razor-sharp focus, mouth closed, torpedo-shaped body with realistic proportions, tall dorsal fin and crescent tail, natural dark eye, every muscle tense. Photoreal like a nature documentary: no cartoon look, no glowing eyes, no open grin.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: teal-green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#22d3a7"><div class="zeile"><span class="ton">Lustig</span><code class="datei">shark-funny</code><label class="gespeichert" for="ok-shark-funny"><input type="checkbox" id="ok-shark-funny" data-ok="shark-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦈 I'm a Shark on the Electroneum Smart Chain - <b>the whales think they're in charge. Cute.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An underwater boardroom made of coral. Three huge whales wearing tiny neckties sit at a long stone table, very serious, pointing at a flip chart covered in doodles. At the far end of the table, a shark lounges sideways across its chair, big and in sharp focus, smirking straight at the camera with one eyebrow raised.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shark-funny" data-kopie="shark-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An underwater boardroom made of coral. Three huge whales wearing tiny neckties sit at a long stone table, very serious, pointing at a flip chart covered in doodles. At the far end of the table, a shark lounges sideways across its chair, big and in sharp focus, smirking straight at the camera with one eyebrow raised.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: teal-green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#22d3a7"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">shark-calm</code><label class="gespeichert" for="ok-shark-calm"><input type="checkbox" id="ok-shark-calm" data-ok="shark-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦈 I'm a Shark on the Electroneum Smart Chain - <b>patient. Circling. Never far from the action.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A reef shark circles slowly and gracefully above a colourful sunlit coral reef full of small fish, large in the foreground in a gentle curve, seen slightly from above. Sun rays dance across the sand and the coral, and a sea turtle rests calmly below.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shark-calm" data-kopie="shark-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A reef shark circles slowly and gracefully above a colourful sunlit coral reef full of small fish, large in the foreground in a gentle curve, seen slightly from above. Sun rays dance across the sand and the coral, and a sea turtle rests calmly below.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: teal-green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-dolphin" style="--c:#4ade80"><header><div class="emo" aria-hidden="true">🐬</div><h2>Dolphin <small>ab 2 Mio. ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#4ade80"><div class="zeile"><span class="ton">Stolz</span><code class="datei">dolphin-proud</code><label class="gespeichert" for="ok-dolphin-proud"><input type="checkbox" id="ok-dolphin-proud" data-ok="dolphin-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐬 I'm a Dolphin on the Electroneum Smart Chain - <b>smart money swims in pods.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Golden sunset over the open sea: a tight pod of dolphins leaps out of a huge rolling wave in perfect synchronised formation like a flying squadron, glowing spray and droplets frozen in the warm light. The lead dolphin is high in the air in razor-sharp focus, eye fixed on the horizon.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dolphin-proud" data-kopie="dolphin-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Golden sunset over the open sea: a tight pod of dolphins leaps out of a huge rolling wave in perfect synchronised formation like a flying squadron, glowing spray and droplets frozen in the warm light. The lead dolphin is high in the air in razor-sharp focus, eye fixed on the horizon.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: fresh green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#4ade80"><div class="zeile"><span class="ton">Lustig</span><code class="datei">dolphin-funny</code><label class="gespeichert" for="ok-dolphin-funny"><input type="checkbox" id="ok-dolphin-funny" data-ok="dolphin-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐬 I'm a Dolphin on the Electroneum Smart Chain - <b>not the biggest in the ocean. Definitely having the most fun.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A dolphin rides a small surfboard in the foreground, large and in sharp focus, pulling off a joyful spinning trick and grinning from ear to ear, glowing droplets splashing everywhere. A little further behind it, with clear water between them, a huge stern-faced whale swims slowly past and looks deeply unimpressed.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dolphin-funny" data-kopie="dolphin-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A dolphin rides a small surfboard in the foreground, large and in sharp focus, pulling off a joyful spinning trick and grinning from ear to ear, glowing droplets splashing everywhere. A little further behind it, with clear water between them, a huge stern-faced whale swims slowly past and looks deeply unimpressed.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: fresh green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#4ade80"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">dolphin-calm</code><label class="gespeichert" for="ok-dolphin-calm"><input type="checkbox" id="ok-dolphin-calm" data-ok="dolphin-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐬 I'm a Dolphin on the Electroneum Smart Chain - <b>quick, clever, and keeping pace with the giants.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Bright sunlit open water, side view: a bottlenose dolphin swims in the foreground, large and in sharp focus, its whole body clearly visible, relaxed and looking forward. Further behind it, with plenty of open water between them and not touching, a gigantic whale swims in exactly the same direction at the same pace, softly out of focus. Sun rays stream down through calm blue-green water, a few small fish drift past.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dolphin-calm" data-kopie="dolphin-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Bright sunlit open water, side view: a bottlenose dolphin swims in the foreground, large and in sharp focus, its whole body clearly visible, relaxed and looking forward. Further behind it, with plenty of open water between them and not touching, a gigantic whale swims in exactly the same direction at the same pace, softly out of focus. Sun rays stream down through calm blue-green water, a few small fish drift past.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: fresh green. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-fish" style="--c:#fbbf24"><header><div class="emo" aria-hidden="true">🐟</div><h2>Fish <small>ab 1 Mio. ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Stolz</span><code class="datei">fish-proud</code><label class="gespeichert" for="ok-fish-proud"><input type="checkbox" id="ok-fish-proud" data-ok="fish-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐟 I'm a Fish on the Electroneum Smart Chain - <b>seven figures of ETN and still swimming upstream.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A big sailfish races through bright sunlit open ocean water, side view, large in the foreground and filling most of the frame, its tall fan-shaped dorsal fin fully raised, vivid blue stripes on its silver body, mouth closed. Small fish scatter out of its way and sun rays cut through the water behind it. Photoreal like a nature documentary, full of speed.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-fish-proud" data-kopie="fish-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A big sailfish races through bright sunlit open ocean water, side view, large in the foreground and filling most of the frame, its tall fan-shaped dorsal fin fully raised, vivid blue stripes on its silver body, mouth closed. Small fish scatter out of its way and sun rays cut through the water behind it. Photoreal like a nature documentary, full of speed.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: warm golden sunlight. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Lustig</span><code class="datei">fish-funny</code><label class="gespeichert" for="ok-fish-funny"><input type="checkbox" id="ok-fish-funny" data-ok="fish-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐟 I'm a Fish on the Electroneum Smart Chain - <b>officially a millionaire. In ETN. Please don't do the conversion.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A small golden fish dressed as a tycoon, with a tiny top hat, a monocle and a pearl necklace, sits on a velvet throne in a sunken treasure room. But the treasure is a very modest little pile of coins, and a worried shrimp accountant next to it counts the coins on a tiny abacus. The fish poses proudly anyway.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-fish-funny" data-kopie="fish-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A small golden fish dressed as a tycoon, with a tiny top hat, a monocle and a pearl necklace, sits on a velvet throne in a sunken treasure room. But the treasure is a very modest little pile of coins, and a worried shrimp accountant next to it counts the coins on a tiny abacus. The fish poses proudly anyway.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: warm golden sunlight. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">fish-calm</code><label class="gespeichert" for="ok-fish-calm"><input type="checkbox" id="ok-fish-calm" data-ok="fish-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐟 I'm a Fish on the Electroneum Smart Chain - <b>one million reasons to keep swimming.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A bright sunlit coral reef in clear turquoise water: a large colourful parrotfish glides calmly over the corals in side view, seen from a little distance, mouth closed, its blue, green and orange scales catching the light. Two smaller reef fish drift along beside it and sun ripples dance over the reef. Photoreal like an underwater nature photo.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-fish-calm" data-kopie="fish-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A bright sunlit coral reef in clear turquoise water: a large colourful parrotfish glides calmly over the corals in side view, seen from a little distance, mouth closed, its blue, green and orange scales catching the light. Two smaller reef fish drift along beside it and sun ripples dance over the reef. Photoreal like an underwater nature photo.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: warm golden sunlight. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-octopus" style="--c:#fb923c"><header><div class="emo" aria-hidden="true">🐙</div><h2>Octopus <small>ab 500.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#fb923c"><div class="zeile"><span class="ton">Stolz</span><code class="datei">octopus-proud</code><label class="gespeichert" for="ok-octopus-proud"><input type="checkbox" id="ok-octopus-proud" data-ok="octopus-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐙 I'm an Octopus on the Electroneum Smart Chain - <b>eight arms, zero paper hands.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An octopus stands tall on top of a sunken treasure chest in a fierce underwater current, all eight arms wrapped firmly around a big glowing coin engraved with a lightning bolt. Shells, seaweed and small fish are swept past it, but it does not move an inch, eyes fierce and determined. Heroic low angle, dramatic warm orange light falling from above.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-octopus-proud" data-kopie="octopus-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An octopus stands tall on top of a sunken treasure chest in a fierce underwater current, all eight arms wrapped firmly around a big glowing coin engraved with a lightning bolt. Shells, seaweed and small fish are swept past it, but it does not move an inch, eyes fierce and determined. Heroic low angle, dramatic warm orange light falling from above.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fb923c"><div class="zeile"><span class="ton">Lustig</span><code class="datei">octopus-funny</code><label class="gespeichert" for="ok-octopus-funny"><input type="checkbox" id="ok-octopus-funny" data-ok="octopus-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐙 I'm an Octopus on the Electroneum Smart Chain - <b>eight arms and not one of them can find the sell button.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An octopus at a cluttered home-office desk on the sea floor, wearing headphones and using all eight arms at once: typing, sipping coffee, reading a book, watering a plant, holding a snack, petting a tiny crab. A big red button on the corner of the desk sits completely ignored, overgrown with seaweed and a tiny cobweb. The octopus looks very pleased with itself.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-octopus-funny" data-kopie="octopus-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An octopus at a cluttered home-office desk on the sea floor, wearing headphones and using all eight arms at once: typing, sipping coffee, reading a book, watering a plant, holding a snack, petting a tiny crab. A big red button on the corner of the desk sits completely ignored, overgrown with seaweed and a tiny cobweb. The octopus looks very pleased with itself.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fb923c"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">octopus-calm</code><label class="gespeichert" for="ok-octopus-calm"><input type="checkbox" id="ok-octopus-calm" data-ok="octopus-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🐙 I'm an Octopus on the Electroneum Smart Chain - <b>clever, flexible, and holding on with everything I've got.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Close-up in a sunlit coral garden: an octopus rests perfectly camouflaged against orange coral, only its calm, intelligent eye clearly visible and looking straight at the viewer, its arms curled softly around a small glowing coin. Small colourful fish swim past and sun ripples dance over the coral.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-octopus-calm" data-kopie="octopus-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Close-up in a sunlit coral garden: an octopus rests perfectly camouflaged against orange coral, only its calm, intelligent eye clearly visible and looking straight at the viewer, its arms curled softly around a small glowing coin. Small colourful fish swim past and sun ripples dance over the coral.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-crab" style="--c:#f97316"><header><div class="emo" aria-hidden="true">🦀</div><h2>Crab <small>ab 200.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#f97316"><div class="zeile"><span class="ton">Stolz</span><code class="datei">crab-proud</code><label class="gespeichert" for="ok-crab-proud"><input type="checkbox" id="ok-crab-proud" data-ok="crab-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦀 I'm a Crab on the Electroneum Smart Chain - <b>hard shell, strong grip, not letting go.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A crab stands on a black rock at the edge of the sea at a stormy sunset while a massive wave crashes over it, spray exploding in fiery orange and gold light. It braces with both claws raised high, shell gleaming, completely unmoved. Low angle, heroic.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-crab-proud" data-kopie="crab-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A crab stands on a black rock at the edge of the sea at a stormy sunset while a massive wave crashes over it, spray exploding in fiery orange and gold light. It braces with both claws raised high, shell gleaming, completely unmoved. Low angle, heroic.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: deep orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#f97316"><div class="zeile"><span class="ton">Lustig</span><code class="datei">crab-funny</code><label class="gespeichert" for="ok-crab-funny"><input type="checkbox" id="ok-crab-funny" data-ok="crab-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦀 I'm a Crab on the Electroneum Smart Chain - <b>sideways market? Crabs were literally built for this.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An underwater amusement park. In the background, a wild rollercoaster with a glowing orange track shoots steeply up and plunges down in loops, packed with screaming fish holding on for dear life. In the foreground, big and in sharp focus, a crab strolls calmly sideways along a perfectly flat, straight path in the sand, wearing sunglasses, sipping from a coconut with a straw and giving a relaxed thumbs-up with its claw.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-crab-funny" data-kopie="crab-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An underwater amusement park. In the background, a wild rollercoaster with a glowing orange track shoots steeply up and plunges down in loops, packed with screaming fish holding on for dear life. In the foreground, big and in sharp focus, a crab strolls calmly sideways along a perfectly flat, straight path in the sand, wearing sunglasses, sipping from a coconut with a straw and giving a relaxed thumbs-up with its claw.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: deep orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#f97316"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">crab-calm</code><label class="gespeichert" for="ok-crab-calm"><input type="checkbox" id="ok-crab-calm" data-ok="crab-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦀 I'm a Crab on the Electroneum Smart Chain - <b>sideways is still forward.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">On a sunlit sandy sea floor in clear turquoise shallow water, a crab walks steadily sideways in the foreground, sharp and clearly visible, leaving a long neat trail of footprints in the sand behind it. Sun ripples dance across the sand, with a starfish and a few small fish nearby.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-crab-calm" data-kopie="crab-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>On a sunlit sandy sea floor in clear turquoise shallow water, a crab walks steadily sideways in the foreground, sharp and clearly visible, leaving a long neat trail of footprints in the sand behind it. Sun ripples dance across the sand, with a starfish and a few small fish nearby.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: deep orange. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-shrimp" style="--c:#f4635e"><header><div class="emo" aria-hidden="true">🦐</div><h2>Shrimp <small>ab 100.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#f4635e"><div class="zeile"><span class="ton">Stolz</span><code class="datei">shrimp-proud</code><label class="gespeichert" for="ok-shrimp-proud"><input type="checkbox" id="ok-shrimp-proud" data-ok="shrimp-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦐 I'm a Shrimp on the Electroneum Smart Chain - <b>six figures and punching above my weight.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A championship boxing ring on the sea floor, spotlights cutting through the water. A small shrimp stands in the centre of the ring, large in the frame, red boxing gloves raised in victory and a plain golden champion's belt without any writing around its body, while a handful of different fish cheer in the background, softly out of focus. In the corner, a much bigger fish sits dazed on its stool.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shrimp-proud" data-kopie="shrimp-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A championship boxing ring on the sea floor, spotlights cutting through the water. A small shrimp stands in the centre of the ring, large in the frame, red boxing gloves raised in victory and a plain golden champion's belt without any writing around its body, while a handful of different fish cheer in the background, softly out of focus. In the corner, a much bigger fish sits dazed on its stool.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: coral red. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#f4635e"><div class="zeile"><span class="ton">Lustig</span><code class="datei">shrimp-funny</code><label class="gespeichert" for="ok-shrimp-funny"><input type="checkbox" id="ok-shrimp-funny" data-ok="shrimp-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦐 I'm a Shrimp on the Electroneum Smart Chain - <b>the whales' favourite snack? Not today.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Forced perspective: in the foreground, large and in sharp focus, a small shrimp in a little helmet stands on a rock and holds up one claw like a traffic cop. A little further behind it, a giant whale with its mouth open to swallow a cloud of krill freezes mid-gulp, cross-eyed and confused.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shrimp-funny" data-kopie="shrimp-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Forced perspective: in the foreground, large and in sharp focus, a small shrimp in a little helmet stands on a rock and holds up one claw like a traffic cop. A little further behind it, a giant whale with its mouth open to swallow a cloud of krill freezes mid-gulp, cross-eyed and confused.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: coral red. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#f4635e"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">shrimp-calm</code><label class="gespeichert" for="ok-shrimp-calm"><input type="checkbox" id="ok-shrimp-calm" data-ok="shrimp-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦐 I'm a Shrimp on the Electroneum Smart Chain - <b>small on my own, but the ocean runs on us.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Sunlit shallow reef: in the foreground, a few coral-red shrimp sit together on a colourful coral, large and in sharp focus, antennae relaxed. Behind them, more shrimp spread across the reef, each one small, but together they cover it like a living red carpet that fades into the soft distance. Sun rays stream down through clear water.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-shrimp-calm" data-kopie="shrimp-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Sunlit shallow reef: in the foreground, a few coral-red shrimp sit together on a colourful coral, large and in sharp focus, antennae relaxed. Behind them, more shrimp spread across the reef, each one small, but together they cover it like a living red carpet that fades into the soft distance. Sun rays stream down through clear water.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: coral red. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-plankton" style="--c:#94a3b8"><header><div class="emo" aria-hidden="true">🦠</div><h2>Plankton <small>ab 25.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#94a3b8"><div class="zeile"><span class="ton">Stolz</span><code class="datei">plankton-proud</code><label class="gespeichert" for="ok-plankton-proud"><input type="checkbox" id="ok-plankton-proud" data-ok="plankton-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦠 I'm Plankton on the Electroneum Smart Chain - <b>no plankton, no whales. Simple biology.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A giant whale swims through the night ocean, but its entire body is made of billions of glowing silver plankton particles held together in its shape, like a living constellation. Loose plankton drift off its tail.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-plankton-proud" data-kopie="plankton-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A giant whale swims through the night ocean, but its entire body is made of billions of glowing silver plankton particles held together in its shape, like a living constellation. Loose plankton drift off its tail.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: silver-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#94a3b8"><div class="zeile"><span class="ton">Lustig</span><code class="datei">plankton-funny</code><label class="gespeichert" for="ok-plankton-funny"><input type="checkbox" id="ok-plankton-funny" data-ok="plankton-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦠 I'm Plankton on the Electroneum Smart Chain - <b>whales eat plankton? I'd like to see them try.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Forced perspective: in the foreground, large and in sharp focus, a tiny glowing plankton creature wearing a miniature karate headband stands in a fighting pose on a pebble, staring down a giant whale. Behind it, the whale peers at it cross-eyed and seems a little scared.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-plankton-funny" data-kopie="plankton-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Forced perspective: in the foreground, large and in sharp focus, a tiny glowing plankton creature wearing a miniature karate headband stands in a fighting pose on a pebble, staring down a giant whale. Behind it, the whale peers at it cross-eyed and seems a little scared.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: silver-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#94a3b8"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">plankton-calm</code><label class="gespeichert" for="ok-plankton-calm"><input type="checkbox" id="ok-plankton-calm" data-ok="plankton-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🦠 I'm Plankton on the Electroneum Smart Chain - <b>the whole food chain is built on us.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Forced perspective in bright sunlit water: in the foreground, large and in sharp focus like a macro photo, a cloud of tiny glowing silver-blue plankton drifts in the light. Behind it, softly out of focus and at increasing distance, a small fish, a larger fish, a shark and finally a giant whale swim above, as if the whole food chain rises from the plankton. Calm and serene.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-plankton-calm" data-kopie="plankton-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Forced perspective in bright sunlit water: in the foreground, large and in sharp focus like a macro photo, a cloud of tiny glowing silver-blue plankton drifts in the light. Behind it, softly out of focus and at increasing distance, a small fish, a larger fish, a shark and finally a giant whale swim above, as if the whole food chain rises from the plankton. Calm and serene.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: silver-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-microbe" style="--c:#64748b"><header><div class="emo" aria-hidden="true">🧫</div><h2>Microbe <small>ab 5.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#64748b"><div class="zeile"><span class="ton">Stolz</span><code class="datei">microbe-proud</code><label class="gespeichert" for="ok-microbe-proud"><input type="checkbox" id="ok-microbe-proud" data-ok="microbe-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🧫 I'm a Microbe on the Electroneum Smart Chain - <b>microscopic, but I'm on the chain.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Extreme macro shot as if through a microscope lens: a single tiny microbe sits proudly on top of one link of a massive glowing chain made of light that stretches across the frame into the distance. Bokeh, crisp detail, dramatic sense of scale.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-microbe-proud" data-kopie="microbe-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Extreme macro shot as if through a microscope lens: a single tiny microbe sits proudly on top of one link of a massive glowing chain made of light that stretches across the frame into the distance. Bokeh, crisp detail, dramatic sense of scale.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: cool steel-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#64748b"><div class="zeile"><span class="ton">Lustig</span><code class="datei">microbe-funny</code><label class="gespeichert" for="ok-microbe-funny"><input type="checkbox" id="ok-microbe-funny" data-ok="microbe-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🧫 I'm a Microbe on the Electroneum Smart Chain - <b>zoom in. No, more. More. There I am.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A huge round magnifying glass hovers over dark blue water and fills most of the frame. Outside the lens there is only empty water. Inside the lens, hugely enlarged and in sharp focus, a tiny glowing microbe waves enthusiastically with both little arms, beaming, clearly delighted to be found.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-microbe-funny" data-kopie="microbe-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A huge round magnifying glass hovers over dark blue water and fills most of the frame. Outside the lens there is only empty water. Inside the lens, hugely enlarged and in sharp focus, a tiny glowing microbe waves enthusiastically with both little arms, beaming, clearly delighted to be found.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: cool steel-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#64748b"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">microbe-calm</code><label class="gespeichert" for="ok-microbe-calm"><input type="checkbox" id="ok-microbe-calm" data-ok="microbe-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🧫 I'm a Microbe on the Electroneum Smart Chain - <b>everyone starts somewhere. This is my somewhere.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Bright, clear blue water above a sunlit sea floor. On a pebble in the foreground sits a single glowing microbe, shown large like a close-up under a microscope, softly luminous with fine translucent detail. A single warm sun ray reaches down and touches it, while tiny bubbles and particles drift around. Quiet and hopeful.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-microbe-calm" data-kopie="microbe-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Bright, clear blue water above a sunlit sea floor. On a pebble in the foreground sits a single glowing microbe, shown large like a close-up under a microscope, softly luminous with fine translucent detail. A single warm sun ray reaches down and touches it, while tiny bubbles and particles drift around. Quiet and hopeful.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: cool steel-blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-dust" style="--c:#7b8aa3"><header><div class="emo" aria-hidden="true">💨</div><h2>Dust <small>unter 5.000 ETN</small></h2><p class="vorlage">Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.</p></header><div class="bilder"><article class="bild" style="--c:#7b8aa3"><div class="zeile"><span class="ton">Stolz</span><code class="datei">dust-proud</code><label class="gespeichert" for="ok-dust-proud"><input type="checkbox" id="ok-dust-proud" data-ok="dust-proud"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">💨 I'm Dust on the Electroneum Smart Chain - <b>every whale started as a speck.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Extreme macro photo on a dark sea floor: a single glowing speck of dust rests on a dark pebble, sharp and bright like a small star with a soft halo, and fills a third of the frame. One narrow ray of light reaches down to it from far above. Up near the distant surface, tiny and no bigger than the speck itself, the silhouette of a whale glides past.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dust-proud" data-kopie="dust-proud">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Extreme macro photo on a dark sea floor: a single glowing speck of dust rests on a dark pebble, sharp and bright like a small star with a soft halo, and fills a third of the frame. One narrow ray of light reaches down to it from far above. Up near the distant surface, tiny and no bigger than the speck itself, the silhouette of a whale glides past.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: dusky blue-grey. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#7b8aa3"><div class="zeile"><span class="ton">Lustig</span><code class="datei">dust-funny</code><label class="gespeichert" for="ok-dust-funny"><input type="checkbox" id="ok-dust-funny" data-ok="dust-funny"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">💨 I'm Dust on the Electroneum Smart Chain - <b>technically dust. Spiritually a whale.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A tiny speck of dust sits on a rock on the sea floor, lit by a single spotlight from above. Its shadow on the sand behind it is the enormous, majestic silhouette of a whale. The speck looks extremely confident.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dust-funny" data-kopie="dust-funny">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A tiny speck of dust sits on a rock on the sea floor, lit by a single spotlight from above. Its shadow on the sand behind it is the enormous, majestic silhouette of a whale. The speck looks extremely confident.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: dusky blue-grey. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#7b8aa3"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">dust-calm</code><label class="gespeichert" for="ok-dust-calm"><input type="checkbox" id="ok-dust-calm" data-ok="dust-calm"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">💨 I'm Dust on the Electroneum Smart Chain - <b>dust today, a story tomorrow.</b>
+
+What are you? Find your tier on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An old open book lies on a sunlit sandy sea floor, its blank pages gently moving in the current, sun ripples dancing across it. A single glowing speck of dust drifts up from the pages toward the bright surface, leaving a thin line of light behind it like the first line of a story being written.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-dust-calm" data-kopie="dust-calm">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An old open book lies on a sunlit sandy sea floor, its blank pages gently moving in the current, sun ripples dancing across it. A single glowing speck of dust drifts up from the pages toward the bright surface, leaving a thin line of light behind it like the first line of a story being written.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: dusky blue-grey. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-week" style="--c:#5b9cff"><header><div class="emo" aria-hidden="true">🗓️</div><h2>Wochenrückblick <small>Bild nach der größten Nachricht der Woche</small></h2><p class="vorlage">Die Fakten der Woche stehen im Post, das Bild setzt die Stimmung.</p></header><div class="bilder"><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Nachricht</span><code class="datei">week-bridge</code><span class="bedingung">wenn migriert ≥ 25 % über Vorwoche</span><label class="gespeichert" for="ok-week-bridge"><input type="checkbox" id="ok-week-bridge" data-ok="week-bridge"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post"><b>🌉 Busy week at the migration bridge</b> (Sep 8 – Sep 14)
+📈 <mark>TX</mark> transactions
+🌉 <mark>ETN</mark> ETN migrated out of the bridge
+…
+
+Full recap on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A monumental bridge of light spans a night ocean from an old, dark shore to a bright, futuristic shore. Thousands of small glowing lights travel across it in one direction, toward the new shore, which glows brighter and brighter. Wide aerial shot.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-week-bridge" data-kopie="week-bridge">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A monumental bridge of light spans a night ocean from an old, dark shore to a bright, futuristic shore. Thousands of small glowing lights travel across it in one direction, toward the new shore, which glows brighter and brighter. Wide aerial shot.
+
+Clean cinematic key visual, bold simple composition, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Nachricht</span><code class="datei">week-whale</code><span class="bedingung">wenn größte Bewegung ≥ 10 Mio. ETN</span><label class="gespeichert" for="ok-week-whale"><input type="checkbox" id="ok-week-whale" data-ok="week-whale"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post"><b>🐋 A whale made waves this week</b> (Sep 8 – Sep 14)
+🐋 Biggest move: <mark>WALLET</mark> moved out <mark>ETN</mark> ETN
+…
+
+Full recap on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A night bay seen from a lighthouse: a massive whale has just surfaced, and a giant ring wave spreads across the whole bay, rocking small boats and lighting up buoys one after another. The lighthouse beam catches the whale's back.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-week-whale" data-kopie="week-whale">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A night bay seen from a lighthouse: a massive whale has just surfaced, and a giant ring wave spreads across the whole bay, rocking small boats and lighting up buoys one after another. The lighthouse beam catches the whale's back.
+
+Clean cinematic key visual, bold simple composition, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Nachricht</span><code class="datei">week-busy</code><span class="bedingung">wenn Transaktionen ≥ 10 % über Vorwoche</span><label class="gespeichert" for="ok-week-busy"><input type="checkbox" id="ok-week-busy" data-ok="week-busy"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post"><b>📈 Electroneum got busier this week</b> (Sep 8 – Sep 14)
+📈 <mark>TX</mark> transactions · +<mark>P</mark> %
+…
+
+Full recap on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A glowing underwater city at rush hour, seen from above: countless light trails of fish and small submarines zip along glowing highways between towers of coral, everything in motion, full of energy.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-week-busy" data-kopie="week-busy">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A glowing underwater city at rush hour, seen from above: countless light trails of fish and small submarines zip along glowing highways between towers of coral, everything in motion, full of energy.
+
+Clean cinematic key visual, bold simple composition, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#5b9cff"><div class="zeile"><span class="ton">Nachricht</span><code class="datei">week-radar</code><span class="bedingung">sonst</span><label class="gespeichert" for="ok-week-radar"><input type="checkbox" id="ok-week-radar" data-ok="week-radar"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post"><b>📡 This week on Electroneum</b> (Sep 8 – Sep 14)
+📈 <mark>TX</mark> transactions
+…
+
+Full recap on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">Inside a dark submarine control room: a large round radar screen glows blue, showing blips of sea creatures of all sizes. Through the big round window behind it, the real silhouettes of a whale and a school of fish glide past. Calm and focused, like a weekly briefing.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-week-radar" data-kopie="week-radar">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>Inside a dark submarine control room: a large round radar screen glows blue, showing blips of sea creatures of all sizes. Through the big round window behind it, the real silhouettes of a whale and a school of fish glide past. Calm and focused, like a weekly briefing.
+
+Clean cinematic key visual, bold simple composition, highly detailed. Accent colour: electric blue. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section><section class="gruppe" id="g-whatif" style="--c:#fbbf24"><header><div class="emo" aria-hidden="true">🧮</div><h2>Marketcap-Vergleich <small>What if</small></h2><p class="vorlage">Mit Umschalter „nur migrierte ETN“ kommt die Zeile „Counting migrated ETN only - an estimate.“ dazu.</p></header><div class="bilder"><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Ruhig</span><code class="datei">whatif-scale</code><label class="gespeichert" for="ok-whatif-scale"><input type="checkbox" id="ok-whatif-scale" data-ok="whatif-scale"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">📊 <b>ETN with <mark>COIN</mark>'s market cap: <mark>PRICE</mark> per ETN (×<mark>X</mark>).</b>
+Not a forecast, just math. Try any coin on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">An antique brass balance scale stands on the sea floor in a single ray of golden light. On one pan: one small glowing coin engraved with a lightning bolt. On the other: a mountain of glowing coins. The scale hangs almost in balance. Serious, elegant, like a museum piece.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whatif-scale" data-kopie="whatif-scale">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>An antique brass balance scale stands on the sea floor in a single ray of golden light. On one pan: one small glowing coin engraved with a lightning bolt. On the other: a mountain of glowing coins. The scale hangs almost in balance. Serious, elegant, like a museum piece.
+
+Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed. Accent colour: warm gold. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Stolz</span><code class="datei">whatif-dream</code><label class="gespeichert" for="ok-whatif-dream"><input type="checkbox" id="ok-whatif-dream" data-ok="whatif-dream"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🔭 <b>If ETN were as big as <mark>COIN</mark>: <mark>PRICE</mark> per ETN,</b> ×<mark>X</mark> from today.
+Dreaming is free, the math is on ETN Radar:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A small golden fish looks into a large soap bubble floating in the dark ocean; inside the bubble, its reflection is a giant, majestic whale glowing gold. Dreamy, hopeful, magical.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whatif-dream" data-kopie="whatif-dream">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A small golden fish looks into a large soap bubble floating in the dark ocean; inside the bubble, its reflection is a giant, majestic whale glowing gold. Dreamy, hopeful, magical.
+
+Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed. Accent colour: warm gold. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article><article class="bild" style="--c:#fbbf24"><div class="zeile"><span class="ton">Lustig</span><code class="datei">whatif-napkin</code><label class="gespeichert" for="ok-whatif-napkin"><input type="checkbox" id="ok-whatif-napkin" data-ok="whatif-napkin"> gespeichert</label></div><div class="spalte"><span class="etikett">Post</span><p class="post">🧮 <b>Napkin math: ETN at <mark>COIN</mark>'s market cap = <mark>PRICE</mark> per ETN.</b>
+My calculator needed a minute. Do yours:</p></div><div class="spalte"><span class="etikett">Bildidee</span><p class="szene">A crab in tiny reading glasses sits at a café table on the sea floor, scribbling wildly on a napkin with a pencil, surrounded by crumpled napkins and a steaming coffee cup. Its eyes are wide with shock at its own result. The napkin shows only scribbles and doodles.</p><div class="aktionen"><button type="button" class="kopieren" id="kp-whatif-napkin" data-kopie="whatif-napkin">Prompt kopieren</button><details class="voll"><summary>Ganzer Prompt</summary><pre>A crab in tiny reading glasses sits at a café table on the sea floor, scribbling wildly on a napkin with a pencil, surrounded by crumpled napkins and a steaming coffee cup. Its eyes are wide with shock at its own result. The napkin shows only scribbles and doodles.
+
+Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed. Accent colour: warm gold. Square 1:1 format, main subject large and centred. No text, no letters, no logos, no watermark.</pre></details></div></div></article></div></section></div>
+
+  <section class="rahmenteil" aria-labelledby="rahmenTitel">
+    <div>
+      <h2 id="rahmenTitel">Aus jedem Grok-Bild werden zwei</h2>
+      <p>Grok liefert nur das quadratische Motiv. Ein Skript baut daraus die Link-Vorschau für X und Telegram, mit dem Satz groß daneben, und eine gerahmte 1:1-Version, die man direkt als Bild posten kann. Beispiel: Whale · Lustig.</p>
+    </div>
+    <div class="muster">
+      <figure>
+        <div class="karte">
+          <div class="platzhalter">Grok-Bild<br>1:1</div>
+          <div class="seite">
+            <div class="kmarke"><img src="data:image/png;base64,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" alt="">ETN Radar</div>
+            <div><div class="ktier">🐳 Whale · 10M+ ETN</div><p class="ksatz">relax, I didn't sell. I just rolled over in my sleep.</p></div>
+            <div class="kdomain">etn-radar.galacticsl.com</div>
+          </div>
+        </div>
+        <figcaption>LINK-VORSCHAU · 1200 × 630</figcaption>
+      </figure>
+      <figure>
+        <div class="rahmen">
+          <div class="platzhalter">Grok-Bild<br>1:1</div>
+          <div class="linie"></div>
+          <div class="marke"><img src="data:image/png;base64,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" alt="">ETN Radar</div>
+          <div class="domain">etn-radar.galacticsl.com</div>
+        </div>
+        <figcaption>ZUM POSTEN · 1080 × 1080</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="werkzeug" aria-labelledby="wzTitel">
+    <div>
+      <h2 id="wzTitel">Rahmen selbst setzen</h2>
+      <p>Eigenes Bild hineinziehen, Farbe und Format wählen. Alles passiert hier im Browser, nichts wird hochgeladen.</p>
+    </div>
+    <div class="wz">
+      <div class="wzform">
+        <label class="wzablage" id="wzAblage">
+          <input type="file" id="wzDatei" accept="image/*">
+          <span id="wzAblageText">Bild hierher ziehen oder klicken</span>
+        </label>
+        <div>
+          <span class="etikett">Farbe</span>
+          <div class="wzfarben" id="wzFarben"></div>
+        </div>
+        <div>
+          <span class="etikett">Format</span>
+          <select id="wzFormat" aria-label="Format">
+            <option value="1080x1080">Quadrat · 1080 × 1080</option>
+            <option value="1200x630">Breit · 1200 × 630</option>
+            <option value="1080x1350">Hochkant · 1080 × 1350</option>
+          </select>
+        </div>
+      </div>
+      <div class="wzbild">
+        <div id="wzErgebnis"><div class="leer">Noch kein Bild gewählt.</div></div>
+        <div class="wzhinweis" id="wzHinweis" hidden>Speichern: Rechtsklick aufs Bild → „Bild speichern unter“. Am Handy lange draufdrücken.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+// Jeder Look passt zur Stimmung des Satzes - so werden die Bilder abwechslungsreich,
+// Farbe des Tiers und Rahmen halten die Serie zusammen.
+const LOOK = {
+  proud: ["Stolz", "Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed."],
+  funny: ["Lustig", "Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed."],
+  calm:  ["Ruhig", "Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed."],
+  news:  ["Nachricht", "Clean cinematic key visual, bold simple composition, highly detailed."],
+  epic:  ["Titelbild", "Epic cinematic concept art, glowing light, inviting and mysterious, highly detailed."],
+};
+// Nur noch Farbe, Format und das Schrift-Verbot. Keine Hex-Codes (versteht Grok
+// nicht) und kein "ocean world" (widerspricht Szenen am Fluss oder Strand).
+const SCHLUSS = (wort, breit) =>
+  "Accent colour: " + wort + ". " +
+  (breit ? "Wide 16:9 format." : "Square 1:1 format, main subject large and centred.") +
+  " No text, no letters, no logos, no watermark.";
+
+const TEST = new Set([]);
+
+const artikel = (key, name) => (["plankton", "dust"].includes(key) ? "" : /^[aeiou]/i.test(name) ? "an " : "a ");
+const tier = (key, name, emoji, ab, hex, wort, ...drei) => ({
+  id: key, titel: name, emoji, sub: ab, hex, wort,
+  vorlage: "Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.",
+  bilder: drei.map(([ton, satz, szene, neu]) => ({
+    datei: key + "-" + ton, ton, szene, neu, satz,
+    post: emoji + " I'm " + artikel(key, name) + name + " on the Electroneum Smart Chain - **" + satz + "**\n\nWhat are you? Find your tier on ETN Radar:",
+  })),
+});
+
+const GRUPPEN = [
+  { id: "banner", titel: "Titelbild", emoji: "📡", sub: "Startseite", hex: "#a78bfa", wort: "electric blue and soft violet",
+    vorlage: "Vorschau für jeden Link ohne eigenes Bild.",
+    bilder: [{ datei: "banner", ton: "epic", post: "**ETN Radar – Electroneum whale & migration tracker**\nWho holds the ETN, which whales wake up, and how much is still waiting in the migration bridge – live.",
+      szene: "A lone figure stands in a small boat on a dark, calm ocean at night, looking up at a huge glowing radar screen projected into the sky above the water. On the radar: blips shaped like a whale, sharks, dolphins and schools of fish. Below the surface, the real silhouettes of those animals glide through the dark water, lit in blue and violet. A small lightning-bolt glint pulses at the radar's centre." }] },
+
+  tier("humpback", "Humpback Whale", "🐋", "ab 25 Mio. ETN · als Buckelwal", "#a78bfa", "soft violet",
+    ["proud", "only a handful of us live this deep. The ocean goes quiet when we move.",
+     "Deep ocean abyss, dramatic three-quarter side view from slightly below. A colossal humpback whale glides out of the darkness and fills about half of the frame, unmistakably a humpback: very long white-edged pectoral fins spread wide, knobbly head, grooved throat pleats, a huge tail fluke. Everything around it has stopped: a huge school of silver fish frozen mid-turn in a ring around it, jellyfish hanging motionless. Shafts of violet light fall from far above onto its scarred, barnacled skin. Far away in the dark, three other giant whale silhouettes are faintly visible.", true],
+    ["funny", "I don't check the price. The price checks on me.",
+     "Bright violet-blue water just below the surface. A giant humpback whale drifts calmly in side view, its whole long streamlined body visible from its knobbly head to its tail fluke, eyes peacefully closed, a serene little smile, completely unbothered. The whale has exactly two long pectoral fins, both relaxed along its body, and nothing else sticks out of it. Right in front of the whale's face hovers a small silver-grey trading device with a tiny propeller on top and two thin metal robot arms of its own, so it clearly stands out from the purple whale. The device has a nervous cartoon face on its screen, is sweating drops of water, shows a bright green zigzag chart line going up with a green arrow, and taps the whale's cheek with one of its own metal arms to check whether it is awake. The whale does not react at all.", true],
+    ["calm", "deep water, long breath, zero rush.",
+     "Bright, clear sunlit water: a humpback whale mother glides slowly through wide beams of sunlight with her calf swimming close beside her, both large and clearly recognisable from the side, knobbly heads and long white-edged pectoral fins relaxed. A sea turtle and a loose school of silver fish drift along with them, and a few bubbles rise lazily toward the shimmering surface.", true]),
+
+  tier("whale", "Whale", "🐳", "ab 10 Mio. ETN · als Blauwal", "#5b9cff", "electric blue",
+    ["proud", "when I surface, the whole chain feels the wave.",
+     "Night ocean under breaking storm clouds. A massive blue whale surges up through the surface in a powerful lunge, its broad flat head and the front of its enormous sleek body rising out of the water, sheets of water pouring off its smooth mottled blue-grey skin, lit by electric-blue lightning. The force sends a giant ring wave racing across the sea, and along the horizon a long chain of glowing buoys lights up one after another as the wave reaches them. It is clearly a blue whale, not a humpback: smooth skin without knobs or barnacles, a wide U-shaped head, small pectoral fins.", true],
+    ["funny", "relax, I didn't sell. I just rolled over in my sleep.",
+     "On the sea floor, a giant whale sleeps in an enormous bed, wearing a striped nightcap, blanket half kicked off, a stream of bubbles snoring from its mouth. It has just rolled over, and the wave from that tiny movement sends a whole village of little fish tumbling: some cling to seaweed, one faints dramatically, one drops its shopping. A small crab next to the bed holds a claw to its mouth: shhh."],
+    ["calm", "eight figures deep and in no hurry.",
+     "A blue whale glides slowly along a vast underwater cliff, large in the foreground and seen from the side, its extremely long, slender body stretching across most of the frame, the gigantic rock wall rising behind it. Bright sun rays stream down from the surface onto its back, and a school of silver fish and a manta ray glide along beside it. Quiet and patient. It is clearly a blue whale, not a humpback: smooth mottled blue-grey skin without knobs or barnacles, a wide flat U-shaped head, small pectoral fins and a tiny dorsal fin far back.", true]),
+
+  tier("shark", "Shark", "🦈", "ab 5 Mio. ETN", "#22d3a7", "teal-green",
+    ["proud", "calm on the surface, sharp underneath.",
+     "Dramatic underwater view in deep teal-blue water: far above, the sea surface is perfectly calm and glassy, with strong shafts of light cutting down through it. Just below, a sleek great white shark glides past in a powerful three-quarter side view, large and in razor-sharp focus, mouth closed, torpedo-shaped body with realistic proportions, tall dorsal fin and crescent tail, natural dark eye, every muscle tense. Photoreal like a nature documentary: no cartoon look, no glowing eyes, no open grin.", true],
+    ["funny", "the whales think they're in charge. Cute.",
+     "An underwater boardroom made of coral. Three huge whales wearing tiny neckties sit at a long stone table, very serious, pointing at a flip chart covered in doodles. At the far end of the table, a shark lounges sideways across its chair, big and in sharp focus, smirking straight at the camera with one eyebrow raised."],
+    ["calm", "patient. Circling. Never far from the action.",
+     "A reef shark circles slowly and gracefully above a colourful sunlit coral reef full of small fish, large in the foreground in a gentle curve, seen slightly from above. Sun rays dance across the sand and the coral, and a sea turtle rests calmly below.", true]),
+
+  tier("dolphin", "Dolphin", "🐬", "ab 2 Mio. ETN", "#4ade80", "fresh green",
+    ["proud", "smart money swims in pods.",
+     "Golden sunset over the open sea: a tight pod of dolphins leaps out of a huge rolling wave in perfect synchronised formation like a flying squadron, glowing spray and droplets frozen in the warm light. The lead dolphin is high in the air in razor-sharp focus, eye fixed on the horizon.", true],
+    ["funny", "not the biggest in the ocean. Definitely having the most fun.",
+     "A dolphin rides a small surfboard in the foreground, large and in sharp focus, pulling off a joyful spinning trick and grinning from ear to ear, glowing droplets splashing everywhere. A little further behind it, with clear water between them, a huge stern-faced whale swims slowly past and looks deeply unimpressed.", true],
+    ["calm", "quick, clever, and keeping pace with the giants.",
+     "Bright sunlit open water, side view: a bottlenose dolphin swims in the foreground, large and in sharp focus, its whole body clearly visible, relaxed and looking forward. Further behind it, with plenty of open water between them and not touching, a gigantic whale swims in exactly the same direction at the same pace, softly out of focus. Sun rays stream down through calm blue-green water, a few small fish drift past.", true]),
+
+  tier("fish", "Fish", "🐟", "ab 1 Mio. ETN", "#fbbf24", "warm golden sunlight",
+    ["proud", "seven figures of ETN and still swimming upstream.",
+     "A big sailfish races through bright sunlit open ocean water, side view, large in the foreground and filling most of the frame, its tall fan-shaped dorsal fin fully raised, vivid blue stripes on its silver body, mouth closed. Small fish scatter out of its way and sun rays cut through the water behind it. Photoreal like a nature documentary, full of speed.", true],
+    ["funny", "officially a millionaire. In ETN. Please don't do the conversion.",
+     "A small golden fish dressed as a tycoon, with a tiny top hat, a monocle and a pearl necklace, sits on a velvet throne in a sunken treasure room. But the treasure is a very modest little pile of coins, and a worried shrimp accountant next to it counts the coins on a tiny abacus. The fish poses proudly anyway.", true],
+    ["calm", "one million reasons to keep swimming.",
+     "A bright sunlit coral reef in clear turquoise water: a large colourful parrotfish glides calmly over the corals in side view, seen from a little distance, mouth closed, its blue, green and orange scales catching the light. Two smaller reef fish drift along beside it and sun ripples dance over the reef. Photoreal like an underwater nature photo.", true]),
+
+  tier("octopus", "Octopus", "🐙", "ab 500.000 ETN", "#fb923c", "orange",
+    ["proud", "eight arms, zero paper hands.",
+     "An octopus stands tall on top of a sunken treasure chest in a fierce underwater current, all eight arms wrapped firmly around a big glowing coin engraved with a lightning bolt. Shells, seaweed and small fish are swept past it, but it does not move an inch, eyes fierce and determined. Heroic low angle, dramatic warm orange light falling from above.", true],
+    ["funny", "eight arms and not one of them can find the sell button.",
+     "An octopus at a cluttered home-office desk on the sea floor, wearing headphones and using all eight arms at once: typing, sipping coffee, reading a book, watering a plant, holding a snack, petting a tiny crab. A big red button on the corner of the desk sits completely ignored, overgrown with seaweed and a tiny cobweb. The octopus looks very pleased with itself."],
+    ["calm", "clever, flexible, and holding on with everything I've got.",
+     "Close-up in a sunlit coral garden: an octopus rests perfectly camouflaged against orange coral, only its calm, intelligent eye clearly visible and looking straight at the viewer, its arms curled softly around a small glowing coin. Small colourful fish swim past and sun ripples dance over the coral.", true]),
+
+  tier("crab", "Crab", "🦀", "ab 200.000 ETN", "#f97316", "deep orange",
+    ["proud", "hard shell, strong grip, not letting go.",
+     "A crab stands on a black rock at the edge of the sea at a stormy sunset while a massive wave crashes over it, spray exploding in fiery orange and gold light. It braces with both claws raised high, shell gleaming, completely unmoved. Low angle, heroic.", true],
+    ["funny", "sideways market? Crabs were literally built for this.",
+     "An underwater amusement park. In the background, a wild rollercoaster with a glowing orange track shoots steeply up and plunges down in loops, packed with screaming fish holding on for dear life. In the foreground, big and in sharp focus, a crab strolls calmly sideways along a perfectly flat, straight path in the sand, wearing sunglasses, sipping from a coconut with a straw and giving a relaxed thumbs-up with its claw.", true],
+    ["calm", "sideways is still forward.",
+     "On a sunlit sandy sea floor in clear turquoise shallow water, a crab walks steadily sideways in the foreground, sharp and clearly visible, leaving a long neat trail of footprints in the sand behind it. Sun ripples dance across the sand, with a starfish and a few small fish nearby.", true]),
+
+  tier("shrimp", "Shrimp", "🦐", "ab 100.000 ETN", "#f4635e", "coral red",
+    ["proud", "six figures and punching above my weight.",
+     "A championship boxing ring on the sea floor, spotlights cutting through the water. A small shrimp stands in the centre of the ring, large in the frame, red boxing gloves raised in victory and a plain golden champion's belt without any writing around its body, while a handful of different fish cheer in the background, softly out of focus. In the corner, a much bigger fish sits dazed on its stool.", true],
+    ["funny", "the whales' favourite snack? Not today.",
+     "Forced perspective: in the foreground, large and in sharp focus, a small shrimp in a little helmet stands on a rock and holds up one claw like a traffic cop. A little further behind it, a giant whale with its mouth open to swallow a cloud of krill freezes mid-gulp, cross-eyed and confused.", true],
+    ["calm", "small on my own, but the ocean runs on us.",
+     "Sunlit shallow reef: in the foreground, a few coral-red shrimp sit together on a colourful coral, large and in sharp focus, antennae relaxed. Behind them, more shrimp spread across the reef, each one small, but together they cover it like a living red carpet that fades into the soft distance. Sun rays stream down through clear water.", true]),
+
+  tier("plankton", "Plankton", "🦠", "ab 25.000 ETN", "#94a3b8", "silver-blue",
+    ["proud", "no plankton, no whales. Simple biology.",
+     "A giant whale swims through the night ocean, but its entire body is made of billions of glowing silver plankton particles held together in its shape, like a living constellation. Loose plankton drift off its tail."],
+    ["funny", "whales eat plankton? I'd like to see them try.",
+     "Forced perspective: in the foreground, large and in sharp focus, a tiny glowing plankton creature wearing a miniature karate headband stands in a fighting pose on a pebble, staring down a giant whale. Behind it, the whale peers at it cross-eyed and seems a little scared.", true],
+    ["calm", "the whole food chain is built on us.",
+     "Forced perspective in bright sunlit water: in the foreground, large and in sharp focus like a macro photo, a cloud of tiny glowing silver-blue plankton drifts in the light. Behind it, softly out of focus and at increasing distance, a small fish, a larger fish, a shark and finally a giant whale swim above, as if the whole food chain rises from the plankton. Calm and serene.", true]),
+
+  tier("microbe", "Microbe", "🧫", "ab 5.000 ETN", "#64748b", "cool steel-blue",
+    ["proud", "microscopic, but I'm on the chain.",
+     "Extreme macro shot as if through a microscope lens: a single tiny microbe sits proudly on top of one link of a massive glowing chain made of light that stretches across the frame into the distance. Bokeh, crisp detail, dramatic sense of scale."],
+    ["funny", "zoom in. No, more. More. There I am.",
+     "A huge round magnifying glass hovers over dark blue water and fills most of the frame. Outside the lens there is only empty water. Inside the lens, hugely enlarged and in sharp focus, a tiny glowing microbe waves enthusiastically with both little arms, beaming, clearly delighted to be found.", true],
+    ["calm", "everyone starts somewhere. This is my somewhere.",
+     "Bright, clear blue water above a sunlit sea floor. On a pebble in the foreground sits a single glowing microbe, shown large like a close-up under a microscope, softly luminous with fine translucent detail. A single warm sun ray reaches down and touches it, while tiny bubbles and particles drift around. Quiet and hopeful.", true]),
+
+  tier("dust", "Dust", "💨", "unter 5.000 ETN", "#7b8aa3", "dusky blue-grey",
+    ["proud", "every whale started as a speck.",
+     "Extreme macro photo on a dark sea floor: a single glowing speck of dust rests on a dark pebble, sharp and bright like a small star with a soft halo, and fills a third of the frame. One narrow ray of light reaches down to it from far above. Up near the distant surface, tiny and no bigger than the speck itself, the silhouette of a whale glides past.", true],
+    ["funny", "technically dust. Spiritually a whale.",
+     "A tiny speck of dust sits on a rock on the sea floor, lit by a single spotlight from above. Its shadow on the sand behind it is the enormous, majestic silhouette of a whale. The speck looks extremely confident."],
+    ["calm", "dust today, a story tomorrow.",
+     "An old open book lies on a sunlit sandy sea floor, its blank pages gently moving in the current, sun ripples dancing across it. A single glowing speck of dust drifts up from the pages toward the bright surface, leaving a thin line of light behind it like the first line of a story being written.", true]),
+
+  { id: "week", titel: "Wochenrückblick", emoji: "🗓️", sub: "Bild nach der größten Nachricht der Woche", hex: "#5b9cff", wort: "electric blue",
+    vorlage: "Die Fakten der Woche stehen im Post, das Bild setzt die Stimmung.",
+    bilder: [
+      { datei: "week-bridge", ton: "news", bedingung: "wenn migriert ≥ 25 % über Vorwoche",
+        post: "**🌉 Busy week at the migration bridge** (Sep 8 – Sep 14)\n📈 {TX} transactions\n🌉 {ETN} ETN migrated out of the bridge\n…\n\nFull recap on ETN Radar:",
+        szene: "A monumental bridge of light spans a night ocean from an old, dark shore to a bright, futuristic shore. Thousands of small glowing lights travel across it in one direction, toward the new shore, which glows brighter and brighter. Wide aerial shot." },
+      { datei: "week-whale", ton: "news", bedingung: "wenn größte Bewegung ≥ 10 Mio. ETN",
+        post: "**🐋 A whale made waves this week** (Sep 8 – Sep 14)\n🐋 Biggest move: {WALLET} moved out {ETN} ETN\n…\n\nFull recap on ETN Radar:",
+        szene: "A night bay seen from a lighthouse: a massive whale has just surfaced, and a giant ring wave spreads across the whole bay, rocking small boats and lighting up buoys one after another. The lighthouse beam catches the whale's back." },
+      { datei: "week-busy", ton: "news", bedingung: "wenn Transaktionen ≥ 10 % über Vorwoche",
+        post: "**📈 Electroneum got busier this week** (Sep 8 – Sep 14)\n📈 {TX} transactions · +{P} %\n…\n\nFull recap on ETN Radar:",
+        szene: "A glowing underwater city at rush hour, seen from above: countless light trails of fish and small submarines zip along glowing highways between towers of coral, everything in motion, full of energy." },
+      { datei: "week-radar", ton: "news", bedingung: "sonst",
+        post: "**📡 This week on Electroneum** (Sep 8 – Sep 14)\n📈 {TX} transactions\n…\n\nFull recap on ETN Radar:",
+        szene: "Inside a dark submarine control room: a large round radar screen glows blue, showing blips of sea creatures of all sizes. Through the big round window behind it, the real silhouettes of a whale and a school of fish glide past. Calm and focused, like a weekly briefing." },
+    ] },
+
+  { id: "whatif", titel: "Marketcap-Vergleich", emoji: "🧮", sub: "What if", hex: "#fbbf24", wort: "warm gold",
+    vorlage: "Mit Umschalter „nur migrierte ETN“ kommt die Zeile „Counting migrated ETN only - an estimate.“ dazu.",
+    bilder: [
+      { datei: "whatif-scale", ton: "calm", post: "📊 **ETN with {COIN}'s market cap: {PRICE} per ETN (×{X}).**\nNot a forecast, just math. Try any coin on ETN Radar:",
+        szene: "An antique brass balance scale stands on the sea floor in a single ray of golden light. On one pan: one small glowing coin engraved with a lightning bolt. On the other: a mountain of glowing coins. The scale hangs almost in balance. Serious, elegant, like a museum piece." },
+      { datei: "whatif-dream", ton: "proud", post: "🔭 **If ETN were as big as {COIN}: {PRICE} per ETN,** ×{X} from today.\nDreaming is free, the math is on ETN Radar:",
+        szene: "A small golden fish looks into a large soap bubble floating in the dark ocean; inside the bubble, its reflection is a giant, majestic whale glowing gold. Dreamy, hopeful, magical." },
+      { datei: "whatif-napkin", ton: "funny", post: "🧮 **Napkin math: ETN at {COIN}'s market cap = {PRICE} per ETN.**\nMy calculator needed a minute. Do yours:",
+        szene: "A crab in tiny reading glasses sits at a café table on the sea floor, scribbling wildly on a napkin with a pencil, surrounded by crumpled napkins and a steaming coffee cup. Its eyes are wide with shock at its own result. The napkin shows only scribbles and doodles." },
+    ] },
+];
+
+const ALLE = GRUPPEN.flatMap((g) => g.bilder.map((b) => ({ ...b, g })));
+// Kurz und bildhaft: Szene, Look, Farbe, Format. Kein Satz mit Krypto-Slang
+// ("seven figures", "paper hands") - Grok nimmt Woerter woertlich.
+const prompt = (b, g = b.g) => b.szene + "\n\n" + LOOK[b.ton][1] + " " + SCHLUSS(g.wort, b.datei === "banner");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const postHtml = (s) => esc(s).replace(/\*\*(.+?)\*\*/gs, "<b>$1</b>").replace(/\{([A-Z]+)\}/g, "<mark>$1</mark>");
+
+let FERTIG = new Set();
+try { FERTIG = new Set(JSON.parse(localStorage.getItem("etnradar-sharekit") || "[]")); } catch {}
+const merken = () => { try { localStorage.setItem("etnradar-sharekit", JSON.stringify([...FERTIG])); } catch {} };
+let FILTER = "alle";
+
+function zeichnen() {
+  const sichtbar = (b) => FILTER === "alle" || (FILTER === "test" ? TEST.has(b.datei) : !FERTIG.has(b.datei));
+  const html = GRUPPEN.map((g) => {
+    const bilder = g.bilder.filter(sichtbar);
+    if (!bilder.length) return "";
+    return '<section class="gruppe" id="g-' + g.id + '" style="--c:' + g.hex + '">' +
+      '<header><div class="emo" aria-hidden="true">' + g.emoji + "</div>" +
+      "<h2>" + esc(g.titel) + " <small>" + esc(g.sub) + "</small></h2>" +
+      '<p class="vorlage">' + esc(g.vorlage) + "</p></header>" +
+      '<div class="bilder">' + bilder.map((b) => {
+        const fertig = FERTIG.has(b.datei);
+        return '<article class="bild' + (fertig ? " fertig" : "") + '" style="--c:' + g.hex + '">' +
+          '<div class="zeile"><span class="ton">' + LOOK[b.ton][0] + '</span><code class="datei">' + b.datei + "</code>" +
+            (TEST.has(b.datei) ? '<span class="test">ALS NÄCHSTES</span>' : "") +
+            (b.bedingung ? '<span class="bedingung">' + esc(b.bedingung) + "</span>" : "") +
+            '<label class="gespeichert" for="ok-' + b.datei + '"><input type="checkbox" id="ok-' + b.datei + '" data-ok="' + b.datei + '"' +
+            (fertig ? " checked" : "") + "> gespeichert</label></div>" +
+          '<div class="spalte"><span class="etikett">Post</span><p class="post">' + postHtml(b.post) + "</p></div>" +
+          '<div class="spalte"><span class="etikett">Bildidee</span><p class="szene">' + esc(b.szene) + "</p>" +
+            '<div class="aktionen"><button type="button" class="kopieren" id="kp-' + b.datei + '" data-kopie="' + b.datei + '">Prompt kopieren</button>' +
+            '<details class="voll"><summary>Ganzer Prompt</summary><pre>' + esc(prompt(b, g)) + "</pre></details></div></div>" +
+        "</article>";
+      }).join("") + "</div></section>";
+  }).join("");
+  document.getElementById("gruppen").innerHTML = html || '<p class="leer">Alles gespeichert. Leg die Bilder in Bilder/share-roh/ und sag Bescheid.</p>';
+  zaehlen();
+}
+
+function zaehlen() {
+  const n = ALLE.filter((b) => FERTIG.has(b.datei)).length;
+  document.getElementById("zaehler").textContent = n + " / " + ALLE.length + " gespeichert";
+  document.getElementById("balken").style.width = (n / ALLE.length) * 100 + "%";
+}
+
+async function kopieren(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  const t = document.createElement("textarea");
+  t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+  document.body.appendChild(t); t.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch {}
+  t.remove(); return ok;
+}
+
+document.getElementById("gruppen").addEventListener("click", async (e) => {
+  const knopf = e.target.closest("[data-kopie]");
+  if (!knopf) return;
+  const b = ALLE.find((x) => x.datei === knopf.dataset.kopie);
+  const ok = await kopieren(prompt(b));
+  if (!ok) knopf.nextElementSibling.open = true;
+  knopf.textContent = ok ? "Kopiert" : "Unten markieren und kopieren";
+  knopf.classList.toggle("ok", ok);
+  setTimeout(() => { knopf.textContent = "Prompt kopieren"; knopf.classList.remove("ok"); }, 1800);
+});
+
+document.getElementById("gruppen").addEventListener("change", (e) => {
+  const box = e.target.closest("[data-ok]");
+  if (!box) return;
+  box.checked ? FERTIG.add(box.dataset.ok) : FERTIG.delete(box.dataset.ok);
+  merken();
+  box.closest(".bild").classList.toggle("fertig", box.checked);
+  zaehlen();
+});
+
+document.querySelector(".filter").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-f]");
+  if (!b) return;
+  FILTER = b.dataset.f;
+  document.querySelectorAll(".filter button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  zeichnen();
+});
+
+// Sprungmarken schalten auf "Alle", sonst fehlt das Ziel
+document.getElementById("sprung").innerHTML = GRUPPEN.map((g) => '<a href="#g-' + g.id + '" data-ziel="' + g.id + '">' + g.emoji + " " + esc(g.titel) + "</a>").join("");
+document.getElementById("sprung").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-ziel]");
+  if (!a || FILTER === "alle") return;
+  FILTER = "alle";
+  document.querySelectorAll(".filter button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.f === "alle")));
+  zeichnen();
+});
+
+// Der Filter "Als Naechstes" erscheint nur, wenn etwas ansteht.
+document.getElementById("fTest").hidden = !TEST.size;
+document.getElementById("fTest").textContent = "Als Nächstes · " + TEST.size;
+
+zeichnen();
+
+// ---------- Rahmen-Werkzeug ----------
+// Derselbe Rahmen wie im Bau-Skript (scripts/share-bilder.mjs): Linie in der
+// Farbe mit weichen Luecken oben links fuer Logo + Name und unten rechts fuer
+// die Domain, Schrift mit dunklem Halo. Ergebnis als <img>, weil diese Seite
+// selbst keine Downloads ausloesen darf.
+const WZ = { bild: null, farbe: "#5b9cff" };
+const WZ_FARBEN = GRUPPEN.filter((g) => g.hex)
+  .map((g) => [g.hex, g.titel])
+  .filter((f, i, a) => a.findIndex((x) => x[0] === f[0]) === i);
+
+function wzFarbenZeigen() {
+  document.getElementById("wzFarben").innerHTML =
+    WZ_FARBEN.map(([hex, name]) =>
+      '<button type="button" style="--c:' + hex + '" title="' + esc(name) + '" aria-label="' + esc(name) +
+      '" aria-pressed="' + (hex === WZ.farbe) + '" data-farbe="' + hex + '"></button>').join("") +
+    '<input type="color" id="wzEigene" value="' + WZ.farbe + '" title="Eigene Farbe" aria-label="Eigene Farbe">';
+}
+
+const wzHell = (hex, anteil) => {
+  const n = parseInt(hex.slice(1), 16);
+  const k = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => Math.round(c + (255 - c) * anteil));
+  return "rgb(" + k.join(",") + ")";
+};
+
+function wzBauen() {
+  if (!WZ.bild || !LOGO_BILD.complete) return;
+  const [W, H] = document.getElementById("wzFormat").value.split("x").map(Number);
+  // Wie im Skript: das breite Format bekommt die kleinere Variante.
+  const s = H < 1000 ? 0.8 : 1;
+  const i = Math.round(46 * s), r = Math.round(30 * s), logoS = Math.round(64 * s);
+  const luft = 16 * s, verlauf = 28 * s, zurEcke = 56 * s, abstand = Math.round(logoS * 0.25);
+
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const x = c.getContext("2d");
+
+  // Bild wie object-fit: cover
+  const b = WZ.bild;
+  const f = Math.max(W / b.naturalWidth, H / b.naturalHeight);
+  x.drawImage(b, (W - b.naturalWidth * f) / 2, (H - b.naturalHeight * f) / 2, b.naturalWidth * f, b.naturalHeight * f);
+
+  const nameFont = "700 " + Math.round(34 * s) + "px 'Segoe UI', system-ui, sans-serif";
+  const domFont = "700 " + Math.round(22 * s) + "px Consolas, ui-monospace, monospace";
+  const domText = "etn-radar.galacticsl.com";
+  x.font = nameFont; const nameW = x.measureText("ETN Radar").width;
+  x.font = domFont; const domW = x.measureText(domText).width;
+
+  const obenVon = i + r + zurEcke, obenBis = obenVon + logoS + abstand + nameW;
+  const untenBis = W - i - r - zurEcke, untenVon = untenBis - domW;
+
+  // Linie auf eigener Ebene, dann die Luecken mit weichem Verlauf herausnehmen
+  const l = document.createElement("canvas");
+  l.width = W; l.height = H;
+  const lx = l.getContext("2d");
+  const rahmen = (breite) => { lx.beginPath(); lx.roundRect(i, i, W - 2 * i, H - 2 * i, r); lx.lineWidth = breite; lx.stroke(); };
+  lx.save(); lx.filter = "blur(7px)"; lx.globalAlpha = 0.7; lx.strokeStyle = WZ.farbe; rahmen(8); lx.restore();
+  lx.strokeStyle = wzHell(WZ.farbe, 0.35); rahmen(3);
+  lx.globalCompositeOperation = "destination-out";
+  const luecke = (von, bis, y) => {
+    const x0 = von - luft - verlauf, x1 = bis + luft + verlauf;
+    const g = lx.createLinearGradient(x0, 0, x1, 0);
+    const t = verlauf / (x1 - x0);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(t, "rgba(0,0,0,1)");
+    g.addColorStop(1 - t, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    lx.fillStyle = g; lx.fillRect(x0, y - 30, x1 - x0, 60);
+  };
+  luecke(obenVon, obenBis, i);
+  luecke(untenVon, untenBis, H - i);
+
+  // Dunkle weiche Flaechen hinter Marke und Domain, dann die Linie darueber
+  x.save(); x.filter = "blur(16px)"; x.fillStyle = "rgba(6,16,31,.6)";
+  x.beginPath(); x.roundRect(obenVon - 12, i - logoS / 2 - 4, obenBis - obenVon + 24, logoS + 8, logoS / 2); x.fill();
+  x.beginPath(); x.roundRect(untenVon - 14, H - i - 20 * s, domW + 28, 40 * s, 20 * s); x.fill();
+  x.restore();
+  x.drawImage(l, 0, 0);
+
+  // Schrift mit Halo, zweimal gezeichnet wie im Skript
+  const text = (t, font, tx, ty) => {
+    x.save(); x.font = font; x.textBaseline = "middle";
+    x.shadowColor = "rgba(2,6,17,.95)"; x.shadowBlur = 10; x.fillStyle = "#fff";
+    x.fillText(t, tx, ty); x.fillText(t, tx, ty); x.restore();
+  };
+  x.drawImage(LOGO_BILD, obenVon, i - logoS / 2, logoS, logoS);
+  text("ETN Radar", nameFont, obenVon + logoS + abstand, i + 1);
+  text(domText, domFont, untenVon, H - i + 1);
+
+  const img = new Image();
+  img.alt = "Gerahmtes Bild";
+  img.src = c.toDataURL("image/jpeg", 0.9);
+  const box = document.getElementById("wzErgebnis");
+  box.innerHTML = "";
+  box.appendChild(img);
+  document.getElementById("wzHinweis").hidden = false;
+}
+
+const LOGO_BILD = new Image();
+LOGO_BILD.onload = () => wzBauen();
+LOGO_BILD.src = document.querySelector(".marke img")?.getAttribute?.("src") ?? "";
+
+function wzLaden(datei) {
+  if (!datei || !/^image\//.test(datei.type)) return;
+  const b = new Image();
+  b.onload = () => {
+    WZ.bild = b;
+    document.getElementById("wzAblageText").textContent = datei.name + " - anderes Bild? Einfach nochmal";
+    wzBauen();
+  };
+  b.src = URL.createObjectURL(datei);
+}
+
+wzFarbenZeigen();
+document.getElementById("wzFarben").addEventListener("click", (e) => {
+  const k = e.target.closest("[data-farbe]");
+  if (!k) return;
+  WZ.farbe = k.dataset.farbe;
+  wzFarbenZeigen();
+  wzBauen();
+});
+document.getElementById("wzFarben").addEventListener("input", (e) => {
+  if (e.target.id !== "wzEigene") return;
+  WZ.farbe = e.target.value;
+  document.querySelectorAll("#wzFarben [data-farbe]").forEach((k) => k.setAttribute("aria-pressed", "false"));
+  wzBauen();
+});
+document.getElementById("wzFormat").addEventListener("change", wzBauen);
+document.getElementById("wzDatei").addEventListener("change", (e) => wzLaden(e.target.files[0]));
+const ablage = document.getElementById("wzAblage");
+ablage.addEventListener("dragover", (e) => { e.preventDefault(); ablage.classList.add("drueber"); });
+ablage.addEventListener("dragleave", () => ablage.classList.remove("drueber"));
+ablage.addEventListener("drop", (e) => { e.preventDefault(); ablage.classList.remove("drueber"); wzLaden(e.dataTransfer.files[0]); });
+</script>

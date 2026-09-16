@@ -71,6 +71,13 @@ for (const id of Object.keys(SHARE_SONDER)) {
   pruef(appJs.includes('"' + id + '"'), id + ": die Seite kann dieses Bild auch waehlen");
 }
 
+// What if: drei Bilder, Besucher landen im Reiter.
+const wi = await (await holen("/s/whatif-napkin")).text();
+pruef(wi.includes("assets/share/whatif-napkin-card.jpg") && wi.includes('location.replace("/whatif")'), "What if: eigenes Bild, Besucher landen im Reiter");
+pruef(wi.includes('og:title" content="What would one ETN cost? Do the math on ETN Radar"'), "What if: eigener Titel");
+const reiter = await holen("/whatif");
+pruef(await reiter.text() === "asset", "/whatif liefert die Seite aus");
+
 const start = readFileSync(join(REPO, "public/index.html"), "utf8");
 const banner = start.match(/property="og:image" content="https:\/\/etn-radar\.galacticsl\.com(\/assets\/[^"]+)"/);
 pruef(banner && existsSync(join(REPO, "public", banner[1])), "Startseite: og:image zeigt auf eine vorhandene Datei");

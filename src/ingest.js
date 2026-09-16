@@ -9,6 +9,7 @@ import { fetchTopAddresses, fetchStats, fetchTxChart } from "./blockscout.js";
 import { tierFor, TIERS } from "./tiers.js";
 import { benachrichtigeSleeperWakes } from "./telegram.js";
 import { chainSammeln } from "./chain.js";
+import { marktkapitalisierungen } from "./marketcaps.js";
 
 const CHUNK = 100; // Statements pro D1-Batch
 
@@ -708,6 +709,18 @@ export async function runIngest(env, db, opts = {}) {
     }
   } catch (e) {
     log("  Chain-Daten fehlgeschlagen: " + e.message);
+  }
+
+  // --- 11. Marktkapitalisierungen fuer den What-if-Vergleich ---------------
+  //
+  // Zwei Anfragen an CoinGecko, einmal am Tag (src/marketcaps.js entscheidet
+  // selbst, ob schon wieder). Ebenfalls in eigenem try: faellt CoinGecko aus,
+  // bleibt die alte Liste stehen und der Snapshot ist davon unberuehrt.
+  try {
+    const m = await marktkapitalisierungen(env, db, { log });
+    if (m.coins) log("  Marktdaten: " + m.coins + " Coins");
+  } catch (e) {
+    log("  Marktkapitalisierungen fehlgeschlagen: " + e.message);
   }
 
   log("Snapshot #" + snapId + " fertig in " + (ms / 1000).toFixed(1) + "s");

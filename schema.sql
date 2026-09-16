@@ -563,3 +563,15 @@ CREATE TABLE IF NOT EXISTS bridge_tage (
   abfluss_anzahl  INTEGER NOT NULL,
   zufluss_wei     TEXT NOT NULL DEFAULT '0'
 );
+
+-- Marktkapitalisierung der 300 groessten Coins fuer den What-if-Vergleich.
+-- Einmal taeglich aus dem Snapshot-Lauf (src/marketcaps.js); der Worker liest nur.
+CREATE TABLE IF NOT EXISTS coin_caps (
+  id          TEXT PRIMARY KEY,             -- CoinGecko-Id, z.B. "bitcoin"
+  symbol      TEXT NOT NULL,                -- BTC
+  name        TEXT NOT NULL,
+  rang        INTEGER,                      -- Platz nach Marktkapitalisierung
+  market_cap  REAL,                         -- in US-Dollar
+  abgerufen   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_coin_caps_rang ON coin_caps(rang);
