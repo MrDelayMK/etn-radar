@@ -1,6 +1,7 @@
 // Baut aus den Grok-Rohbildern in Bilder/share-roh/ die Bilder der Seite:
 //   public/assets/share/<name>-card.jpg    Link-Vorschau 1200x630: Bild links, Satz rechts
 //   public/assets/share/<name>-square.jpg  gerahmtes 1:1-Bild 1080x1080 zum Posten
+//   public/assets/share/<name>-thumb.jpg   360x360 fuer die Galerie (Bilder-Reiter)
 //   public/assets/share/banner.jpg         Startseite 1200x630 mit Rahmen
 //
 // Laeuft nur lokal (Windows-Schriften, sharp als devDependency):
@@ -206,6 +207,7 @@ for (const datei of readdirSync(ROH).sort()) {
   const quelle = ROH + datei;
   if (name === "banner") {
     await gerahmt(quelle, 1200, 630, "#8b8cf8", AUS + "banner.jpg");
+    await sharp(AUS + "banner.jpg").resize(480, 252).jpeg({ quality: 78, mozjpeg: true }).toFile(AUS + "banner-thumb.jpg");
     fertig.push("banner");
     continue;
   }
@@ -214,6 +216,8 @@ for (const datei of readdirSync(ROH).sort()) {
   if (!kopf) { console.log("uebersprungen (kein Satz):", name); continue; }
   await karte(quelle, kopf, kopf[3], AUS + name + "-card.jpg");
   await gerahmt(quelle, 1080, 1080, kopf[2], AUS + name + "-square.jpg");
+  // Kleines Vorschaubild fuer die Galerie im Bilder-Reiter.
+  await sharp(AUS + name + "-square.jpg").resize(360, 360).jpeg({ quality: 78, mozjpeg: true }).toFile(AUS + name + "-thumb.jpg");
   fertig.push(name);
 }
 console.log(fertig.length + " Bilder gebaut: " + fertig.join(", "));

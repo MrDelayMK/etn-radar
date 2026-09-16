@@ -20,7 +20,7 @@ import { shareSeite } from "./share.js";
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
 // des Pfads.
-const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|whatif|clusters|investigate|about|wallet\/[^/]+)\/?$/;
+const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|whatif|images|clusters|investigate|about|wallet\/[^/]+)\/?$/;
 
 export default {
   async fetch(request, env, ctx) {

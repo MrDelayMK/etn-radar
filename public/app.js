@@ -1584,13 +1584,35 @@ async function ladeWhatif() {
   wiSchnellZeigen();
   // Vorgewaehlt der groesste Coin: das Ergebnis ist sofort da, ohne Klick.
   wiWaehlen(WI.daten.schnell[0]?.ids[0] ?? WI.daten.coins[0]?.i);
+  wiChipsZeigen();
 }
 
-const wiZeile = (c) =>
-  '<button type="button" class="wizeile' + (c.i === WI.coin?.i ? " on" : "") + '" data-coin="' + esc(c.i) + '">' +
-  '<span class="rang">#' + nf(c.r) + "</span>" +
-  '<span class="nm">' + esc(c.n) + " <small>" + esc(c.s) + "</small></span>" +
-  '<span class="cap num">' + wiCap(c.c) + "</span></button>";
+// Jeder Bereich hat seine Farbe - dieselbe in Ueberschrift, Rang und Balken,
+// auch bei Suchtreffern. So sieht man sofort, in welcher Liga ein Coin spielt.
+const WI_BEREICHE = [
+  ["Top 10", 10, "#fbbf24"], ["Top 30", 30, "#a78bfa"], ["Top 50", 50, "#5b9cff"],
+  ["Top 100", 100, "#22d3a7"], ["Top 150", 150, "#4ade80"], ["Top 300", 300, "#fb923c"],
+];
+const wiBereich = (rang) => WI_BEREICHE.find(([, bis]) => rang <= bis) ?? WI_BEREICHE[WI_BEREICHE.length - 1];
+
+// Balken auf log-Skala: von der kleinsten bis zur groessten Marktkapitalisierung
+// der Liste. Linear waere alles ausser Bitcoin ein Strich.
+function wiBalken(cap) {
+  const caps = WI.daten.coins.map((c) => c.c);
+  const lo = Math.log10(Math.min(...caps)), hi = Math.log10(Math.max(...caps));
+  return Math.max(4, ((Math.log10(cap) - lo) / (hi - lo || 1)) * 100);
+}
+
+const wiZeile = (c) => {
+  const menge = wiMenge();
+  return '<button type="button" class="wizeile' + (c.i === WI.coin?.i ? " on" : "") + '" data-coin="' + esc(c.i) +
+    '" style="--f:' + wiBereich(c.r)[2] + '">' +
+    '<span class="rang num">' + nf(c.r) + "</span>" +
+    '<span class="nm"><span class="name">' + esc(c.n) + " <small>" + esc(c.s) + "</small></span>" +
+      '<i class="wibalken"><b style="width:' + wiBalken(c.c).toFixed(1) + '%"></b></i></span>' +
+    '<span class="cap num">' + wiCap(c.c) +
+      (menge > 0 ? "<small>" + wiPreis(c.c / menge) + " / ETN</small>" : "") + "</span></button>";
+};
 
 // Je Bereich (Top 10, Top 30 ...) die bekanntesten Namen - so sieht man auf
 // einen Blick, wie weit die Marktkapitalisierungen auseinanderliegen.
@@ -1603,8 +1625,15 @@ function wiSchnellZeigen() {
     box.innerHTML = '<div class="empty">No market caps yet.</div>';
     return;
   }
+  let vorher = 0;
   box.innerHTML = gruppen
-    .map((g) => '<div class="wigruppe">' + esc(g.titel) + "</div>" + g.coins.map(wiZeile).join(""))
+    .map((g) => {
+      const [titel, bis, farbe] = WI_BEREICHE.find(([t]) => t === g.titel) ?? [g.titel, 0, "#5b9cff"];
+      const kopf = '<div class="wigruppe" style="--f:' + farbe + '"><span class="pill">' + esc(titel) + "</span>" +
+        '<span class="bereich">rank ' + (vorher + 1) + " - " + bis + "</span></div>";
+      vorher = bis;
+      return '<div class="wiblock" style="--f:' + farbe + '">' + kopf + g.coins.map(wiZeile).join("") + "</div>";
+    })
     .join("");
 }
 
@@ -1679,6 +1708,8 @@ function wiErgebnisZeigen() {
     '<div class="sharebar"><button data-teilen>📢 Share this</button></div>' +
     '<div class="wiquelle dim3">Market caps: CoinGecko, ' + esc(stand) +
       ". Division, not a forecast.</div>";
+  // Neuer Coin oder andere Menge: der eigene Wert rechnet mit.
+  wiWertZeigen();
 }
 
 el("wiQ").addEventListener("input", wiTrefferZeigen);
@@ -1690,13 +1721,19 @@ el("wiQ").parentElement.querySelector(".leeren").addEventListener("click", () =>
 for (const id of ["wiSchnell", "wiTreffer"]) {
   el(id).addEventListener("click", (e) => {
     const b = e.target.closest("button[data-coin]");
-    if (b) wiWaehlen(b.dataset.coin);
+    if (!b) return;
+    // Aus der Suche gewaehlt: Liste zuklappen, das Ergebnis steht direkt darunter.
+    if (id === "wiTreffer") el("wiQ").value = "";
+    wiWaehlen(b.dataset.coin);
   });
 }
 el("wiErgebnis").addEventListener("click", (e) => {
   const m = e.target.closest("button[data-menge]");
   if (m) {
     WI.nurMigriert = m.dataset.menge === "migriert";
+    // Die Preise je ETN in den Listen haengen an derselben Menge.
+    wiSchnellZeigen();
+    wiTrefferZeigen();
     wiErgebnisZeigen();
     return;
   }
@@ -1712,6 +1749,104 @@ el("wiErgebnis").addEventListener("click", (e) => {
     varianten,
     url: location.origin + "/whatif",
   });
+});
+
+// --- Eigener Bestand: was waere er wert? -------------------------------------
+// Eine Zahl oder eine Adresse ins Feld; Adressen holt /api/search (aus der
+// Datenbank, ausserhalb der Top N einmal beim Explorer aus dem Minutenbudget).
+// Die gemerkten Wallets stehen als Schnellknoepfe darunter. Bewusst "worth"
+// statt "profit" - das hier ist eine Rechnung, kein Versprechen.
+WI.eigen = null; // { etn, name }
+let wiSuchLauf = 0;
+
+function wiMengeLesen(text) {
+  const t = text.trim().toLowerCase().replace(/[\s,_']/g, "");
+  const m = t.match(/^(\d+(?:\.\d+)?)([kmb]?)$/);
+  if (!m) return null;
+  return Number(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2]] ?? 1);
+}
+
+function wiWertZeigen(hinweis) {
+  const box = el("wiWert");
+  const r = wiRechnung();
+  const e = WI.eigen;
+  if (hinweis) {
+    box.innerHTML = '<span class="dim3">' + hinweis + "</span>";
+    return;
+  }
+  if (!e || !r) {
+    box.innerHTML = '<span class="dim3">Type an amount like 250000 or 1.5m, or paste a wallet address.</span>';
+    return;
+  }
+  box.innerHTML =
+    '<div class="k">' + (e.name ? esc(e.name) + " · " : "") + nf(e.etn) + " ETN with " + esc(r.coin.n) + "'s market cap</div>" +
+    '<div class="v num">' + wiPreis(e.etn * r.preis) + "</div>" +
+    '<div class="k">worth ' + wiPreis(e.etn * WI.daten.etn.preis) + " today</div>";
+}
+
+async function wiMengeEingabe() {
+  const feld = el("wiMenge");
+  const text = feld.value.trim();
+  feld.parentElement.querySelector(".leeren").hidden = !text;
+  const lauf = ++wiSuchLauf;
+  if (!text) { WI.eigen = null; wiWertZeigen(); wiChipsZeigen(); return; }
+  const zahl = wiMengeLesen(text);
+  if (zahl != null) { WI.eigen = { etn: zahl, name: null }; wiWertZeigen(); wiChipsZeigen(); return; }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(text)) {
+    WI.eigen = null;
+    wiWertZeigen(/^0x/i.test(text) ? "A wallet address has 42 characters." : "Type an amount of ETN or a 0x wallet address.");
+    return;
+  }
+  wiWertZeigen("Looking up this wallet…");
+  try {
+    const d = await hole("/api/search?q=" + encodeURIComponent(text));
+    if (lauf !== wiSuchLauf) return; // inzwischen weitergetippt
+    if (d.beschaeftigt) { wiWertZeigen("The explorer is busy - try again in a minute."); return; }
+    WI.eigen = { etn: Number(d.etn) || 0, name: d.label ?? d.etn_name ?? kurzAdr(text), adresse: text.toLowerCase() };
+    wiWertZeigen();
+    wiChipsZeigen();
+  } catch (err) {
+    if (lauf === wiSuchLauf) wiWertZeigen(esc(fehlerText(err)));
+  }
+}
+
+async function wiChipsZeigen() {
+  const box = el("wiChips");
+  if (!watchListe().length) {
+    box.innerHTML = '<span class="dim3">Tip: wallets you star ⭐ show up here for one-tap checks.</span>';
+    return;
+  }
+  const d = await watchDaten();
+  const eintraege = (d?.eintraege ?? []).filter((e) => e.etn > 0).slice(0, 8);
+  if (!eintraege.length) { box.innerHTML = ""; return; }
+  box.innerHTML = '<span class="wichipkopf">⭐ Your watchlist</span>' + eintraege.map((e) => {
+    const name = e.label ?? e.etn_name ?? kurzAdr(e.address);
+    const an = WI.eigen && WI.eigen.adresse === e.address;
+    return '<button type="button" class="wichip' + (an ? " on" : "") + '" data-adr="' + esc(e.address) +
+      '" data-etn="' + e.etn + '" data-name="' + esc(name) + '">' + esc(name) +
+      ' <b class="num">' + kurz(e.etn) + "</b></button>";
+  }).join("");
+}
+
+el("wiMenge").addEventListener("input", () => {
+  clearTimeout(wiMengeEingabe.t);
+  // Adressen erst abfragen, wenn sie fertig getippt sind - Zahlen sofort.
+  wiMengeEingabe.t = setTimeout(wiMengeEingabe, wiMengeLesen(el("wiMenge").value) != null ? 0 : 350);
+});
+el("wiMenge").parentElement.querySelector(".leeren").addEventListener("click", () => {
+  el("wiMenge").value = "";
+  wiMengeEingabe();
+  el("wiMenge").focus();
+});
+el("wiChips").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-adr]");
+  if (!b) return;
+  el("wiMenge").value = b.dataset.adr;
+  el("wiMenge").parentElement.querySelector(".leeren").hidden = false;
+  ++wiSuchLauf;
+  WI.eigen = { etn: Number(b.dataset.etn), name: b.dataset.name, adresse: b.dataset.adr };
+  wiWertZeigen();
+  wiChipsZeigen();
 });
 
 // ---------- Groesste Migrationen ----------
@@ -3330,6 +3465,221 @@ async function shareAktion(knopf) {
   }
 }
 
+// ---------- Images (Galerie + eigener Rahmen) ----------
+//
+// Alle Bilder, die die Seite ohnehin zum Teilen hat, zum Herunterladen: das
+// gerahmte Quadrat zum Posten und die breite Karte. Die Vorschau nutzt kleine
+// Thumbnails (scripts/share-bilder.mjs), sonst luede der Reiter ~10 MB.
+const GAL_NAMEN = {
+  humpback: ["🐋", "Humpback Whale"], whale: ["🐳", "Whale"], shark: ["🦈", "Shark"],
+  dolphin: ["🐬", "Dolphin"], fish: ["🐟", "Fish"], octopus: ["🐙", "Octopus"], crab: ["🦀", "Crab"],
+  shrimp: ["🦐", "Shrimp"], plankton: ["🦠", "Plankton"], microbe: ["🧫", "Microbe"], dust: ["💨", "Dust"],
+};
+const GAL_SONDER = [
+  ["week", "week-bridge", "Busy week at the migration bridge"],
+  ["week", "week-whale", "A whale made waves this week"],
+  ["week", "week-busy", "Electroneum got busier this week"],
+  ["week", "week-radar", "The week in numbers"],
+  ["whatif", "whatif-scale", "Not a forecast. Just math."],
+  ["whatif", "whatif-dream", "What if ETN were that big?"],
+  ["whatif", "whatif-napkin", "Napkin math for ETN"],
+];
+const GAL_GRUPPEN = [
+  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["whatif", "🧮 What if"], ["banner", "📡 Banner"],
+];
+const GAL = { filter: "alle" };
+
+function galEintraege() {
+  const liste = [];
+  for (const [tier, saetze] of Object.entries(SHARE_SAETZE)) {
+    for (const [ton, satz] of saetze) {
+      const id = tier + "-" + ton;
+      if (!SHARE_BILDER.has(id)) continue;
+      liste.push({ gruppe: "tiers", id, farbe: TIERFARBEN[tier], titel: GAL_NAMEN[tier].join(" "),
+        unter: SHARE_TON[ton], satz: satz.charAt(0).toUpperCase() + satz.slice(1) });
+    }
+  }
+  for (const [gruppe, id, satz] of GAL_SONDER) {
+    liste.push({ gruppe, id, farbe: gruppe === "week" ? "#5b9cff" : "#fbbf24",
+      titel: gruppe === "week" ? "🗓️ Weekly recap" : "🧮 What if", unter: "", satz });
+  }
+  liste.push({ gruppe: "banner", id: "banner", farbe: "#a78bfa", titel: "📡 ETN Radar", unter: "Banner", satz: "" });
+  return liste;
+}
+
+function zeichneGalerie() {
+  el("galFilter").innerHTML = GAL_GRUPPEN.map(([k, t]) =>
+    '<button class="ghost' + (GAL.filter === k ? " on" : "") + '" data-g="' + k + '">' + t + "</button>").join("");
+  const pfad = (datei) => "/assets/share/" + datei;
+  const laden = (datei, text) =>
+    '<a class="galknopf" href="' + pfad(datei) + '" download="etn-radar-' + datei + '">' + text + "</a>";
+  el("galerie").innerHTML = galEintraege()
+    .filter((b) => GAL.filter === "alle" || b.gruppe === GAL.filter)
+    .map((b) => {
+      const breit = b.id === "banner";
+      const vorschau = breit ? "banner-thumb.jpg" : b.id + "-thumb.jpg";
+      const knoepfe = breit
+        ? laden("banner.jpg", "⬇️ Banner")
+        : laden(b.id + "-square.jpg", "⬇️ Square") + laden(b.id + "-card.jpg", "⬇️ Wide");
+      return '<figure class="galbild' + (breit ? " breit" : "") + '" style="--f:' + b.farbe + '">' +
+        '<a href="' + pfad(breit ? "banner.jpg" : b.id + "-square.jpg") + '" target="_blank" rel="noopener">' +
+        '<img src="' + pfad(vorschau) + '" alt="' + esc(b.titel + (b.satz ? ": " + b.satz : "")) +
+        '" loading="lazy" width="360" height="' + (breit ? 189 : 360) + '"></a>' +
+        "<figcaption><div class=\"galkopf\"><b>" + b.titel + "</b>" +
+        (b.unter ? "<span>" + esc(b.unter) + "</span>" : "") + "</div>" +
+        (b.satz ? '<div class="galsatz">' + esc(b.satz) + "</div>" : "") +
+        '<div class="galknoepfe">' + knoepfe + "</div></figcaption></figure>";
+    })
+    .join("");
+}
+
+el("galFilter").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-g]");
+  if (!b) return;
+  GAL.filter = b.dataset.g;
+  zeichneGalerie();
+});
+
+// --- Eigener Rahmen ---------------------------------------------------------
+// Derselbe Rahmen wie in scripts/share-bilder.mjs, hier mit Canvas: Linie in
+// der Farbe, weiche Luecken oben links (Logo + Name) und unten rechts (Domain).
+// Alles bleibt im Browser.
+const RW = { bild: null, farbe: "#5b9cff", format: "1080x1080", blob: null };
+const RW_FARBEN = [
+  ...Object.entries(TIERFARBEN).map(([k, f]) => [f, GAL_NAMEN[k][1]]),
+  ["#e8eef8", "White"],
+].filter((f, i, a) => a.findIndex((x) => x[0] === f[0]) === i);
+const RW_LOGO = new Image();
+RW_LOGO.src = "/assets/logo-192.png";
+RW_LOGO.onload = () => rwBauen();
+
+function rwFarbenZeigen() {
+  el("rwFarben").innerHTML =
+    RW_FARBEN.map(([f, name]) =>
+      '<button type="button" style="--c:' + f + '" title="' + esc(name) + '" aria-label="' + esc(name) +
+      '" aria-pressed="' + (f === RW.farbe) + '" data-farbe="' + f + '"></button>').join("") +
+    '<label class="eigene" title="Any colour"><input type="color" id="rwEigene" value="' + RW.farbe + '" aria-label="Any colour"></label>';
+}
+
+const rwHell = (hex, anteil) => {
+  const n = parseInt(hex.slice(1), 16);
+  return "rgb(" + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => Math.round(c + (255 - c) * anteil)).join(",") + ")";
+};
+
+function rwBauen() {
+  if (!RW.bild || !RW_LOGO.complete) return;
+  const [W, H] = RW.format.split("x").map(Number);
+  const s = H < 1000 ? 0.8 : 1; // das breite Format bekommt die kleinere Variante
+  const i = Math.round(46 * s), r = Math.round(30 * s), logoS = Math.round(64 * s);
+  const luft = 16 * s, verlauf = 28 * s, zurEcke = 56 * s, abstand = Math.round(logoS * 0.25);
+
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  const b = RW.bild;
+  const f = Math.max(W / b.naturalWidth, H / b.naturalHeight);
+  x.drawImage(b, (W - b.naturalWidth * f) / 2, (H - b.naturalHeight * f) / 2, b.naturalWidth * f, b.naturalHeight * f);
+
+  const nameFont = "700 " + Math.round(34 * s) + "px 'Segoe UI', system-ui, sans-serif";
+  const domFont = "700 " + Math.round(22 * s) + "px Consolas, ui-monospace, monospace";
+  const domText = "etn-radar.galacticsl.com";
+  x.font = nameFont; const nameW = x.measureText("ETN Radar").width;
+  x.font = domFont; const domW = x.measureText(domText).width;
+  const obenVon = i + r + zurEcke, obenBis = obenVon + logoS + abstand + nameW;
+  const untenBis = W - i - r - zurEcke, untenVon = untenBis - domW;
+
+  const l = document.createElement("canvas");
+  l.width = W; l.height = H;
+  const lx = l.getContext("2d");
+  const rahmen = (breite) => { lx.beginPath(); lx.roundRect(i, i, W - 2 * i, H - 2 * i, r); lx.lineWidth = breite; lx.stroke(); };
+  lx.save(); lx.filter = "blur(7px)"; lx.globalAlpha = 0.7; lx.strokeStyle = RW.farbe; rahmen(8); lx.restore();
+  lx.strokeStyle = rwHell(RW.farbe, 0.35); rahmen(3);
+  lx.globalCompositeOperation = "destination-out";
+  const luecke = (von, bis, y) => {
+    const x0 = von - luft - verlauf, x1 = bis + luft + verlauf, t = verlauf / (x1 - x0);
+    const g = lx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(t, "rgba(0,0,0,1)");
+    g.addColorStop(1 - t, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    lx.fillStyle = g; lx.fillRect(x0, y - 30, x1 - x0, 60);
+  };
+  luecke(obenVon, obenBis, i);
+  luecke(untenVon, untenBis, H - i);
+
+  x.save(); x.filter = "blur(16px)"; x.fillStyle = "rgba(6,16,31,.6)";
+  x.beginPath(); x.roundRect(obenVon - 12, i - logoS / 2 - 4, obenBis - obenVon + 24, logoS + 8, logoS / 2); x.fill();
+  x.beginPath(); x.roundRect(untenVon - 14, H - i - 20 * s, domW + 28, 40 * s, 20 * s); x.fill();
+  x.restore();
+  x.drawImage(l, 0, 0);
+
+  const text = (t, font, tx, ty) => {
+    x.save(); x.font = font; x.textBaseline = "middle";
+    x.shadowColor = "rgba(2,6,17,.95)"; x.shadowBlur = 10; x.fillStyle = "#fff";
+    x.fillText(t, tx, ty); x.fillText(t, tx, ty); x.restore();
+  };
+  x.drawImage(RW_LOGO, obenVon, i - logoS / 2, logoS, logoS);
+  text("ETN Radar", nameFont, obenVon + logoS + abstand, i + 1);
+  text(domText, domFont, untenVon, H - i + 1);
+
+  c.toBlob((blob) => {
+    RW.blob = blob;
+    const alt = el("rwBild").querySelector("img")?.src;
+    if (alt) URL.revokeObjectURL(alt);
+    el("rwBild").innerHTML = '<img alt="Your framed picture" src="' + URL.createObjectURL(blob) + '">';
+    el("rwLaden").disabled = false;
+  }, "image/jpeg", 0.9);
+}
+
+function rwLaden(datei) {
+  if (!datei || !/^image\//.test(datei.type)) return;
+  const b = new Image();
+  b.onload = () => {
+    RW.bild = b;
+    el("rwAblageText").textContent = datei.name + " - drop another one to swap";
+    rwBauen();
+  };
+  b.src = URL.createObjectURL(datei);
+}
+
+rwFarbenZeigen();
+el("rwFarben").addEventListener("click", (e) => {
+  const k = e.target.closest("[data-farbe]");
+  if (!k) return;
+  RW.farbe = k.dataset.farbe;
+  rwFarbenZeigen();
+  rwBauen();
+});
+el("rwFarben").addEventListener("input", (e) => {
+  if (e.target.id !== "rwEigene") return;
+  RW.farbe = e.target.value;
+  el("rwFarben").querySelectorAll("[data-farbe]").forEach((k) => k.setAttribute("aria-pressed", "false"));
+  rwBauen();
+});
+el("rwFormat").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-format]");
+  if (!b) return;
+  RW.format = b.dataset.format;
+  el("rwFormat").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  rwBauen();
+});
+el("rwDatei").addEventListener("change", (e) => rwLaden(e.target.files[0]));
+el("rwAblage").addEventListener("dragover", (e) => { e.preventDefault(); el("rwAblage").classList.add("drueber"); });
+el("rwAblage").addEventListener("dragleave", () => el("rwAblage").classList.remove("drueber"));
+el("rwAblage").addEventListener("drop", (e) => {
+  e.preventDefault();
+  el("rwAblage").classList.remove("drueber");
+  rwLaden(e.dataTransfer.files[0]);
+});
+el("rwLaden").addEventListener("click", () => {
+  if (!RW.blob) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(RW.blob);
+  a.download = "etn-radar-framed-" + RW.format + ".jpg";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
 // ---------- Money flow (Sankey) ----------
 //
 // Zwei Diagramme statt einem: bei einer Boerse sind Ein- und Ausgaenge zwei
@@ -3838,6 +4188,7 @@ const LADER = {
     Promise.all([ladeWatchlist(), ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
   chain: () => chainDaten(),
   whatif: () => ladeWhatif(),
+  images: async () => zeichneGalerie(),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
   // Wartet auf eine Suche - die Merkliste ist das einzige, was hier von
   // selbst etwas zu zeigen hat, und genau dort ist sie am nuetzlichsten.
@@ -4335,6 +4686,7 @@ const VIS_SEITEN = {
   overview: ["Overview", "🌊"], migration: ["Migration", "🌉"], tiers: ["Tiers", "🏔️"],
   board: ["Leaderboard", "🏆"], activity: ["Activity", "⚡"], chain: ["Chain", "⛓️"],
   investigate: ["Investigate", "🔎"], about: ["About", "📡"], clusters: ["Clusters", "🔍"],
+  whatif: ["What if", "🧮"], images: ["Images", "🖼️"],
 };
 const VIS_QUELLE_ICON = { X: "𝕏", Facebook: "📘", Google: "🔎", Telegram: "✈️", Reddit: "👽", "Direct / app": "🔗" };
 

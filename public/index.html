@@ -55,6 +55,7 @@
   <button data-p="investigate"><span class="ic">🔎</span>Investigate</button>
   </div>
   <div class="navrechts">
+    <button data-p="images"><span class="ic">🖼️</span>Images</button>
     <button data-p="about"><span class="ic">📡</span>About</button>
     <button data-feedback><span class="ic">💬</span>Feedback</button>
     <button data-spende hidden><span class="ic">💛</span>Donate</button>
@@ -469,19 +470,65 @@
     <h2>🧮 What if <span class="hint">what one ETN would cost at another coin's market cap</span></h2>
     <div class="whatif">
       <div class="wilinks">
-        <div class="card wiergebnis" id="wiErgebnis"><div class="empty">Loading&hellip;</div></div>
         <div class="card wisuche">
           <div class="suchfeld">
-            <input type="text" id="wiQ" placeholder="Search a coin - name or symbol" spellcheck="false" autocomplete="off">
+            <input type="text" id="wiQ" placeholder="Compare ETN with... search a coin by name or symbol" spellcheck="false" autocomplete="off">
             <button type="button" class="leeren" aria-label="Clear search" hidden>&times;</button>
           </div>
           <div class="witreffer" id="wiTreffer"></div>
+        </div>
+        <div class="card wiergebnis" id="wiErgebnis"><div class="empty">Loading&hellip;</div></div>
+        <div class="card wiwert">
+          <div class="wikopf">💰 What would your ETN be worth?</div>
+          <div class="wiwertzeile">
+            <div class="suchfeld">
+              <input type="text" id="wiMenge" placeholder="Amount of ETN or a 0x wallet address" spellcheck="false" autocomplete="off" inputmode="text">
+              <button type="button" class="leeren" aria-label="Clear" hidden>&times;</button>
+            </div>
+            <div class="wiwertergebnis" id="wiWert"></div>
+          </div>
+          <div class="wichips" id="wiChips"></div>
         </div>
       </div>
       <div class="card wischnell">
         <div class="wikopf">Quick pick</div>
         <div id="wiSchnell"><div class="empty">Loading&hellip;</div></div>
       </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= IMAGES ================= -->
+<div class="page" id="page-images">
+  <section style="margin-top:22px">
+    <h2>🖼️ Images <span class="hint">every ETN Radar picture, free to download and post</span></h2>
+    <div class="tabs" id="galFilter"></div>
+    <div class="galerie" id="galerie"></div>
+  </section>
+  <section>
+    <h2>🎨 Frame your own picture <span class="hint">stays in your browser, nothing is uploaded</span></h2>
+    <div class="rahmwz">
+      <div class="card rahmform">
+        <label class="rahmablage" id="rwAblage">
+          <input type="file" id="rwDatei" accept="image/*">
+          <span class="gross">🖼️</span>
+          <span id="rwAblageText">Drop a picture here or tap to choose one</span>
+        </label>
+        <div>
+          <div class="rahmlabel">Colour</div>
+          <div class="rahmfarben" id="rwFarben"></div>
+        </div>
+        <div>
+          <div class="rahmlabel">Format</div>
+          <div class="tabs" id="rwFormat">
+            <button class="ghost on" data-format="1080x1080">Square</button>
+            <button class="ghost" data-format="1200x630">Wide</button>
+            <button class="ghost" data-format="1080x1350">Portrait</button>
+          </div>
+        </div>
+        <div class="sharebar"><button id="rwLaden" disabled>⬇️ Download</button></div>
+      </div>
+      <div class="card rahmbild" id="rwBild"><div class="empty">Your framed picture shows up here.</div></div>
     </div>
   </section>
 </div>
@@ -691,7 +738,9 @@
       <a href="/leaderboard" data-seite="board">Leaderboard</a>
       <a href="/activity" data-seite="activity">Activity</a>
       <a href="/chain" data-seite="chain">Chain</a>
+      <a href="/whatif" data-seite="whatif">What if</a>
       <a href="/investigate" data-seite="investigate">Investigate</a>
+      <a href="/images" data-seite="images">Images</a>
       <a href="/about" data-seite="about">About</a>
       <a href="#" data-feedback>Feedback</a>
       <a href="#" data-spende hidden>Donate</a>

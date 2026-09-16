@@ -78,6 +78,15 @@ pruef(wi.includes('og:title" content="What would one ETN cost? Do the math on ET
 const reiter = await holen("/whatif");
 pruef(await reiter.text() === "asset", "/whatif liefert die Seite aus");
 
+// Bilder-Reiter: jede Kachel braucht ihr kleines Vorschaubild.
+const ohneThumb = [...Object.keys(SHARE_BILDER), ...Object.keys(SHARE_SONDER), "banner"]
+  .filter((id) => !existsSync(join(REPO, "public/assets/share", id + "-thumb.jpg")));
+pruef(ohneThumb.length === 0, "Galerie: alle Vorschaubilder vorhanden" + (ohneThumb.length ? " - fehlt: " + ohneThumb.join(", ") : ""));
+const galerie = appJs.match(/const GAL_SONDER = \[([\s\S]*?)\n\];/);
+const galIds = galerie ? [...galerie[1].matchAll(/"((?:week|whatif)-[a-z]+)"/g)].map((m) => m[1]).sort() : [];
+pruef(JSON.stringify(galIds) === JSON.stringify(Object.keys(SHARE_SONDER).sort()), "Galerie zeigt genau die Sonderbilder, die es gibt");
+pruef((await holen("/images")).status === 200, "/images liefert die Seite aus");
+
 const start = readFileSync(join(REPO, "public/index.html"), "utf8");
 const banner = start.match(/property="og:image" content="https:\/\/etn-radar\.galacticsl\.com(\/assets\/[^"]+)"/);
 pruef(banner && existsSync(join(REPO, "public", banner[1])), "Startseite: og:image zeigt auf eine vorhandene Datei");
