@@ -2753,7 +2753,19 @@ const SHARE_SAETZE = {
 // passen, sonst zeigt die Link-Vorschau ein fremdes Bild - tests/share.test.mjs
 // prueft das.
 const SHARE_TON = { proud: "😎 Proud", funny: "😂 Funny", calm: "😌 Calm" };
-const SHARE_BILDER = new Set(["whale-funny", "crab-funny", "humpback-calm"]);
+const SHARE_BILDER = new Set([
+  "humpback-proud", "humpback-funny", "humpback-calm",
+  "whale-proud", "whale-funny", "whale-calm",
+  "shark-proud", "shark-funny", "shark-calm",
+  "dolphin-proud", "dolphin-funny", "dolphin-calm",
+  "fish-proud", "fish-funny", "fish-calm",
+  "octopus-proud", "octopus-funny", "octopus-calm",
+  "crab-proud", "crab-funny", "crab-calm",
+  "shrimp-proud", "shrimp-funny", "shrimp-calm",
+  "plankton-proud", "plankton-funny", "plankton-calm",
+  "microbe-proud", "microbe-funny", "microbe-calm",
+  "dust-proud", "dust-funny", "dust-calm",
+]);
 let SHARE_WAHL = 0;
 
 // "I'm a Whale", "I'm an Octopus" - Plankton und Dust ohne Artikel.

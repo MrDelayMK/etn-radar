@@ -19,6 +19,7 @@
     "test:schnell": "node scripts/tests.mjs --schnell"
   },
   "devDependencies": {
+    "sharp": "^0.34.5",
     "wrangler": "4.131.0"
   }
 }

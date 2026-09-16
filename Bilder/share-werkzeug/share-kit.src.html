@@ -1,0 +1,427 @@
+<title>ETN Radar Share-Kit</title>
+<meta name="description" content="Share-Texte und Grok-Prompts für die Vorschaubilder von ETN Radar">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Bewusst nur dunkel: die Bilder, der Rahmen und die Seite selbst leben auf Navy. */
+  :root{
+    color-scheme:dark;
+    --bg:#080b12; --panel:#0f1522; --panel2:#141c2d; --line:#22324a; --line2:#34496a;
+    --tx:#e8eef8; --tx2:#a6b6cc; --tx3:#7f8ca6; --acc:#5b9cff; --ok:#22d3a7;
+    --display:"Chakra Petch", "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+    --sans:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--tx);font:15px/1.6 var(--sans);margin:0;padding-inline:20px;padding-block:0 80px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.01em;text-wrap:balance;margin:0}
+  code,.mono{font-family:var(--mono)}
+  button{font:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+  /* Kopf */
+  .kopf{padding-block:40px 24px;display:grid;gap:14px}
+  .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+  .kopf h1{font-size:clamp(30px,5vw,44px);line-height:1.05}
+  .kopf p{margin:0;max-width:66ch;color:var(--tx2)}
+  .schritte{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .schritte li{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;color:var(--tx2)}
+  .schritte b{display:block;color:var(--tx);font-weight:600;font-size:14px}
+  .schritte code{color:var(--tx);font-size:12.5px}
+  @media (max-width:640px){.schritte{grid-template-columns:1fr}}
+
+  /* Leiste */
+  .leiste{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);
+    border-block:1px solid var(--line);padding-block:10px;margin-inline:-20px;padding-inline:20px}
+  .leiste .innen{max-width:980px;margin:0 auto;display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+  .filter{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+  .filter button{background:none;border:0;padding:5px 12px;font-size:13px;color:var(--tx2)}
+  .filter button+button{border-left:1px solid var(--line2)}
+  .filter button[aria-pressed="true"]{background:var(--panel2);color:var(--tx)}
+  .fortschritt{font:500 13px/1 var(--mono);color:var(--tx2);display:flex;align-items:center;gap:10px;margin-left:auto}
+  .fortschritt .spur{width:120px;height:4px;border-radius:2px;background:var(--line)}
+  .fortschritt .spur b{display:block;height:100%;border-radius:2px;background:var(--ok);transition:width .25s}
+  .sprung{display:flex;gap:4px;overflow-x:auto;width:100%;scrollbar-width:none}
+  .sprung a{flex:0 0 auto;text-decoration:none;color:var(--tx2);font-size:12.5px;padding:3px 9px;border-radius:5px;white-space:nowrap}
+  .sprung a:hover{background:var(--panel2);color:var(--tx)}
+
+  /* Gruppen */
+  .gruppe{padding-block:34px 6px;scroll-margin-top:100px}
+  .gruppe > header{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;margin-bottom:16px}
+  .gruppe .emo{grid-row:span 2;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:24px;
+    background:color-mix(in srgb,var(--c) 14%,var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 45%,transparent)}
+  .gruppe h2{font-size:24px;line-height:1.1;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .gruppe h2 small{font:500 12.5px/1 var(--mono);color:var(--tx3);letter-spacing:.02em}
+  .gruppe .vorlage{font-size:13px;color:var(--tx3);margin:0}
+
+  .bilder{display:grid;gap:14px}
+  .bild{--c:#5b9cff;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px 22px}
+  .bild.fertig{border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+  .bild .zeile{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  @media (max-width:720px){.bild{grid-template-columns:1fr}}
+  .ton{font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:4px;
+    color:color-mix(in srgb,var(--c) 60%,white);background:color-mix(in srgb,var(--c) 16%,transparent)}
+  .datei{font:500 13px/1 var(--mono);color:var(--tx)}
+  .test{font:500 11px/1 var(--mono);letter-spacing:.06em;color:#fbbf24;border:1px solid rgba(251,191,36,.45);padding:3px 6px;border-radius:4px}
+  .neu{font:500 11px/1 var(--mono);letter-spacing:.06em;color:#9cc2ff;border:1px solid rgba(91,156,255,.5);padding:3px 6px;border-radius:4px}
+  .bedingung{font-size:12.5px;color:var(--tx3)}
+  .gespeichert{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--tx2);cursor:pointer;user-select:none}
+  .gespeichert input{accent-color:var(--ok);width:16px;height:16px;margin:0}
+  .spalte{display:grid;gap:8px;align-content:start}
+  .etikett{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--tx3)}
+  .post{margin:0;white-space:pre-wrap;font-size:15px;line-height:1.5;color:var(--tx);
+    border-left:2px solid color-mix(in srgb,var(--c) 70%,transparent);padding:2px 0 2px 12px}
+  .post b{font-weight:600;color:color-mix(in srgb,var(--c) 45%,white)}
+  .post mark{background:rgba(91,156,255,.16);color:#bcd5ff;border-radius:3px;padding:0 3px;font-family:var(--mono);font-size:.84em}
+  .szene{margin:0;color:var(--tx2);font-size:14px}
+  .aktionen{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .kopieren{background:var(--acc);color:#06101f;border:0;border-radius:6px;padding:7px 14px;font-weight:600;font-size:13.5px}
+  .kopieren.ok{background:var(--ok)}
+  details.voll summary{cursor:pointer;font-size:13px;color:var(--tx3);list-style:none}
+  details.voll summary::-webkit-details-marker{display:none}
+  details.voll summary::before{content:"▸ "}
+  details.voll[open] summary::before{content:"▾ "}
+  details.voll pre{white-space:pre-wrap;margin:8px 0 0;font:400 12.5px/1.55 var(--mono);color:var(--tx2);
+    background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px;max-height:260px;overflow:auto}
+  .leer{color:var(--tx3);padding-block:30px;text-align:center}
+
+  /* Die zwei Ausgaben ganz unten */
+  .rahmenteil{border-top:1px solid var(--line);margin-top:44px;padding-block:30px 0;display:grid;gap:18px}
+  .rahmenteil h2{font-size:20px;margin-bottom:6px}
+  .rahmenteil p{margin:0;color:var(--tx2);font-size:14px;max-width:70ch}
+  .muster{display:grid;grid-template-columns:minmax(0,1.905fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media (max-width:640px){.muster{grid-template-columns:1fr}}
+  .muster figure{margin:0;display:grid;gap:8px}
+  .muster figcaption{font:500 12px/1 var(--mono);color:var(--tx3);letter-spacing:.04em}
+  .platzhalter{background:repeating-linear-gradient(135deg,#1a2a44 0 14px,#15233a 14px 28px);display:grid;place-items:center;color:#8fa3c2;text-align:center}
+  .karte{--c:#5b9cff;container-type:inline-size;aspect-ratio:1200/630;max-width:100%;display:grid;grid-template-columns:52.5% 1fr;border-radius:8px;overflow:hidden}
+  .karte .platzhalter{font:500 2.2cqw/1.3 var(--sans)}
+  .karte .seite{display:flex;flex-direction:column;justify-content:space-between;padding:4.5cqw 4cqw;
+    background:radial-gradient(circle at 100% 0,color-mix(in srgb,var(--c) 26%,transparent),transparent 65%),#101a2e;
+    border-left:.3cqw solid var(--c)}
+  .karte .kmarke{display:flex;align-items:center;gap:1cqw;font:600 2.3cqw/1 var(--display);color:#fff}
+  .karte .kmarke img{width:3.8cqw;height:3.8cqw;border-radius:50%}
+  .karte .ktier{font:500 2cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--c) 55%,white);margin-bottom:1.6cqw}
+  .karte .ksatz{margin:0;font:600 3.9cqw/1.17 var(--display);color:#fff;text-wrap:balance}
+  .karte .kdomain{font:500 1.7cqw/1 var(--mono);color:#8fa3c2}
+  .rahmen{--c:#5b9cff;container-type:inline-size;position:relative;aspect-ratio:1/1;max-width:100%;border-radius:8px;overflow:hidden}
+  .rahmen .platzhalter{position:absolute;inset:0;font:500 4.2cqw/1.3 var(--sans)}
+  .rahmen .linie{position:absolute;inset:3.2%;border:max(1.5px,.32cqw) solid color-mix(in srgb,var(--c) 75%,white 10%);
+    border-radius:2.6cqw;box-shadow:0 0 2cqw color-mix(in srgb,var(--c) 45%,transparent)}
+  .rahmen .marke{position:absolute;top:3.2%;left:8%;transform:translateY(-50%);display:flex;align-items:center;gap:1.8cqw;
+    padding:0 2.2cqw;background:#15233a;font:600 4.8cqw/1 var(--display);color:#fff;letter-spacing:.02em}
+  .rahmen .marke img{width:8cqw;height:8cqw;border-radius:50%}
+  .rahmen .domain{position:absolute;bottom:3.2%;right:8%;transform:translateY(50%);padding:0 2cqw;background:#15233a;
+    font:500 2.9cqw/1 var(--mono);color:color-mix(in srgb,var(--c) 55%,white)}
+  @media (max-width:520px){.gespeichert,.fortschritt{margin-left:0}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="kopf">
+    <div class="eyebrow">ETN Radar · Teilen-Vorschau</div>
+    <h1>Share-Kit</h1>
+    <p>Jede Karte ist ein Bild: links der Post, der rausgeht, rechts die Bildidee dazu. Der blaue Knopf kopiert den fertigen Grok-Prompt.</p>
+    <ol class="schritte">
+      <li><b>Kopieren</b>„Prompt kopieren“ auf der Karte drücken</li>
+      <li><b>In Grok erzeugen</b>Format <code>1:1</code> wählen (nur Titelbild <code>16:9</code>), einfügen, beste Variante aussuchen</li>
+      <li><b>Speichern</b>unter dem Dateinamen der Karte in <code>Bilder/share-roh/</code>, dann abhaken</li>
+    </ol>
+  </header>
+</div>
+
+<nav class="leiste" aria-label="Filter und Sprungmarken">
+  <div class="innen">
+    <div class="filter" role="group" aria-label="Anzeige">
+      <button type="button" id="fAlle" data-f="alle" aria-pressed="true">Alle · 41</button>
+      <button type="button" id="fTest" data-f="test" aria-pressed="false">Als Nächstes · 2</button>
+      <button type="button" id="fOffen" data-f="offen" aria-pressed="false">Noch offen</button>
+    </div>
+    <div class="fortschritt"><span id="zaehler">0 / 41</span><span class="spur"><b id="balken" style="width:0"></b></span></div>
+    <div class="sprung" id="sprung"></div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <div id="gruppen"></div>
+
+  <section class="rahmenteil" aria-labelledby="rahmenTitel">
+    <div>
+      <h2 id="rahmenTitel">Aus jedem Grok-Bild werden zwei</h2>
+      <p>Grok liefert nur das quadratische Motiv. Ein Skript baut daraus die Link-Vorschau für X und Telegram, mit dem Satz groß daneben, und eine gerahmte 1:1-Version, die man direkt als Bild posten kann. Beispiel: Whale · Lustig.</p>
+    </div>
+    <div class="muster">
+      <figure>
+        <div class="karte">
+          <div class="platzhalter">Grok-Bild<br>1:1</div>
+          <div class="seite">
+            <div class="kmarke"><img src="__LOGO__" alt="">ETN Radar</div>
+            <div><div class="ktier">🐳 Whale · 10M+ ETN</div><p class="ksatz">relax, I didn't sell. I just rolled over in my sleep.</p></div>
+            <div class="kdomain">etn-radar.galacticsl.com</div>
+          </div>
+        </div>
+        <figcaption>LINK-VORSCHAU · 1200 × 630</figcaption>
+      </figure>
+      <figure>
+        <div class="rahmen">
+          <div class="platzhalter">Grok-Bild<br>1:1</div>
+          <div class="linie"></div>
+          <div class="marke"><img src="__LOGO__" alt="">ETN Radar</div>
+          <div class="domain">etn-radar.galacticsl.com</div>
+        </div>
+        <figcaption>ZUM POSTEN · 1080 × 1080</figcaption>
+      </figure>
+    </div>
+  </section>
+</main>
+
+<script>
+// Jeder Look passt zur Stimmung des Satzes - so werden die Bilder abwechslungsreich,
+// Farbe des Tiers und Rahmen halten die Serie zusammen.
+const LOOK = {
+  proud: ["Stolz", "Epic cinematic photo, dramatic light, heroic low angle, realistic anatomy, highly detailed."],
+  funny: ["Lustig", "Colourful 3D animated film still, expressive faces, bright soft lighting, animals keep their real body shape, highly detailed."],
+  calm:  ["Ruhig", "Serene underwater nature photo, bright clear water, soft sun rays, peaceful, realistic anatomy, highly detailed."],
+  news:  ["Nachricht", "Clean cinematic key visual, bold simple composition, highly detailed."],
+  epic:  ["Titelbild", "Epic cinematic concept art, glowing light, inviting and mysterious, highly detailed."],
+};
+// Nur noch Farbe, Format und das Schrift-Verbot. Keine Hex-Codes (versteht Grok
+// nicht) und kein "ocean world" (widerspricht Szenen am Fluss oder Strand).
+const SCHLUSS = (wort, breit) =>
+  "Accent colour: " + wort + ". " +
+  (breit ? "Wide 16:9 format." : "Square 1:1 format, main subject large and centred.") +
+  " No text, no letters, no logos, no watermark.";
+
+const TEST = new Set(["whale-proud", "whale-calm"]);
+
+const artikel = (key, name) => (["plankton", "dust"].includes(key) ? "" : /^[aeiou]/i.test(name) ? "an " : "a ");
+const tier = (key, name, emoji, ab, hex, wort, ...drei) => ({
+  id: key, titel: name, emoji, sub: ab, hex, wort,
+  vorlage: "Post ohne Adresse. Mit Adresse kommen Rang, Bestand und nächste Stufe dazu.",
+  bilder: drei.map(([ton, satz, szene, neu]) => ({
+    datei: key + "-" + ton, ton, szene, neu, satz,
+    post: emoji + " I'm " + artikel(key, name) + name + " on the Electroneum Smart Chain - **" + satz + "**\n\nWhat are you? Find your tier on ETN Radar:",
+  })),
+});
+
+const GRUPPEN = [
+  { id: "banner", titel: "Titelbild", emoji: "📡", sub: "Startseite", hex: "#a78bfa", wort: "electric blue and soft violet",
+    vorlage: "Vorschau für jeden Link ohne eigenes Bild.",
+    bilder: [{ datei: "banner", ton: "epic", post: "**ETN Radar – Electroneum whale & migration tracker**\nWho holds the ETN, which whales wake up, and how much is still waiting in the migration bridge – live.",
+      szene: "A lone figure stands in a small boat on a dark, calm ocean at night, looking up at a huge glowing radar screen projected into the sky above the water. On the radar: blips shaped like a whale, sharks, dolphins and schools of fish. Below the surface, the real silhouettes of those animals glide through the dark water, lit in blue and violet. A small lightning-bolt glint pulses at the radar's centre." }] },
+
+  tier("humpback", "Humpback Whale", "🐋", "ab 25 Mio. ETN · als Buckelwal", "#a78bfa", "soft violet",
+    ["proud", "only a handful of us live this deep. The ocean goes quiet when we move.",
+     "Deep ocean abyss, dramatic three-quarter side view from slightly below. A colossal humpback whale glides out of the darkness and fills about half of the frame, unmistakably a humpback: very long white-edged pectoral fins spread wide, knobbly head, grooved throat pleats, a huge tail fluke. Everything around it has stopped: a huge school of silver fish frozen mid-turn in a ring around it, jellyfish hanging motionless. Shafts of violet light fall from far above onto its scarred, barnacled skin. Far away in the dark, three other giant whale silhouettes are faintly visible.", true],
+    ["funny", "I don't check the price. The price checks on me.",
+     "Bright violet-blue water just below the surface. A giant humpback whale drifts calmly in side view, its whole long streamlined body visible from its knobbly head to its tail fluke, eyes peacefully closed, a serene little smile, completely unbothered. The whale has exactly two long pectoral fins, both relaxed along its body, and nothing else sticks out of it. Right in front of the whale's face hovers a small silver-grey trading device with a tiny propeller on top and two thin metal robot arms of its own, so it clearly stands out from the purple whale. The device has a nervous cartoon face on its screen, is sweating drops of water, shows a bright green zigzag chart line going up with a green arrow, and taps the whale's cheek with one of its own metal arms to check whether it is awake. The whale does not react at all.", true],
+    ["calm", "deep water, long breath, zero rush.",
+     "Bright, clear sunlit water: a humpback whale mother glides slowly through wide beams of sunlight with her calf swimming close beside her, both large and clearly recognisable from the side, knobbly heads and long white-edged pectoral fins relaxed. A sea turtle and a loose school of silver fish drift along with them, and a few bubbles rise lazily toward the shimmering surface.", true]),
+
+  tier("whale", "Whale", "🐳", "ab 10 Mio. ETN · als Blauwal", "#5b9cff", "electric blue",
+    ["proud", "when I surface, the whole chain feels the wave.",
+     "Night ocean under breaking storm clouds. A massive blue whale surges up through the surface in a powerful lunge, its broad flat head and the front of its enormous sleek body rising out of the water, sheets of water pouring off its smooth mottled blue-grey skin, lit by electric-blue lightning. The force sends a giant ring wave racing across the sea, and along the horizon a long chain of glowing buoys lights up one after another as the wave reaches them. It is clearly a blue whale, not a humpback: smooth skin without knobs or barnacles, a wide U-shaped head, small pectoral fins.", true],
+    ["funny", "relax, I didn't sell. I just rolled over in my sleep.",
+     "On the sea floor, a giant whale sleeps in an enormous bed, wearing a striped nightcap, blanket half kicked off, a stream of bubbles snoring from its mouth. It has just rolled over, and the wave from that tiny movement sends a whole village of little fish tumbling: some cling to seaweed, one faints dramatically, one drops its shopping. A small crab next to the bed holds a claw to its mouth: shhh."],
+    ["calm", "eight figures deep and in no hurry.",
+     "A blue whale glides slowly along a vast underwater cliff, large in the foreground and seen from the side, its extremely long, slender body stretching across most of the frame, the gigantic rock wall rising behind it. Bright sun rays stream down from the surface onto its back, and a school of silver fish and a manta ray glide along beside it. Quiet and patient. It is clearly a blue whale, not a humpback: smooth mottled blue-grey skin without knobs or barnacles, a wide flat U-shaped head, small pectoral fins and a tiny dorsal fin far back.", true]),
+
+  tier("shark", "Shark", "🦈", "ab 5 Mio. ETN", "#22d3a7", "teal-green",
+    ["proud", "calm on the surface, sharp underneath.",
+     "Dramatic underwater view in deep teal-blue water: far above, the sea surface is perfectly calm and glassy, with strong shafts of light cutting down through it. Just below, a sleek great white shark glides past in a powerful three-quarter side view, large and in razor-sharp focus, mouth closed, torpedo-shaped body with realistic proportions, tall dorsal fin and crescent tail, natural dark eye, every muscle tense. Photoreal like a nature documentary: no cartoon look, no glowing eyes, no open grin.", true],
+    ["funny", "the whales think they're in charge. Cute.",
+     "An underwater boardroom made of coral. Three huge whales wearing tiny neckties sit at a long stone table, very serious, pointing at a flip chart covered in doodles. At the far end of the table, a shark lounges sideways across its chair, big and in sharp focus, smirking straight at the camera with one eyebrow raised."],
+    ["calm", "patient. Circling. Never far from the action.",
+     "A reef shark circles slowly and gracefully above a colourful sunlit coral reef full of small fish, large in the foreground in a gentle curve, seen slightly from above. Sun rays dance across the sand and the coral, and a sea turtle rests calmly below.", true]),
+
+  tier("dolphin", "Dolphin", "🐬", "ab 2 Mio. ETN", "#4ade80", "fresh green",
+    ["proud", "smart money swims in pods.",
+     "Golden sunset over the open sea: a tight pod of dolphins leaps out of a huge rolling wave in perfect synchronised formation like a flying squadron, glowing spray and droplets frozen in the warm light. The lead dolphin is high in the air in razor-sharp focus, eye fixed on the horizon.", true],
+    ["funny", "not the biggest in the ocean. Definitely having the most fun.",
+     "A dolphin rides a small surfboard in the foreground, large and in sharp focus, pulling off a joyful spinning trick and grinning from ear to ear, glowing droplets splashing everywhere. A little further behind it, with clear water between them, a huge stern-faced whale swims slowly past and looks deeply unimpressed.", true],
+    ["calm", "quick, clever, and keeping pace with the giants.",
+     "Bright sunlit open water, side view: a bottlenose dolphin swims in the foreground, large and in sharp focus, its whole body clearly visible, relaxed and looking forward. Further behind it, with plenty of open water between them and not touching, a gigantic whale swims in exactly the same direction at the same pace, softly out of focus. Sun rays stream down through calm blue-green water, a few small fish drift past.", true]),
+
+  tier("fish", "Fish", "🐟", "ab 1 Mio. ETN", "#fbbf24", "warm golden sunlight",
+    ["proud", "seven figures of ETN and still swimming upstream.",
+     "A wild salmon with a natural silver body leaps up a roaring waterfall at golden hour, side view, body arched with power, head pointing toward the top of the falls, mouth closed. Warm sunlight makes its wet scales shimmer with a hint of gold, water droplets sparkle around it, a rainbow glows in the spray.", true],
+    ["funny", "officially a millionaire. In ETN. Please don't do the conversion.",
+     "A small golden fish dressed as a tycoon, with a tiny top hat, a monocle and a pearl necklace, sits on a velvet throne in a sunken treasure room. But the treasure is a very modest little pile of coins, and a worried shrimp accountant next to it counts the coins on a tiny abacus. The fish poses proudly anyway.", true],
+    ["calm", "one million reasons to keep swimming.",
+     "Sunlit clear blue water near a colourful reef: a mahi-mahi with its natural shimmering blue, green and gold colours glides calmly past in side view, seen from a little distance, mouth closed. A few other fish swim far behind it, small and blurred. Soft sun rays stream down from the surface.", true]),
+
+  tier("octopus", "Octopus", "🐙", "ab 500.000 ETN", "#fb923c", "orange",
+    ["proud", "eight arms, zero paper hands.",
+     "An octopus stands tall on top of a sunken treasure chest in a fierce underwater current, all eight arms wrapped firmly around a big glowing coin engraved with a lightning bolt. Shells, seaweed and small fish are swept past it, but it does not move an inch, eyes fierce and determined. Heroic low angle, dramatic warm orange light falling from above.", true],
+    ["funny", "eight arms and not one of them can find the sell button.",
+     "An octopus at a cluttered home-office desk on the sea floor, wearing headphones and using all eight arms at once: typing, sipping coffee, reading a book, watering a plant, holding a snack, petting a tiny crab. A big red button on the corner of the desk sits completely ignored, overgrown with seaweed and a tiny cobweb. The octopus looks very pleased with itself."],
+    ["calm", "clever, flexible, and holding on with everything I've got.",
+     "Close-up in a sunlit coral garden: an octopus rests perfectly camouflaged against orange coral, only its calm, intelligent eye clearly visible and looking straight at the viewer, its arms curled softly around a small glowing coin. Small colourful fish swim past and sun ripples dance over the coral.", true]),
+
+  tier("crab", "Crab", "🦀", "ab 200.000 ETN", "#f97316", "deep orange",
+    ["proud", "hard shell, strong grip, not letting go.",
+     "A crab stands on a black rock at the edge of the sea at a stormy sunset while a massive wave crashes over it, spray exploding in fiery orange and gold light. It braces with both claws raised high, shell gleaming, completely unmoved. Low angle, heroic.", true],
+    ["funny", "sideways market? Crabs were literally built for this.",
+     "An underwater amusement park. In the background, a wild rollercoaster with a glowing orange track shoots steeply up and plunges down in loops, packed with screaming fish holding on for dear life. In the foreground, big and in sharp focus, a crab strolls calmly sideways along a perfectly flat, straight path in the sand, wearing sunglasses, sipping from a coconut with a straw and giving a relaxed thumbs-up with its claw.", true],
+    ["calm", "sideways is still forward.",
+     "On a sunlit sandy sea floor in clear turquoise shallow water, a crab walks steadily sideways in the foreground, sharp and clearly visible, leaving a long neat trail of footprints in the sand behind it. Sun ripples dance across the sand, with a starfish and a few small fish nearby.", true]),
+
+  tier("shrimp", "Shrimp", "🦐", "ab 100.000 ETN", "#f4635e", "coral red",
+    ["proud", "six figures and punching above my weight.",
+     "A championship boxing ring on the sea floor, spotlights cutting through the water. A small shrimp stands in the centre of the ring, large in the frame, red boxing gloves raised in victory and a plain golden champion's belt without any writing around its body, while a handful of different fish cheer in the background, softly out of focus. In the corner, a much bigger fish sits dazed on its stool.", true],
+    ["funny", "the whales' favourite snack? Not today.",
+     "Forced perspective: in the foreground, large and in sharp focus, a small shrimp in a little helmet stands on a rock and holds up one claw like a traffic cop. A little further behind it, a giant whale with its mouth open to swallow a cloud of krill freezes mid-gulp, cross-eyed and confused.", true],
+    ["calm", "small on my own, but the ocean runs on us.",
+     "Sunlit shallow reef: in the foreground, a few coral-red shrimp sit together on a colourful coral, large and in sharp focus, antennae relaxed. Behind them, more shrimp spread across the reef, each one small, but together they cover it like a living red carpet that fades into the soft distance. Sun rays stream down through clear water.", true]),
+
+  tier("plankton", "Plankton", "🦠", "ab 25.000 ETN", "#94a3b8", "silver-blue",
+    ["proud", "no plankton, no whales. Simple biology.",
+     "A giant whale swims through the night ocean, but its entire body is made of billions of glowing silver plankton particles held together in its shape, like a living constellation. Loose plankton drift off its tail."],
+    ["funny", "whales eat plankton? I'd like to see them try.",
+     "Forced perspective: in the foreground, large and in sharp focus, a tiny glowing plankton creature wearing a miniature karate headband stands in a fighting pose on a pebble, staring down a giant whale. Behind it, the whale peers at it cross-eyed and seems a little scared.", true],
+    ["calm", "the whole food chain is built on us.",
+     "Forced perspective in bright sunlit water: in the foreground, large and in sharp focus like a macro photo, a cloud of tiny glowing silver-blue plankton drifts in the light. Behind it, softly out of focus and at increasing distance, a small fish, a larger fish, a shark and finally a giant whale swim above, as if the whole food chain rises from the plankton. Calm and serene.", true]),
+
+  tier("microbe", "Microbe", "🧫", "ab 5.000 ETN", "#64748b", "cool steel-blue",
+    ["proud", "microscopic, but I'm on the chain.",
+     "Extreme macro shot as if through a microscope lens: a single tiny microbe sits proudly on top of one link of a massive glowing chain made of light that stretches across the frame into the distance. Bokeh, crisp detail, dramatic sense of scale."],
+    ["funny", "zoom in. No, more. More. There I am.",
+     "A huge round magnifying glass hovers over dark blue water and fills most of the frame. Outside the lens there is only empty water. Inside the lens, hugely enlarged and in sharp focus, a tiny glowing microbe waves enthusiastically with both little arms, beaming, clearly delighted to be found.", true],
+    ["calm", "everyone starts somewhere. This is my somewhere.",
+     "Bright, clear blue water above a sunlit sea floor. On a pebble in the foreground sits a single glowing microbe, shown large like a close-up under a microscope, softly luminous with fine translucent detail. A single warm sun ray reaches down and touches it, while tiny bubbles and particles drift around. Quiet and hopeful.", true]),
+
+  tier("dust", "Dust", "💨", "unter 5.000 ETN", "#7b8aa3", "dusky blue-grey",
+    ["proud", "every whale started as a speck.",
+     "Forced perspective in sunlit water: in the foreground, magnified and in sharp focus, a single speck of dust glows like a tiny bright star, surrounded by a soft halo of light. Far behind it, softly out of focus, a majestic giant whale swims past in dramatic light, as if the speck is looking at its own future.", true],
+    ["funny", "technically dust. Spiritually a whale.",
+     "A tiny speck of dust sits on a rock on the sea floor, lit by a single spotlight from above. Its shadow on the sand behind it is the enormous, majestic silhouette of a whale. The speck looks extremely confident."],
+    ["calm", "dust today, a story tomorrow.",
+     "An old open book lies on a sunlit sandy sea floor, its blank pages gently moving in the current, sun ripples dancing across it. A single glowing speck of dust drifts up from the pages toward the bright surface, leaving a thin line of light behind it like the first line of a story being written.", true]),
+
+  { id: "week", titel: "Wochenrückblick", emoji: "🗓️", sub: "Bild nach der größten Nachricht der Woche", hex: "#5b9cff", wort: "electric blue",
+    vorlage: "Die Fakten der Woche stehen im Post, das Bild setzt die Stimmung.",
+    bilder: [
+      { datei: "week-bridge", ton: "news", bedingung: "wenn migriert ≥ 25 % über Vorwoche",
+        post: "**🌉 Busy week at the migration bridge** (Sep 8 – Sep 14)\n📈 {TX} transactions\n🌉 {ETN} ETN migrated out of the bridge\n…\n\nFull recap on ETN Radar:",
+        szene: "A monumental bridge of light spans a night ocean from an old, dark shore to a bright, futuristic shore. Thousands of small glowing lights travel across it in one direction, toward the new shore, which glows brighter and brighter. Wide aerial shot." },
+      { datei: "week-whale", ton: "news", bedingung: "wenn größte Bewegung ≥ 10 Mio. ETN",
+        post: "**🐋 A whale made waves this week** (Sep 8 – Sep 14)\n🐋 Biggest move: {WALLET} moved out {ETN} ETN\n…\n\nFull recap on ETN Radar:",
+        szene: "A night bay seen from a lighthouse: a massive whale has just surfaced, and a giant ring wave spreads across the whole bay, rocking small boats and lighting up buoys one after another. The lighthouse beam catches the whale's back." },
+      { datei: "week-busy", ton: "news", bedingung: "wenn Transaktionen ≥ 10 % über Vorwoche",
+        post: "**📈 Electroneum got busier this week** (Sep 8 – Sep 14)\n📈 {TX} transactions · +{P} %\n…\n\nFull recap on ETN Radar:",
+        szene: "A glowing underwater city at rush hour, seen from above: countless light trails of fish and small submarines zip along glowing highways between towers of coral, everything in motion, full of energy." },
+      { datei: "week-radar", ton: "news", bedingung: "sonst",
+        post: "**📡 This week on Electroneum** (Sep 8 – Sep 14)\n📈 {TX} transactions\n…\n\nFull recap on ETN Radar:",
+        szene: "Inside a dark submarine control room: a large round radar screen glows blue, showing blips of sea creatures of all sizes. Through the big round window behind it, the real silhouettes of a whale and a school of fish glide past. Calm and focused, like a weekly briefing." },
+    ] },
+
+  { id: "whatif", titel: "Marketcap-Vergleich", emoji: "🧮", sub: "What if", hex: "#fbbf24", wort: "warm gold",
+    vorlage: "Mit Umschalter „nur migrierte ETN“ kommt die Zeile „Counting migrated ETN only - an estimate.“ dazu.",
+    bilder: [
+      { datei: "whatif-scale", ton: "calm", post: "📊 **ETN with {COIN}'s market cap: {PRICE} per ETN (×{X}).**\nNot a forecast, just math. Try any coin on ETN Radar:",
+        szene: "An antique brass balance scale stands on the sea floor in a single ray of golden light. On one pan: one small glowing coin engraved with a lightning bolt. On the other: a mountain of glowing coins. The scale hangs almost in balance. Serious, elegant, like a museum piece." },
+      { datei: "whatif-dream", ton: "proud", post: "🔭 **If ETN were as big as {COIN}: {PRICE} per ETN,** ×{X} from today.\nDreaming is free, the math is on ETN Radar:",
+        szene: "A small golden fish looks into a large soap bubble floating in the dark ocean; inside the bubble, its reflection is a giant, majestic whale glowing gold. Dreamy, hopeful, magical." },
+      { datei: "whatif-napkin", ton: "funny", post: "🧮 **Napkin math: ETN at {COIN}'s market cap = {PRICE} per ETN.**\nMy calculator needed a minute. Do yours:",
+        szene: "A crab in tiny reading glasses sits at a café table on the sea floor, scribbling wildly on a napkin with a pencil, surrounded by crumpled napkins and a steaming coffee cup. Its eyes are wide with shock at its own result. The napkin shows only scribbles and doodles." },
+    ] },
+];
+
+const ALLE = GRUPPEN.flatMap((g) => g.bilder.map((b) => ({ ...b, g })));
+// Kurz und bildhaft: Szene, Look, Farbe, Format. Kein Satz mit Krypto-Slang
+// ("seven figures", "paper hands") - Grok nimmt Woerter woertlich.
+const prompt = (b, g = b.g) => b.szene + "\n\n" + LOOK[b.ton][1] + " " + SCHLUSS(g.wort, b.datei === "banner");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const postHtml = (s) => esc(s).replace(/\*\*(.+?)\*\*/gs, "<b>$1</b>").replace(/\{([A-Z]+)\}/g, "<mark>$1</mark>");
+
+let FERTIG = new Set();
+try { FERTIG = new Set(JSON.parse(localStorage.getItem("etnradar-sharekit") || "[]")); } catch {}
+const merken = () => { try { localStorage.setItem("etnradar-sharekit", JSON.stringify([...FERTIG])); } catch {} };
+let FILTER = "alle";
+
+function zeichnen() {
+  const sichtbar = (b) => FILTER === "alle" || (FILTER === "test" ? TEST.has(b.datei) : !FERTIG.has(b.datei));
+  const html = GRUPPEN.map((g) => {
+    const bilder = g.bilder.filter(sichtbar);
+    if (!bilder.length) return "";
+    return '<section class="gruppe" id="g-' + g.id + '" style="--c:' + g.hex + '">' +
+      '<header><div class="emo" aria-hidden="true">' + g.emoji + "</div>" +
+      "<h2>" + esc(g.titel) + " <small>" + esc(g.sub) + "</small></h2>" +
+      '<p class="vorlage">' + esc(g.vorlage) + "</p></header>" +
+      '<div class="bilder">' + bilder.map((b) => {
+        const fertig = FERTIG.has(b.datei);
+        return '<article class="bild' + (fertig ? " fertig" : "") + '" style="--c:' + g.hex + '">' +
+          '<div class="zeile"><span class="ton">' + LOOK[b.ton][0] + '</span><code class="datei">' + b.datei + "</code>" +
+            (TEST.has(b.datei) ? '<span class="test">ALS NÄCHSTES</span>' : "") +
+            (b.bedingung ? '<span class="bedingung">' + esc(b.bedingung) + "</span>" : "") +
+            '<label class="gespeichert" for="ok-' + b.datei + '"><input type="checkbox" id="ok-' + b.datei + '" data-ok="' + b.datei + '"' +
+            (fertig ? " checked" : "") + "> gespeichert</label></div>" +
+          '<div class="spalte"><span class="etikett">Post</span><p class="post">' + postHtml(b.post) + "</p></div>" +
+          '<div class="spalte"><span class="etikett">Bildidee</span><p class="szene">' + esc(b.szene) + "</p>" +
+            '<div class="aktionen"><button type="button" class="kopieren" id="kp-' + b.datei + '" data-kopie="' + b.datei + '">Prompt kopieren</button>' +
+            '<details class="voll"><summary>Ganzer Prompt</summary><pre>' + esc(prompt(b, g)) + "</pre></details></div></div>" +
+        "</article>";
+      }).join("") + "</div></section>";
+  }).join("");
+  document.getElementById("gruppen").innerHTML = html || '<p class="leer">Alles gespeichert. Leg die Bilder in Bilder/share-roh/ und sag Bescheid.</p>';
+  zaehlen();
+}
+
+function zaehlen() {
+  const n = ALLE.filter((b) => FERTIG.has(b.datei)).length;
+  document.getElementById("zaehler").textContent = n + " / " + ALLE.length + " gespeichert";
+  document.getElementById("balken").style.width = (n / ALLE.length) * 100 + "%";
+}
+
+async function kopieren(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  const t = document.createElement("textarea");
+  t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+  document.body.appendChild(t); t.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch {}
+  t.remove(); return ok;
+}
+
+document.getElementById("gruppen").addEventListener("click", async (e) => {
+  const knopf = e.target.closest("[data-kopie]");
+  if (!knopf) return;
+  const b = ALLE.find((x) => x.datei === knopf.dataset.kopie);
+  const ok = await kopieren(prompt(b));
+  if (!ok) knopf.nextElementSibling.open = true;
+  knopf.textContent = ok ? "Kopiert" : "Unten markieren und kopieren";
+  knopf.classList.toggle("ok", ok);
+  setTimeout(() => { knopf.textContent = "Prompt kopieren"; knopf.classList.remove("ok"); }, 1800);
+});
+
+document.getElementById("gruppen").addEventListener("change", (e) => {
+  const box = e.target.closest("[data-ok]");
+  if (!box) return;
+  box.checked ? FERTIG.add(box.dataset.ok) : FERTIG.delete(box.dataset.ok);
+  merken();
+  box.closest(".bild").classList.toggle("fertig", box.checked);
+  zaehlen();
+});
+
+document.querySelector(".filter").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-f]");
+  if (!b) return;
+  FILTER = b.dataset.f;
+  document.querySelectorAll(".filter button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  zeichnen();
+});
+
+// Sprungmarken schalten auf "Alle", sonst fehlt das Ziel
+document.getElementById("sprung").innerHTML = GRUPPEN.map((g) => '<a href="#g-' + g.id + '" data-ziel="' + g.id + '">' + g.emoji + " " + esc(g.titel) + "</a>").join("");
+document.getElementById("sprung").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-ziel]");
+  if (!a || FILTER === "alle") return;
+  FILTER = "alle";
+  document.querySelectorAll(".filter button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.f === "alle")));
+  zeichnen();
+});
+
+zeichnen();
+</script>
