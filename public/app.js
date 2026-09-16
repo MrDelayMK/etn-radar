@@ -790,7 +790,6 @@ function alleChartsNachziehen() {
   if (MIG.punkte.length) zeichneMigration();
   if (el("invChart")?._punkte) zeichneChart(el("invChart"));
   if (TIER_VERLAUF.tage) zeichneTierVerlauf();
-  if (CHAIN.daten) zeichneChainKacheln();
   if (VIS.daten) zeichneBesucherChart();
   if (FLOW.punkte) zeichneFlowChart(el("flowChart"));
 }
@@ -803,7 +802,6 @@ function beobachte(holderId, zeichnen) {
 }
 beobachte("prHolder", () => { if (el("prChart")._punkte) zeichnePreisChart(); });
 beobachte("tierVerlauf", () => { if (TIER_VERLAUF.tage) zeichneTierVerlauf(); });
-beobachte("chainKacheln", () => { if (CHAIN.daten) zeichneChainKacheln(); });
 beobachte("visHolder", () => { if (VIS.daten) zeichneBesucherChart(); });
 beobachte("chartHolder", () => { if (MIG.punkte.length) zeichneMigration(); });
 // #invChart fehlt, solange ein Wallet ohne genug Verlauf offen ist: dann steht
@@ -1376,14 +1374,13 @@ async function ladeBridgeVerlauf() {
 }
 
 // ---------- Chain ----------
-// Liest nur /api/chain (src/index.js, chain()). Oben Kacheln im Stil der
-// Tier-Verlaeufe, darunter Wochenrueckblick, Tokens und neue Contracts.
-const CHAIN = { daten: null, text: "" };
-const CHAIN_KACHELN = [
-  // art: "schnitt" = Tagesschnitt der Woche, "summe" = Wochensumme
-  { k: "tx", titel: "Transactions", einheit: "transactions", art: "schnitt" },
-  { k: "contracts", titel: "Verified contracts", einheit: "verified", art: "summe" },
-];
+// Liest nur /api/chain (src/index.js, chain()). Daraus kommen der
+// Wochenrueckblick - der steht in der Overview - sowie Tokens und Contracts.
+const CHAIN = { daten: null, text: "", bild: "week-radar" };
+// Overview und Chain-Reiter brauchen dieselbe Antwort: einmal holen, beide
+// zeichnen lassen. /api/chain liegt ohnehin eine Stunde im Edge-Zwischenspeicher.
+let chainLaeuft = null;
+const chainDaten = () => (chainLaeuft ??= ladeChain());
 
 async function ladeChain() {
   try {
@@ -1394,7 +1391,6 @@ async function ladeChain() {
     }
     return;
   }
-  zeichneChainKacheln();
   zeichneChainWoche();
   zeichneChainTokens();
   zeichneChainNeu();
@@ -1416,26 +1412,15 @@ function chainProzent(p) {
     nf(Math.abs(p), Math.abs(p) < 10 ? 1 : 0) + "% vs. last week</span>";
 }
 
-function zeichneChainKacheln() {
-  const d = CHAIN.daten;
-  const box = el("chainKacheln");
-  if (!d || box.clientWidth === 0) return; // versteckter Reiter, siehe zeichneChart
-  box.innerHTML = CHAIN_KACHELN.map((c) => {
-    const w = d[c.k];
-    const wert = !w?.woche ? null : c.art === "summe" ? w.woche.summe : w.woche.summe / w.woche.tage;
-    return '<div class="tvkarte" data-k="' + c.k + '">' +
-      '<div class="kopf"><span class="nm">' + c.titel + '</span><span class="wert num">' +
-        (wert == null ? "—" : chainZahl(wert)) + "</span></div>" +
-      '<div class="unter">' + (chainProzent(chainVergleich(w)) || "<span></span>") +
-        "<span>" + (c.art === "summe" ? "last 7 days" : "per day, 7-day avg") + "</span></div>" +
-      '<div class="chartholder"><svg></svg><div class="tip"></div></div></div>';
-  }).join("");
-  box.querySelectorAll(".tvkarte").forEach((karte) => {
-    const c = CHAIN_KACHELN.find((x) => x.k === karte.dataset.k);
-    tierMiniChart(karte.querySelector(".chartholder"), d[c.k]?.reihe ?? [], "#5b9cff", chainDatum, {
-      format: chainZahl, einheit: c.einheit, ende: "datum", links: 46,
-    });
-  });
+
+// Das Bild zum Wochenrueckblick richtet sich nach der groessten Nachricht der
+// Woche. Trifft nichts davon zu, zeigt das Radarbild einfach die Woche an sich.
+function wocheBild(d) {
+  const m = d.migration;
+  if (m?.vorwoche > 0 && (m.woche - m.vorwoche) / m.vorwoche >= 0.25) return "week-bridge";
+  if (Math.abs(d.bewegung?.etn ?? 0) >= 10e6) return "week-whale";
+  if (chainVergleich(d.tx) >= 10) return "week-busy";
+  return "week-radar";
 }
 
 function zeichneChainWoche() {
@@ -1482,6 +1467,7 @@ function zeichneChainWoche() {
   }
   CHAIN.text = "This week on Electroneum (" + el("chainWocheRange").textContent + ")\n" +
     fakten.map((f) => f[0] + " " + f[2]).join("\n");
+  CHAIN.bild = wocheBild(d);
   box.innerHTML = '<ul class="wochefakten">' +
     fakten.map((f) => "<li><i>" + f[0] + "</i><span>" + f[1] + "</span></li>").join("") + "</ul>" +
     '<div class="sharebar"><button data-teilen>📢 Share this week</button></div>';
@@ -1497,7 +1483,12 @@ el("chainWoche").addEventListener("click", (e) => {
   }
   if (!e.target.closest("[data-teilen]") || !CHAIN.text) return;
   // Derselbe Dialog wie "Share" beim Wallet: Vorschau, dann X oder Telegram.
-  shareTextOeffnen({ titel: "📢 Share this week", text: CHAIN.text, url: location.origin + "/chain" });
+  shareTextOeffnen({
+    titel: "📢 Share this week",
+    text: CHAIN.text,
+    url: location.origin + "/",
+    bild: CHAIN.bild,
+  });
 });
 
 function zeichneChainTokens() {
@@ -2868,7 +2859,7 @@ function shareBlock(addr) {
 //
 // Derselbe Dialog teilt auch fertige Texte, etwa den Wochenrueckblick auf dem
 // Chain-Reiter: dann ohne Adress-Schalter, Satz- und Bildwahl.
-// SHARE_FREMD = { titel, text, url } oder null fuer den Rang.
+// SHARE_FREMD = { titel, text, url, bild } oder null fuer den Rang.
 let SHARE_FREMD = null;
 let SHARE_FORMAT = "karte";
 // Wessen Wallet: "fremd" ist vorgewaehlt - wer ein Wallet oeffnet, will meist
@@ -2877,13 +2868,14 @@ let SHARE_WER = "fremd";
 let SHARE_FOTO = { schluessel: null, datei: null, laden: null };
 
 const shareBildId = () => {
+  if (SHARE_FREMD) return SHARE_FREMD.bild ?? null;
   const s = SHARE_SAETZE[CUR_WALLET?.tier]?.[SHARE_WAHL];
   const id = s ? CUR_WALLET.tier + "-" + s[0] : null;
   return id && SHARE_BILDER.has(id) ? id : null;
 };
 const shareBildUrl = (id, art) => location.origin + "/assets/share/" + id + "-" + art + ".jpg";
 const bildArt = (format) => (format === "foto" ? "square" : "card");
-const aktivesFormat = () => (SHARE_FREMD || !shareBildId() ? "text" : SHARE_FORMAT);
+const aktivesFormat = () => (shareBildId() ? SHARE_FORMAT : "text");
 const kannFotoTeilen = () => {
   try { return !!navigator.canShare?.({ files: [new File([""], "x.jpg", { type: "image/jpeg" })] }); } catch { return false; }
 };
@@ -2899,8 +2891,15 @@ const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet 
 
 // Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
 function shareInhalt(weg) {
-  if (SHARE_FREMD) return { text: SHARE_FREMD.text, url: SHARE_FREMD.url };
   const format = aktivesFormat();
+  if (SHARE_FREMD) {
+    const text = SHARE_FREMD.text;
+    // Als Karte fuehrt der Link ueber /s/<bild>, damit X und Telegram genau
+    // dieses Bild als Vorschau zeigen; als Foto geht die Datei selbst raus.
+    if (format === "karte" && weg === "link") return { text, url: location.origin + "/s/" + SHARE_FREMD.bild };
+    if (format !== "text") return { text, url: "" };
+    return { text, url: SHARE_FREMD.url };
+  }
   if (SHARE_WER === "fremd") {
     const text = fremdText(CUR_WALLET, format);
     // Die Vorschau fuehrt ueber ?w= direkt zum Wallet statt zur Startseite.
@@ -2950,7 +2949,7 @@ function shareKnoepfe() {
   const k = (aktion, text, klasse = "") =>
     '<button type="button" class="' + klasse + '" data-aktion="' + aktion + '">' + text + "</button>";
   let gross, klein = [];
-  if (istHandy() && !SHARE_FREMD) {
+  if (istHandy() && (!SHARE_FREMD || format !== "text")) {
     gross = k("teilen", "📤 Share");
     // Als Link nur das breite Bild - ein Quadrat schnitte die Vorschaukarte ab.
     if (format === "karte") klein.push(k("x", "𝕏 as link"), k("tg", "✈️ as link"));
@@ -2969,23 +2968,8 @@ function shareKnoepfe() {
   el("shareMehr").innerHTML = klein.join("");
 }
 
-function shareVorschau() {
-  if (!SHARE_FREMD && !CUR_WALLET) return;
-  const inhalt = shareInhalt(hauptWeg());
-  el("sharePreview").textContent = inhalt.text + (inhalt.url ? "\n" + inhalt.url : "");
-  shareKnoepfe();
-  if (SHARE_FREMD) return;
-
-  const fremd = SHARE_WER === "fremd";
-  el("shareTitel").textContent = fremd ? "📢 Share this wallet" : "📢 Share your rank";
-  el("shareWer").querySelectorAll("button").forEach((b) => {
-    const an = b.dataset.wer === SHARE_WER;
-    b.classList.toggle("on", an);
-    b.setAttribute("aria-checked", String(an));
-  });
-  el("shareHideRow").hidden = fremd;
-  const id = shareBildId();
-  const format = aktivesFormat();
+// Bildwahl, ⓘ-Text und Vorschaubild - gleich fuer Rang und fertigen Text.
+function shareBildZeigen(id, format) {
   el("shareInfoKnopf").dataset.info = shareInfoText(format);
   el("shareFormat").querySelectorAll("button[data-format]").forEach((b) => {
     const an = b.dataset.format === format;
@@ -2996,11 +2980,34 @@ function shareVorschau() {
   const bild = el("shareBild");
   bild.hidden = format === "text";
   bild.classList.toggle("foto", format === "foto");
-  if (!bild.hidden) {
-    const src = shareBildUrl(id, bildArt(format));
-    if (el("shareBildImg").getAttribute("src") !== src) el("shareBildImg").src = src;
-    if (istHandy()) fotoVorladen(id, bildArt(format));
-  }
+  if (bild.hidden) return;
+  const src = shareBildUrl(id, bildArt(format));
+  if (el("shareBildImg").getAttribute("src") !== src) el("shareBildImg").src = src;
+  if (istHandy()) fotoVorladen(id, bildArt(format));
+}
+
+function shareVorschau() {
+  if (!SHARE_FREMD && !CUR_WALLET) return;
+  const inhalt = shareInhalt(hauptWeg());
+  el("sharePreview").textContent = inhalt.text + (inhalt.url ? "\n" + inhalt.url : "");
+  shareKnoepfe();
+
+  // Bildwahl und Vorschaubild gibt es fuer beides: fuer den eigenen Rang und
+  // fuer einen fertigen Text mit Bild, etwa den Wochenrueckblick.
+  const id = shareBildId();
+  const format = aktivesFormat();
+  if (SHARE_FREMD) el("shareFormat").hidden = !id;
+  shareBildZeigen(id, format);
+  if (SHARE_FREMD) return;
+
+  const fremd = SHARE_WER === "fremd";
+  el("shareTitel").textContent = fremd ? "📢 Share this wallet" : "📢 Share your rank";
+  el("shareWer").querySelectorAll("button").forEach((b) => {
+    const an = b.dataset.wer === SHARE_WER;
+    b.classList.toggle("on", an);
+    b.setAttribute("aria-checked", String(an));
+  });
+  el("shareHideRow").hidden = fremd;
 
   el("sharePrivacyNote").textContent = fremd
     ? "The address goes out with the post."
@@ -3054,9 +3061,9 @@ function shareTextOeffnen(fremd) {
   el("shareTitel").textContent = fremd.titel;
   el("sharePrivat").hidden = true;
   el("shareTexte").hidden = true;
-  el("shareFormat").hidden = true;
   el("shareWer").hidden = true;
-  el("shareBild").hidden = true;
+  // Mit Bild faengt der Dialog bei der Karte an - so sieht man sofort, was rausgeht.
+  SHARE_FORMAT = "karte";
   shareVorschau();
   el("shareModal").classList.add("on");
 }
@@ -3630,7 +3637,7 @@ const uebersicht = () => (uebersichtLaeuft ??= ladeOverview());
 
 const LADER = {
   overview: () =>
-    Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), ladeWatchlist(), fbBesucher()]),
+    Promise.all([uebersicht(), ladeNetzwerk(), ladeKurs(), chainDaten(), ladeWatchlist(), fbBesucher()]),
   // Reihenfolge ist hier wichtig, nicht Geschmack: ladeOverview() schreibt den
   // Kopfbereich fuer die Zeit VOR dem Stichtag, ladeBilanz() ueberschreibt ihn
   // danach. Parallel gestartet gewaenne mal der eine, mal der andere.
@@ -3643,7 +3650,7 @@ const LADER = {
   board: () => ladeLeaderboard(),
   activity: () =>
     Promise.all([ladeWatchlist(), ladeMovers("7d"), ladeSleepers(), ladeEvents(), ladeExchangeFlow()]),
-  chain: () => ladeChain(),
+  chain: () => chainDaten(),
   clusters: () => Promise.all([ladeClusters(), ladeJobStatus("clusters", "clustersBtn")]),
   // Wartet auf eine Suche - die Merkliste ist das einzige, was hier von
   // selbst etwas zu zeigen hat, und genau dort ist sie am nuetzlichsten.

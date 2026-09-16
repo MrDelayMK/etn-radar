@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO, repoUrl, ctx, pruefer } from "./hilfen.mjs";
 
-const { SHARE_BILDER } = await import(repoUrl("src/share.js"));
+const { SHARE_BILDER, SHARE_SONDER } = await import(repoUrl("src/share.js"));
 const { default: worker } = await import(repoUrl("src/index.js"));
 const { pruef, ende } = pruefer();
 
@@ -57,6 +57,18 @@ pruef(JSON.stringify(seitenIds) === JSON.stringify(Object.keys(SHARE_BILDER).sor
 for (const [id, satz] of Object.entries(SHARE_BILDER)) {
   const ton = id.split("-")[1];
   pruef(appJs.includes('["' + ton + '", ' + JSON.stringify(satz) + "]"), id + ": derselbe Satz im Dialog wie im Bild");
+}
+
+// Wochenrueckblick: vier Bilder, eines je Art von Nachricht.
+const woche = await (await holen("/s/week-whale")).text();
+pruef(woche.includes('property="og:image" content="https://etn-radar.galacticsl.com/assets/share/week-whale-card.jpg"'), "Wochenrueckblick: og:image zeigt auf das Wochenbild");
+pruef(woche.includes('og:title" content="This week on Electroneum - the full recap on ETN Radar"'), "Wochenrueckblick: eigener Titel");
+pruef(woche.includes('location.replace("/")'), "Wochenrueckblick: Besucher landen in der Overview");
+for (const id of Object.keys(SHARE_SONDER)) {
+  const card = join(REPO, "public/assets/share", id + "-card.jpg");
+  const square = join(REPO, "public/assets/share", id + "-square.jpg");
+  pruef(existsSync(card) && existsSync(square), id + ": Vorschau- und 1:1-Bild liegen in public/assets/share");
+  pruef(appJs.includes('"' + id + '"'), id + ": die Seite kann dieses Bild auch waehlen");
 }
 
 const start = readFileSync(join(REPO, "public/index.html"), "utf8");

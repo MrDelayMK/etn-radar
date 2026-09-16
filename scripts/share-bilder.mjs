@@ -29,6 +29,15 @@ const TIERS = {
   microbe: ["Microbe", "5K+ ETN", "#64748b"],
   dust: ["Dust", "under 5K ETN", "#7b8aa3"],
 };
+// Bilder ohne Stufe: Kopfzeile, Unterzeile, Farbe und die Schlagzeile auf der
+// Karte. Die Woche wechselt jede Woche, das Bild aber nicht - deshalb steht
+// dort die Art der Nachricht und kein Datum.
+const SONDER = {
+  "week-bridge": ["This week", "Electroneum", "#5b9cff", "Busy week at the migration bridge."],
+  "week-whale": ["This week", "Electroneum", "#5b9cff", "A whale made waves this week."],
+  "week-busy": ["This week", "Electroneum", "#5b9cff", "Electroneum got busier this week."],
+  "week-radar": ["This week", "Electroneum", "#5b9cff", "The week in numbers."],
+};
 // Die Saetze kommen aus SHARE_SAETZE in public/app.js - so steht auf dem Bild
 // immer genau der Satz, den der Teilen-Dialog daneben anbietet.
 function saetzeLesen() {
@@ -139,8 +148,7 @@ async function gerahmt(quelle, W, H, farbe, ziel) {
 }
 
 // Link-Vorschau: quadratisches Bild links, Satz rechts
-async function karte(quelle, tierKey, satz, ziel) {
-  const [tierName, ab, farbe] = TIERS[tierKey];
+async function karte(quelle, [tierName, ab, farbe], satz, ziel) {
   const W = 1200, H = 630, X = 630, rand = 54;
   const kunst = await sharp(quelle).resize(H, H, { fit: "cover" }).toBuffer();
   const logo = await sharp(LOGO).resize(50, 50).toBuffer();
@@ -199,9 +207,10 @@ for (const datei of readdirSync(ROH).sort()) {
     continue;
   }
   const tierKey = name.split("-")[0];
-  if (!TIERS[tierKey] || !SAETZE[name]) { console.log("uebersprungen (kein Satz):", name); continue; }
-  await karte(quelle, tierKey, SAETZE[name], AUS + name + "-card.jpg");
-  await gerahmt(quelle, 1080, 1080, TIERS[tierKey][2], AUS + name + "-square.jpg");
+  const kopf = SONDER[name] ?? (TIERS[tierKey] && SAETZE[name] ? [...TIERS[tierKey], SAETZE[name]] : null);
+  if (!kopf) { console.log("uebersprungen (kein Satz):", name); continue; }
+  await karte(quelle, kopf, kopf[3], AUS + name + "-card.jpg");
+  await gerahmt(quelle, 1080, 1080, kopf[2], AUS + name + "-square.jpg");
   fertig.push(name);
 }
 console.log(fertig.length + " Bilder gebaut: " + fertig.join(", "));
