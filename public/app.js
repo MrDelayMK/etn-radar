@@ -873,8 +873,12 @@ async function ladeOverview() {
   el("kConc").textContent = d.holder.top100_anteil != null ? nf(d.holder.top100_anteil * 100, 1) + "%" : "—";
   el("kConcS").textContent = d.holder.top10_anteil != null
     ? "top 10 hold " + nf(d.holder.top10_anteil * 100, 1) + "%" : "—";
-  el("kAddr").textContent = nf(d.snapshot.addr_count);
-  el("kAddrS").textContent = "in the latest snapshot";
+  // Top N live plus die Wallets aus dem woechentlichen Census - so viele stehen im Leaderboard.
+  const woche = d.census_wallets ?? 0;
+  el("kAddr").textContent = nf(d.snapshot.addr_count + woche);
+  el("kAddrS").textContent = woche
+    ? nf(d.snapshot.addr_count) + " live · " + nf(woche) + " weekly"
+    : "in the latest snapshot";
 
   // Stand von jetzt als letzter Punkt der Tier-Verlaeufe.
   TIER_VERLAUF.tiers = d.tiers;

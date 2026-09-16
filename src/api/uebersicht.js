@@ -208,8 +208,20 @@ export async function overview(db, env) {
     ).results?.[0] ??
     null;
 
+  // Wallets aus dem woechentlichen Census, die das Leaderboard zusaetzlich
+  // listet. Aus der ersten und letzten Position statt COUNT(*): zwei
+  // Indexzeilen statt 21.000 gelesener - bei jedem Seitenaufruf.
+  const censusListe = await db
+    .prepare(
+      "SELECT (SELECT pos FROM census_wallets ORDER BY pos LIMIT 1) AS von," +
+        " (SELECT pos FROM census_wallets ORDER BY pos DESC LIMIT 1) AS bis"
+    )
+    .first()
+    .catch(() => null);
+
   return {
     snapshot: snap,
+    census_wallets: censusListe?.von != null ? censusListe.bis - censusListe.von + 1 : 0,
     preis: snap.etn_price,
     telegram_bot: env.TELEGRAM_BOT_USERNAME ?? null,
     // Optional wie der Telegram-Bot: ohne Variable bleibt der Spendenknopf

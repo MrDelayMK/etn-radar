@@ -376,11 +376,18 @@ export async function runIngest(env, db, opts = {}) {
     try {
       const aufsteiger = rows.filter((r) => { const p = prev.get(r.hash); return !p || p.in_top_n === 0; });
       const census = aufsteiger.map((r) => db.prepare("DELETE FROM census_wallets WHERE address = ?").bind(r.hash));
-      if (dropped.length) {
+      // Nur wer schon mit seinem alten Bestand unter die neue Grenze faellt,
+      // wurde bloss verdraengt und haelt vermutlich noch genau das. Lag der
+      // alte Bestand darueber, hat das Wallet selbst abgegeben - wie viel,
+      // weiss dieser Lauf nicht (am 16.09. standen so 1,8 Mio. in der Liste,
+      // die laengst weg waren). Solche warten auf den naechsten Census.
+      const grenze = Math.min(...rows.map((r) => r.etn));
+      const verdraengt = dropped.filter((a) => prev.get(a).etn < grenze);
+      if (verdraengt.length) {
         const oben = await db.prepare("SELECT MIN(pos) AS m FROM census_wallets").first();
         let pos = (oben?.m ?? 1) - 1;
         // Groesster zuerst, also mit der kleinsten Position.
-        const nachBestand = [...dropped].sort((a, b) => prev.get(b).etn - prev.get(a).etn);
+        const nachBestand = [...verdraengt].sort((a, b) => prev.get(b).etn - prev.get(a).etn);
         for (let i = nachBestand.length - 1; i >= 0; i--) {
           const a = nachBestand[i];
           const p = prev.get(a);
