@@ -943,9 +943,12 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
   .chip{padding:6px 10px;font-size:12px}
   .homelink span{display:none}
 
-  /* Feedback und Donate stehen auch im Footer - hier bleibt der Platz den
-     Reitern. Images und About sind aber Seiten und muessen erreichbar bleiben. */
-  nav .navrechts button[data-feedback],nav .navrechts button[data-spende]{display:none}
+  /* Alle vier bleiben sichtbar, aber nur als Symbol im 2x2-Block - so passen
+     sie in die Breite eines einzigen Knopfs und sehen nicht abgeschnitten aus. */
+  nav .navrechts{grid-template-columns:auto auto}
+  nav .navrechts button{padding:3px 7px;justify-content:center}
+  nav .navrechts button .ic{font-size:14px}
+  nav .navrechts button .tx{display:none}
 
   /* Willkommen: Titel, Satz, Knopf. Die Liste schob am Handy alles weit nach unten. */
   .welcome ul,.welcome > img{display:none}
@@ -1083,8 +1086,6 @@ footer{margin-top:52px;padding-top:26px;border-top:1px solid var(--line);font-si
 /* Rechte Gruppe: Images, About, Feedback, Donate als 2x2-Block. Alle vier
    uebereinander machten die Leiste 90 statt 55 px hoch. */
 nav .navrechts{display:grid;grid-template-columns:auto auto;align-content:center}
-/* Einspaltig erst, wenn Feedback und Donate ausgeblendet sind (560px, s.o.). */
-@media (max-width:560px){nav .navrechts{grid-template-columns:auto}}
 nav .navrechts button.on{color:var(--tx);border-color:var(--acc);background:rgba(91,156,255,.12)}
 
 /* What if: eigener Bestand */
