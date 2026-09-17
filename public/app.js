@@ -3259,8 +3259,18 @@ const hauptWeg = () => (istHandy() && aktivesFormat() !== "text" ? "datei" : "li
 // Link mit dem breiten Bild als Vorschau (src/share.js); ?w= fuer ein fremdes Wallet.
 const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet ? "?w=" + wallet : "");
 
-// Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
+// Unter jedem Post dieselben Hashtags - der Link bleibt ganz am Ende, dann
+// blendet X ihn aus und zeigt nur die Vorschaukarte.
+const SHARE_TAGS = "#ETN #Electroneum #ETNRadar #GalacticSL";
 function shareInhalt(weg) {
+  const i = shareInhaltRoh(weg);
+  return { text: i.text + "
+
+" + SHARE_TAGS, url: i.url };
+}
+
+// Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
+function shareInhaltRoh(weg) {
   const format = aktivesFormat();
   if (SHARE_FREMD) {
     const text = SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
