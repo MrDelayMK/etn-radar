@@ -22,6 +22,13 @@ const dateien = readdirSync(ORDNER)
   .sort();
 
 let rot = 0;
+// Die Browser-Skripte laedt kein Test - ein Syntaxfehler dort legt aber die ganze Seite lahm.
+const PUBLIC = fileURLToPath(new URL("../public/", import.meta.url));
+for (const f of readdirSync(PUBLIC).filter((f) => f.endsWith(".js"))) {
+  const r = spawnSync(process.execPath, ["--check", PUBLIC + f], { encoding: "utf8" });
+  console.log((r.status === 0 ? "OK    " : "ROT   ") + "Syntax public/" + f);
+  if (r.status !== 0) { rot++; console.log("      " + (r.stderr ?? "").trim().split(/\r?\n/).slice(0, 5).join("\n      ")); }
+}
 for (const f of dateien) {
   const t0 = Date.now();
   const r = spawnSync(process.execPath, [ORDNER + f], { encoding: "utf8" });
