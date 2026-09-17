@@ -3264,9 +3264,7 @@ const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet 
 const SHARE_TAGS = "#ETN #Electroneum #ETNRadar #GalacticSL";
 function shareInhalt(weg) {
   const i = shareInhaltRoh(weg);
-  return { text: i.text + "
-
-" + SHARE_TAGS, url: i.url };
+  return { text: i.text + "\n\n" + SHARE_TAGS, url: i.url };
 }
 
 // Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
