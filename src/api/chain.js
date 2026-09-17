@@ -19,7 +19,7 @@ export async function chain(db, env) {
   const woche = { von: tagVor(7), bis: tagVor(1) };
   const vorwoche = { von: tagVor(14), bis: tagVor(8) };
 
-  const [tage, tokenZeilen, contracts, bridgeTage, bewegung] = await Promise.all([
+  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse] = await Promise.all([
     alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
@@ -40,6 +40,12 @@ export async function chain(db, env) {
       woche.von + "T00:00:00Z",
       heute + "T00:00:00Z",
       bridge
+    ),
+    // Tageskurs (letzter Snapshot des Tages) vom Tag vor der Woche bis zu ihrem Ende.
+    alle(
+      "SELECT day, etn_price FROM network_daily WHERE day >= ? AND day <= ? AND etn_price > 0 ORDER BY day",
+      vorwoche.bis,
+      woche.bis
     ),
   ]);
 
@@ -123,9 +129,23 @@ export async function chain(db, env) {
     };
   }).sort((a, b) => (b.holders ?? -1) - (a.holders ?? -1));
 
+  // Kurs der Woche: Schluss am Vortag gegen Schluss am letzten Tag. Fehlt der
+  // Vortag, zaehlt der erste Tag der Woche - mehr als ein Tag Luecke ist keine Woche mehr.
+  const ende = kurse[kurse.length - 1];
+  const start = kurse[0];
+  const preis = kurse.length >= 2 && ende.day === woche.bis && start.day <= woche.von
+    ? {
+        start: start.etn_price,
+        ende: ende.etn_price,
+        hoch: Math.max(...kurse.map((k) => k.etn_price)),
+        tief: Math.min(...kurse.map((k) => k.etn_price)),
+      }
+    : null;
+
   const b = bewegung[0];
   return {
     woche,
+    preis,
     tx: kachel(tx),
     contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
     migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,

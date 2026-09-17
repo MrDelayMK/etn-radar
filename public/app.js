@@ -1440,6 +1440,18 @@ function zeichneChainWoche() {
   const mit = (p) => (p == null ? "" : " · " + chainProzent(p));
   // [Emoji, HTML fuer die Seite, Klartext fuer den geteilten Post]
   const fakten = [];
+  if (d.preis) {
+    const p = ((d.preis.ende - d.preis.start) / d.preis.start) * 100;
+    const flach = Math.abs(p) < 0.1;
+    const pfeil = flach ? "" : p > 0 ? "▲ " : "▼ ";
+    const wert = pfeil + (p > 0 ? "+" : flach ? "" : "-") + nf(Math.abs(p), 1) + "%";
+    fakten.push(["💰",
+      "ETN price <b>" + wiPreis(d.preis.ende) + "</b> · " +
+        (flach ? '<span class="dim3">unchanged this week</span>'
+          : '<span class="' + (p > 0 ? "up" : "down") + '">' + wert + " this week</span>") +
+        ' <span class="dim3">(low ' + wiPreis(d.preis.tief) + ", high " + wiPreis(d.preis.hoch) + ")</span>",
+      "ETN price " + wiPreis(d.preis.ende) + (flach ? ", unchanged this week" : " (" + wert + " this week)")]);
+  }
   if (d.tx?.woche) {
     const t = kurz(d.tx.woche.summe) + " transactions";
     fakten.push(["📈", "<b>" + t + "</b>" + mit(chainVergleich(d.tx)), t]);
