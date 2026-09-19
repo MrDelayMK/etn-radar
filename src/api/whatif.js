@@ -60,8 +60,10 @@ export async function whatif(db, env) {
   for (const [titel, von, bis] of BEREICHE) {
     const drin = coins.filter((c) => c.r >= von && c.r <= bis);
     const bekannt = BEKANNT.map((id) => drin.find((c) => c.i === id)).filter(Boolean);
-    const ids = [...bekannt, ...drin].map((c) => c.i).filter((id, i, a) => a.indexOf(id) === i);
-    if (ids.length) schnell.push({ titel, ids: ids.slice(0, JE_BEREICH) });
+    // Ausgewaehlt nach Bekanntheit, angezeigt nach dem Rang von heute: sonst stuende
+    // Polkadot (#50) ueber Hedera (#31), nur weil es in BEKANNT frueher kommt.
+    const wahl = [...new Set([...bekannt, ...drin])].slice(0, JE_BEREICH).sort((a, b) => a.r - b.r);
+    if (wahl.length) schnell.push({ titel, ids: wahl.map((c) => c.i) });
   }
 
   return {
