@@ -19,7 +19,8 @@ export async function chain(db, env) {
   const woche = { von: tagVor(7), bis: tagVor(1) };
   const vorwoche = { von: tagVor(14), bis: tagVor(8) };
 
-  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse] = await Promise.all([
+  const vor7 = new Date(Date.now() - 7 * 86400000).toISOString();
+  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse, kursJetzt, kursVor7] = await Promise.all([
     alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
@@ -41,11 +42,20 @@ export async function chain(db, env) {
       heute + "T00:00:00Z",
       bridge
     ),
-    // Tageskurs (letzter Snapshot des Tages) vom Tag vor der Woche bis zu ihrem Ende.
+    // Der Kurs ist anders als der Rest nicht die abgeschlossene Woche, sondern
+    // live: letzter Snapshot gegen den von vor genau sieben Tagen. Tief und
+    // Hoch aus den Tageskursen dazwischen (heute = letzter Snapshot).
     alle(
-      "SELECT day, etn_price FROM network_daily WHERE day >= ? AND day <= ? AND etn_price > 0 ORDER BY day",
-      vorwoche.bis,
-      woche.bis
+      "SELECT day, etn_price FROM network_daily WHERE day >= ? AND etn_price > 0 ORDER BY day",
+      woche.von
+    ),
+    alle("SELECT etn_price FROM snapshots WHERE status='ok' AND etn_price > 0 ORDER BY id DESC LIMIT 1"),
+    // Ueber den Tages-Index: liest nur die rund 48 Snapshots jenes Tages.
+    alle(
+      "SELECT etn_price FROM snapshots WHERE day = ? AND taken_at <= ? AND status='ok' AND etn_price > 0" +
+        " ORDER BY taken_at DESC LIMIT 1",
+      woche.von,
+      vor7
     ),
   ]);
 
@@ -129,17 +139,11 @@ export async function chain(db, env) {
     };
   }).sort((a, b) => (b.holders ?? -1) - (a.holders ?? -1));
 
-  // Kurs der Woche: Schluss am Vortag gegen Schluss am letzten Tag. Fehlt der
-  // Vortag, zaehlt der erste Tag der Woche - mehr als ein Tag Luecke ist keine Woche mehr.
-  const ende = kurse[kurse.length - 1];
-  const start = kurse[0];
-  const preis = kurse.length >= 2 && ende.day === woche.bis && start.day <= woche.von
-    ? {
-        start: start.etn_price,
-        ende: ende.etn_price,
-        hoch: Math.max(...kurse.map((k) => k.etn_price)),
-        tief: Math.min(...kurse.map((k) => k.etn_price)),
-      }
+  const jetzt = kursJetzt[0]?.etn_price;
+  const vorher = kursVor7[0]?.etn_price;
+  const alleKurse = [...kurse.map((k) => k.etn_price), jetzt, vorher].filter((p) => p > 0);
+  const preis = jetzt && vorher
+    ? { start: vorher, ende: jetzt, hoch: Math.max(...alleKurse), tief: Math.min(...alleKurse) }
     : null;
 
   const b = bewegung[0];

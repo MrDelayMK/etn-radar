@@ -459,10 +459,15 @@ function zeichneChart(svg, punkte, totalSupply) {
   }
 
   const PT = 18, PB = 34, PL = svg._totalSupply ? 104 : 74, PR = 14;
+  // Wallet-Chart im Dollar-Modus: dieselbe Kurve, Werte in USD, gruen statt gold.
+  const usd = !!svg._usd;
+  const farbe = usd ? "#34d399" : "#fbbf24";
+  const verlaufId = usd ? "grUsd" : "gr";
   const ys = daten.map((p) => p.etn);
   const min = Math.min(...ys), max = Math.max(...ys);
   const spanne = max - min || Math.abs(max) * 0.02 || 1;
-  const lo = min - spanne * 0.12;
+  // Nie unter null: ein Bestand oder Wert kann nicht negativ werden.
+  const lo = min >= 0 ? Math.max(0, min - spanne * 0.12) : min - spanne * 0.12;
   // Mehr als die gesamte Menge kann nie in der Bridge liegen - sonst stuende
   // bei der ganzen Historie "106 %" an der obersten Linie.
   const hi = svg._totalSupply
@@ -485,7 +490,7 @@ function zeichneChart(svg, punkte, totalSupply) {
     return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
       '" stroke="#1e293b" stroke-width="1"/>' +
       '<text x="' + (PL - 10) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12.5" ' +
-      'text-anchor="end" font-family="ui-monospace,monospace">' + kurz(wert) + pctLbl + "</text>";
+      'text-anchor="end" font-family="ui-monospace,monospace">' + (usd ? "$" : "") + kurz(wert) + pctLbl + "</text>";
   }).join("");
 
   // Datumsachse: so viele Marken, wie bei der aktuellen Breite lesbar sind.
@@ -503,18 +508,18 @@ function zeichneChart(svg, punkte, totalSupply) {
   }).join("");
 
   svg.innerHTML =
-    '<defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="#fbbf24" stop-opacity=".3"/>' +
-    '<stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/></linearGradient></defs>' +
+    '<defs><linearGradient id="' + verlaufId + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="' + farbe + '" stop-opacity=".3"/>' +
+    '<stop offset="100%" stop-color="' + farbe + '" stop-opacity="0"/></linearGradient></defs>' +
     linien + datumTexte +
-    '<path d="' + flaeche + '" fill="url(#gr)"/>' +
-    '<path d="' + d + '" fill="none" stroke="#fbbf24" stroke-width="2.4" ' +
+    '<path d="' + flaeche + '" fill="url(#' + verlaufId + ')"/>' +
+    '<path d="' + d + '" fill="none" stroke="' + farbe + '" stroke-width="2.4" ' +
     'stroke-linejoin="round" stroke-linecap="round"/>' +
     '<g id="cross" style="display:none">' +
-    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="#fbbf24" stroke-width="1" ' +
+    '<line y1="' + PT + '" y2="' + (H - PB) + '" stroke="' + farbe + '" stroke-width="1" ' +
     'stroke-dasharray="4 4" opacity=".7"/>' +
-    '<circle r="6" fill="#fbbf24" stroke="#0b111e" stroke-width="2.5"/></g>' +
-    '<circle cx="' + X(daten.length - 1) + '" cy="' + Y(ys[ys.length - 1]) + '" r="4.5" fill="#fbbf24"/>';
+    '<circle r="6" fill="' + farbe + '" stroke="#0b111e" stroke-width="2.5"/></g>' +
+    '<circle cx="' + X(daten.length - 1) + '" cy="' + Y(ys[ys.length - 1]) + '" r="4.5" fill="' + farbe + '"/>';
 
   const cross = svg.querySelector("#cross");
   const linie = cross.querySelector("line");
@@ -531,11 +536,13 @@ function zeichneChart(svg, punkte, totalSupply) {
     linie.setAttribute("x1", X(i)); linie.setAttribute("x2", X(i));
     punkt.setAttribute("cx", X(i)); punkt.setAttribute("cy", Y(p.etn));
 
-    tip.innerHTML =
-      '<b class="num">' + nf(p.etn, 0) + " ETN</b>" +
-      "<span>" + new Date(p.day).toLocaleDateString(LOC,
-        { year: "numeric", month: "short", day: "numeric" }) + "</span>" +
-      (i > 0
+    const datum = "<span>" + new Date(p.day).toLocaleDateString(LOC,
+      { year: "numeric", month: "short", day: "numeric" }) + "</span>";
+    tip.innerHTML = usd
+      ? '<b class="num">' + dollar(p.etn) + "</b>" + datum +
+        '<span class="num">' + kurz(p.menge) + " ETN × " + wiPreis(p.preis) + "</span>"
+      : '<b class="num">' + nf(p.etn, 0) + " ETN</b>" + datum +
+      (i > 0 && p.etn !== daten[i - 1].etn
         ? '<span class="num ' + (p.etn - daten[i - 1].etn < 0 ? "down" : "up") + '">' +
           kurz(p.etn - daten[i - 1].etn, true) + " vs. previous point</span>"
         : "");
@@ -980,10 +987,12 @@ async function ladeNetzwerk() {
 // Snapshot-Wert ueberschreibt ihn danach nicht mehr: beide Lader laufen
 // nebeneinander, die Reihenfolge ist nicht zugesichert.
 let preisIstLive = false;
+let PREIS_JETZT = null;
 function setzePreis(preis, live) {
   if (preis == null) return;
   if (preisIstLive && !live) return;
   if (live) preisIstLive = true;
+  PREIS_JETZT = preis;
   el("price").textContent = "$" + nf(preis, 6);
 }
 
@@ -1446,11 +1455,11 @@ function zeichneChainWoche() {
     const pfeil = flach ? "" : p > 0 ? "▲ " : "▼ ";
     const wert = pfeil + (p > 0 ? "+" : flach ? "" : "-") + nf(Math.abs(p), 1) + "%";
     fakten.push(["💰",
-      "ETN price <b>" + wiPreis(d.preis.ende) + "</b> · " +
-        (flach ? '<span class="dim3">unchanged this week</span>'
-          : '<span class="' + (p > 0 ? "up" : "down") + '">' + wert + " this week</span>") +
+      "ETN price now <b>" + wiPreis(d.preis.ende) + "</b> · " +
+        (flach ? '<span class="dim3">unchanged in 7 days</span>'
+          : '<span class="' + (p > 0 ? "up" : "down") + '">' + wert + " in 7 days</span>") +
         ' <span class="dim3">(low ' + wiPreis(d.preis.tief) + ", high " + wiPreis(d.preis.hoch) + ")</span>",
-      "ETN price " + wiPreis(d.preis.ende) + (flach ? ", unchanged this week" : " (" + wert + " this week)")]);
+      "ETN price now " + wiPreis(d.preis.ende) + (flach ? ", unchanged in 7 days" : " (" + wert + " in 7 days)")]);
   }
   if (d.tx?.woche) {
     const t = kurz(d.tx.woche.summe) + " transactions";
@@ -4001,6 +4010,153 @@ function wiederFrei(knopf, ms) {
   }, ms);
 }
 
+// ---------- Wallet-Wert in Dollar ----------
+//
+// Bestand je Tag (daily_balances) mal Tageskurs (/api/price, ein Jahr) - ohne
+// eine Anfrage mehr beim Explorer. daily_balances fuehrt nur Tage MIT
+// Aenderung; dazwischen gilt der letzte Stand. Ausserhalb der Top N kommt der
+// Verlauf erst beim Oeffnen (/api/wallet-history, eine Explorer-Anfrage).
+const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false };
+let kurseLaeuft = null;
+const kursTage = () =>
+  (kurseLaeuft ??= hole("/api/price?period=1y")
+    .then((d) => new Map((d.punkte ?? []).map((p) => [String(p.zeit).slice(0, 10), p.preis])))
+    .catch(() => { kurseLaeuft = null; return new Map(); }));
+let KURSE = new Map();
+
+function dollar(v) {
+  if (!isFinite(v)) return "—";
+  const a = Math.abs(v), s = v < 0 ? "-" : "";
+  if (a >= 1e6) return s + "$" + nf(a / 1e6, 2) + "M";
+  if (a >= 1e4) return s + "$" + nf(a, 0);
+  return s + "$" + nf(a, a >= 100 ? 0 : 2);
+}
+const heuteTag = () => new Date().toISOString().slice(0, 10);
+const preisJetzt = () => PREIS_JETZT ?? [...KURSE.values()].pop() ?? null;
+
+// Bestand an einem Tag: letzter Punkt bis dahin. undefined = davor unbekannt.
+function bestandAm(tag) {
+  if (tag >= heuteTag()) return WV.etn;
+  let wert;
+  for (const p of WV.verlauf) { if (p.day > tag) break; wert = p.etn; }
+  if (wert === undefined && WV.vollstaendig) return 0;
+  return wert;
+}
+function kursAm(tag) {
+  if (tag >= heuteTag()) return preisJetzt();
+  let wert = null;
+  for (const [t, p] of KURSE) { if (t > tag) break; wert = p; }
+  return wert;
+}
+
+// Tag fuer Tag, ab dem ersten Tag mit Kurs UND bekanntem Bestand.
+function wertReihe() {
+  const tage = [...KURSE.keys()];
+  if (!tage.length) return [];
+  const ersterBestand = WV.verlauf[0]?.day ?? heuteTag();
+  let t = Date.parse(WV.vollstaendig ? tage[0] : (ersterBestand > tage[0] ? ersterBestand : tage[0]));
+  const ende = Date.parse(heuteTag());
+  const reihe = [];
+  for (; t <= ende; t += 86400000) {
+    const tag = new Date(t).toISOString().slice(0, 10);
+    const menge = bestandAm(tag), preis = kursAm(tag);
+    if (menge === undefined || !(preis > 0)) continue;
+    reihe.push({ day: tag, etn: menge * preis, menge, preis });
+  }
+  // Vor der ersten Bewegung liegt nichts im Wallet - die Nullstrecke weglassen.
+  const erster = reihe.findIndex((p) => p.menge > 0);
+  return erster > 0 ? reihe.slice(erster - 1) : reihe;
+}
+
+// Woher die Veraenderung der letzten 30 Tage kommt: vom Kurs oder vom Bestand.
+// Kurs-Anteil = alter Bestand x Kursdifferenz, Bestands-Anteil = Mengendifferenz
+// x heutiger Kurs - zusammen genau die Wertdifferenz.
+function wertKopf() {
+  const p1 = preisJetzt();
+  if (!(p1 > 0)) return "";
+  const b1 = WV.etn, jetzt = b1 * p1;
+  const tag0 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const b0 = bestandAm(tag0), p0 = kursAm(tag0);
+  let zeile = "";
+  if (b0 !== undefined && p0 > 0) {
+    const vorher = b0 * p0, diff = jetzt - vorher;
+    const kurs = b0 * (p1 - p0), bestand = (b1 - b0) * p1;
+    const farbe = (v) => (v >= 0 ? "up" : "down");
+    const pz = vorher > 0 ? " (" + (diff >= 0 ? "▲ +" : "▼ -") + nf(Math.abs(diff / vorher) * 100, 1) + "%)" : "";
+    zeile = '<div class="wertteile"><span>Last 30 days: <b class="num ' + farbe(diff) + '">' +
+      (diff >= 0 ? "+" : "") + dollar(diff) + "</b>" + pz + "</span>" +
+      (Math.abs(bestand) < Math.max(1, Math.abs(diff) * 0.005)
+        ? '<span class="dim3">all from the price - the balance did not change</span>'
+        : '<span>from the price <b class="num ' + farbe(kurs) + '">' + (kurs >= 0 ? "+" : "") + dollar(kurs) + "</b></span>" +
+          '<span>from the balance <b class="num ' + farbe(bestand) + '">' + (bestand >= 0 ? "+" : "") + dollar(bestand) + "</b></span>") +
+      "</div>";
+  }
+  return '<div class="wertjetzt">Worth <b class="num">' + dollar(jetzt) + '</b> <span class="dim3">at ' + wiPreis(p1) + " per ETN</span></div>" + zeile;
+}
+
+function zeichneWallet() {
+  if (!WV.address) return;
+  el("invWert").innerHTML = WV.laedt ? "" : wertKopf();
+  el("invEinheit").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.einheit === WV.modus));
+  el("invChartTitel").textContent = WV.modus === "usd" ? "Value over time" : "Balance over time";
+  const holder = el("invChartHolder");
+  if (WV.laedt) {
+    holder.innerHTML = '<div class="empty">⏳ Loading history from the explorer…</div>';
+    return;
+  }
+  let punkte;
+  if (WV.modus === "usd") {
+    punkte = wertReihe();
+  } else {
+    // Tag fuer Tag bis heute: daily_balances fuehrt nur Tage mit Aenderung, und
+    // die Achse verteilt Punkte gleichmaessig - sonst laegen bei einem ruhigen
+    // Wallet zwei Jahre zwischen zwei benachbarten Punkten.
+    punkte = [];
+    if (WV.verlauf.length) {
+      const ende = Date.parse(heuteTag());
+      for (let t = Date.parse(WV.verlauf[0].day); t <= ende; t += 86400000) {
+        const tag = new Date(t).toISOString().slice(0, 10);
+        punkte.push({ day: tag, etn: bestandAm(tag) });
+      }
+    }
+  }
+  if (punkte.length < 2) {
+    holder.innerHTML = '<div class="empty">' + (WV.modus === "usd" ? "No price history for this period yet" : "Not enough history for a chart yet") + "</div>";
+    return;
+  }
+  if (!el("invChart")) holder.innerHTML = '<svg class="chart" id="invChart"></svg><div class="tip"></div>';
+  el("invChart")._usd = WV.modus === "usd";
+  zeichneChart(el("invChart"), punkte);
+}
+
+// Beim Oeffnen: Kurse (fuer alle Besucher zwischengespeichert) und - ausserhalb
+// der Top N - den Verlauf nachladen. Wechselt man inzwischen das Wallet, gilt
+// die spaete Antwort nicht mehr.
+async function walletWertLaden(d, mitVerlauf) {
+  const adr = d.address;
+  const [kurse, verlauf] = await Promise.all([
+    kursTage(),
+    mitVerlauf ? hole("/api/wallet-history/" + adr).catch(() => null) : null,
+  ]);
+  if (WV.address !== adr) return;
+  KURSE = kurse;
+  if (mitVerlauf) {
+    WV.laedt = false;
+    if (verlauf?.verlauf) {
+      WV.verlauf = verlauf.verlauf;
+      WV.vollstaendig = !!verlauf.vollstaendig;
+    }
+  }
+  zeichneWallet();
+}
+
+el("invEinheit").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-einheit]");
+  if (!b || b.dataset.einheit === WV.modus) return;
+  WV.modus = b.dataset.einheit;
+  zeichneWallet();
+});
+
 function renderWalletDetail(d, { nurKopf = false } = {}) {
   const wrap = { chart: el("invChartWrap"), cluster: el("invClusterWrap"), events: el("invEventsWrap"), fluss: el("invFlowWrap") };
   const bis = d.bis_naechster_tier;
@@ -4045,21 +4201,29 @@ function renderWalletDetail(d, { nurKopf = false } = {}) {
   // Beim Auffrischen nicht: der Fluss kostet bis zu zwanzig Explorer-Anfragen.
   if (!nurKopf) ladeWalletFlows(d.address).catch((e) => console.error("flows:", e));
 
-  if (liveOnly) {
-    wrap.chart.style.display = wrap.cluster.style.display = wrap.events.style.display = "none";
-    return;
+  // Chart: Bestand oder Dollarwert. Beim Auffrischen nur der heutige Punkt neu.
+  wrap.chart.style.display = "";
+  if (nurKopf && WV.address === d.address) {
+    WV.etn = d.etn;
+    zeichneWallet();
+  } else {
+    // Ausserhalb der Top N (und fuer herausgefallene) holt der Server den
+    // Verlauf erst jetzt - hoechstens alle zwoelf Stunden je Wallet.
+    const nachladen = liveOnly || !d.in_top_n;
+    Object.assign(WV, {
+      address: d.address,
+      verlauf: d.verlauf ?? [],
+      vollstaendig: !liveOnly,
+      etn: d.etn,
+      laedt: liveOnly,
+    });
+    zeichneWallet();
+    walletWertLaden(d, nachladen).catch((e) => console.error("wert:", e));
   }
 
-  // Chart
-  if (d.verlauf && d.verlauf.length >= 2) {
-    wrap.chart.style.display = "";
-    // Das vorige Wallet hatte vielleicht zu wenig Verlauf - dann hat der Hinweis
-    // unten das Diagramm ersetzt, und es muss erst wieder hinein.
-    if (!el("invChart")) el("invChartHolder").innerHTML = '<svg class="chart" id="invChart"></svg><div class="tip"></div>';
-    zeichneChart(el("invChart"), d.verlauf);
-  } else {
-    wrap.chart.style.display = "";
-    el("invChartHolder").innerHTML = '<div class="empty">Not enough history for a chart yet</div>';
+  if (liveOnly) {
+    wrap.cluster.style.display = wrap.events.style.display = "none";
+    return;
   }
 
   // Cluster-Bezug

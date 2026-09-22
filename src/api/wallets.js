@@ -3,7 +3,7 @@
 
 import { TIERS, tierProgress, tierFor, tierMax } from "../tiers.js";
 import { clusterGruppen } from "../clusters.js";
-import { fetchAddress } from "../blockscout.js";
+import { fetchAddress, fetchBalanceChanges } from "../blockscout.js";
 import { liveBestand, liveBudget, liveBudgetKorrigieren } from "./live.js";
 import { fehler, zahlParam, tagVor, ZEITRAUM, STD_ZEITRAUM, WALLET_FELDER, schmuecken, kennzahlen } from "./grundlagen.js";
 
@@ -1029,4 +1029,71 @@ export async function walletRefresh(db, env, hash) {
       zeit
     ),
   };
+}
+
+/*
+ * Verlauf fuer Wallets ausserhalb der Top N. Die Top N schreibt der Snapshot
+ * ohnehin Tag fuer Tag mit; alle anderen kosten je eine Explorer-Anfrage. Die
+ * laeuft darum erst, wenn jemand das Wallet oeffnet, und hoechstens alle
+ * VERLAUF_SPERRE_MS je Wallet - dazwischen kommt alles aus daily_balances.
+ *
+ * Geholt wird eine Seite der Einzelaenderungen (50 Stueck). Bei ruhigen
+ * Wallets ist das die ganze Vergangenheit; bei aktiven die juengste Zeit, und
+ * spaetere Abrufe setzen oben an, was seither dazukam.
+ */
+const VERLAUF_SPERRE_MS = 12 * 3600000;
+const AENDERUNGEN_JE_SEITE = 50;
+
+export async function walletVerlauf(db, env, hash, jetzt = Date.now()) {
+  const adr = String(hash ?? "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(adr)) return fehler("Keine gueltige Adresse", 400);
+  const [stand, bekannt] = await Promise.all([
+    db.prepare("SELECT geholt_am, vollstaendig FROM verlauf_abrufe WHERE address = ?").bind(adr).first().catch(() => null),
+    db.prepare("SELECT in_top_n FROM current_balances WHERE address = ?").bind(adr).first().catch(() => null),
+  ]);
+  const lesen = async () =>
+    (await db.prepare("SELECT day, etn FROM daily_balances WHERE address = ? ORDER BY day").bind(adr).all()).results ?? [];
+  // Aus den Top N gefallene Wallets haben ihre Vergangenheit schon vom Backfill.
+  let vollstaendig = !!stand?.vollstaendig || !!bekannt;
+  if (bekannt?.in_top_n === 1) return { verlauf: await lesen(), vollstaendig: true };
+
+  let beschaeftigt = false;
+  if (!stand || jetzt - Date.parse(stand.geholt_am) >= VERLAUF_SPERRE_MS) {
+    if (await liveBudget(db, "verlauf", 1)) {
+      const aenderungen = await fetchBalanceChanges(env.EXPLORER_API, adr, { maxPages: 1 });
+      // Neueste zuerst: die erste Aenderung eines Tages ist sein Schlussstand.
+      const tage = new Map();
+      for (const a of aenderungen) {
+        const tag = a.at.slice(0, 10);
+        if (!tage.has(tag)) tage.set(tag, a.balance_wei);
+      }
+      vollstaendig ||= aenderungen.length < AENDERUNGEN_JE_SEITE;
+      const zeilen = [...tage].map(([tag, wei]) =>
+        db
+          .prepare(
+            "INSERT INTO daily_balances (address, day, balance_wei, etn, source) VALUES (?,?,?,?,'besuch')" +
+              // Snapshot und Backfill sind genauer - die bleiben stehen.
+              " ON CONFLICT(address, day) DO UPDATE SET balance_wei = excluded.balance_wei, etn = excluded.etn" +
+              " WHERE daily_balances.source = 'besuch'"
+          )
+          .bind(adr, tag, wei, Number(BigInt(wei) / 10n ** 12n) / 1e6)
+      );
+      zeilen.push(
+        db
+          .prepare(
+            "INSERT INTO verlauf_abrufe (address, geholt_am, vollstaendig) VALUES (?,?,?)" +
+              " ON CONFLICT(address) DO UPDATE SET geholt_am = excluded.geholt_am," +
+              " vollstaendig = max(verlauf_abrufe.vollstaendig, excluded.vollstaendig)"
+          )
+          .bind(adr, new Date(jetzt).toISOString(), vollstaendig ? 1 : 0)
+      );
+      await db.batch(zeilen);
+    } else {
+      beschaeftigt = true;
+    }
+  }
+  const verlauf = await lesen();
+  // Budget aufgebraucht und noch nichts gespeichert: "gleich nochmal" statt leerer Kurve.
+  if (beschaeftigt && !verlauf.length) return { beschaeftigt: true };
+  return { verlauf, vollstaendig };
 }

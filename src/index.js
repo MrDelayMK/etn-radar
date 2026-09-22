@@ -10,7 +10,7 @@
 import { handleTelegramWebhook } from "./telegram.js";
 import { stand, overview, preisverlauf, tierVerlauf, network } from "./api/uebersicht.js";
 import { json, fehler, adminOk, cacheSchluessel, liveAntwort, notlaufSchreiben, notlaufLesen } from "./api/grundlagen.js";
-import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche, walletRefresh } from "./api/wallets.js";
+import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche, walletRefresh, walletVerlauf } from "./api/wallets.js";
 import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, job_trigger } from "./api/betreiber.js";
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
@@ -168,6 +168,9 @@ export default {
         antwort = q ? liveAntwort(await suche(db, env, q.slice(0, 200))) : fehler("Parameter q fehlt");
       } else if (pfad.startsWith("/api/wallet-flows/")) {
         antwort = liveAntwort(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
+      } else if (pfad.startsWith("/api/wallet-history/")) {
+        // Verlauf ausserhalb der Top N: eine Explorer-Anfrage, erst beim Oeffnen.
+        antwort = liveAntwort(await walletVerlauf(db, env, pfad.slice("/api/wallet-history/".length)));
       } else if (pfad.startsWith("/api/wallet/")) {
         const w = await wallet(db, env, pfad.slice("/api/wallet/".length));
         antwort = w ? json(w) : fehler("Wallet nicht gefunden", 404);

@@ -586,8 +586,15 @@
     <div class="card" id="invHead"></div>
   </section>
   <section id="invChartWrap" style="display:none">
-    <h2>Balance over time</h2>
+    <h2 id="invChartTitel">Balance over time</h2>
     <div class="card">
+      <div class="wertzeile">
+        <div id="invWert"></div>
+        <div class="tabs" id="invEinheit" role="group" aria-label="Show balance in">
+          <button class="ghost on" type="button" data-einheit="etn">ETN</button>
+          <button class="ghost" type="button" data-einheit="usd">$ Value</button>
+        </div>
+      </div>
       <div class="chartholder" id="invChartHolder">
         <svg class="chart" id="invChart"></svg>
         <div class="tip"></div>

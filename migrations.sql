@@ -246,3 +246,13 @@ CREATE TABLE IF NOT EXISTS census_grenzen (
   pos_unter  INTEGER NOT NULL,
   pos_bis    INTEGER NOT NULL
 );
+
+-- Wallets ausserhalb der Top N: wann ihr Verlauf zuletzt beim Explorer geholt
+-- wurde (eine Anfrage, erst wenn jemand das Wallet oeffnet). Die Punkte selbst
+-- liegen in daily_balances mit source = 'besuch'. vollstaendig = 1, wenn die
+-- erste Seite schon bis zur allerersten Bewegung zurueckreichte.
+CREATE TABLE IF NOT EXISTS verlauf_abrufe (
+  address      TEXT PRIMARY KEY,
+  geholt_am    TEXT NOT NULL,
+  vollstaendig INTEGER NOT NULL DEFAULT 0
+);

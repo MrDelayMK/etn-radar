@@ -1158,3 +1158,11 @@ tr.lbcensus td:last-child{white-space:nowrap}
 .walletstand{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px;font-size:12.5px;color:var(--tx2)}
 .walletstand b{color:var(--tx)}
 .walletstand button{padding:4px 11px;font-size:12.5px}
+
+/* Investigate: Wert in Dollar ueber dem Wallet-Chart */
+.wertzeile{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.wertzeile .tabs{flex-wrap:nowrap}
+.wertjetzt{font-size:15px}
+.wertjetzt b{font-size:20px;font-weight:660;color:#34d399}
+.wertteile{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--tx2);margin-top:4px}
+.wertteile b{font-weight:620}
