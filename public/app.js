@@ -1525,11 +1525,15 @@ el("chainWoche").addEventListener("click", (e) => {
   }
   if (!e.target.closest("[data-teilen]") || !CHAIN.text) return;
   // Derselbe Dialog wie "Share" beim Wallet: Vorschau, dann X oder Telegram.
+  // Alle vier Bilder zur Wahl, vorgewaehlt das zur groessten Nachricht. Die
+  // Automatik allein zeigte fast immer die Bruecke: die Migration schwankt von
+  // Woche zu Woche um Hunderte Prozent.
+  const bilder = ["bridge", "whale", "busy", "radar"];
   shareTextOeffnen({
     titel: "📢 Share this week",
-    text: CHAIN.text,
+    varianten: bilder.map((b) => [b, CHAIN.text, "week-" + b]),
+    wahl: Math.max(0, bilder.indexOf(CHAIN.bild.replace("week-", ""))),
     url: location.origin + "/",
-    bild: CHAIN.bild,
   });
 });
 
@@ -3146,7 +3150,11 @@ const SHARE_SAETZE = {
 // Saetze, deren Bilder schon fertig sind. Muss zu SHARE_BILDER in src/share.js
 // passen, sonst zeigt die Link-Vorschau ein fremdes Bild - tests/share.test.mjs
 // prueft das.
-const SHARE_TON = { proud: "😎 Proud", funny: "😂 Funny", calm: "😌 Calm" };
+const SHARE_TON = {
+  proud: "😎 Proud", funny: "😂 Funny", calm: "😌 Calm",
+  // Bildwahl beim Wochenrueckblick: gleicher Text, anderes Bild.
+  bridge: "🌉 Bridge", whale: "🐳 Whale", busy: "📈 Busy", radar: "📡 Radar",
+};
 const SHARE_BILDER = new Set([
   "humpback-proud", "humpback-funny", "humpback-calm",
   "whale-proud", "whale-funny", "whale-calm",
@@ -3480,7 +3488,8 @@ function shareTextOeffnen(fremd) {
   el("shareWer").hidden = true;
   // Mehrere Fassungen: eine zufaellig vorwaehlen, damit nicht jeder denselben
   // Post absetzt - genau wie beim Rang.
-  SHARE_WAHL = fremd.varianten ? Math.floor(Math.random() * fremd.varianten.length) : 0;
+  // Eine vorgegebene Wahl (Wochenrueckblick: das Bild zur groessten Nachricht) gewinnt.
+  SHARE_WAHL = fremd.wahl ?? (fremd.varianten ? Math.floor(Math.random() * fremd.varianten.length) : 0);
   shareTexteZeigen();
   // Mit Bild faengt der Dialog bei der Karte an - so sieht man sofort, was rausgeht.
   SHARE_FORMAT = "karte";
