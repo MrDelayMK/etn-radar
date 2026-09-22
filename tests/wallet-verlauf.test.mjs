@@ -65,4 +65,21 @@ pruef(leer.beschaeftigt === true && abrufe.length === vorher, "ohne Budget keine
 const falsch = await walletVerlauf(db, env, "0x123", jetzt);
 pruef(falsch instanceof Response && falsch.status === 400, "ungueltige Adresse wird abgewiesen");
 
+// --- Wal-Alarm (wale): nur grosse Bewegungen der letzten sieben Tage, ohne Bridge.
+const { wale } = await import(repoUrl("src/api/wallets.js"));
+const bridgeAdr = "0x" + "e".repeat(40);
+const vorStunden = (h) => new Date(Date.now() - h * 3600000).toISOString();
+const ev = db.db.prepare("INSERT INTO events (detected_at, address, type, delta_etn, severity) VALUES (?,?,?,?,50)");
+const gleich = vorStunden(2); // ein Snapshot = ein Zeitstempel fuer alle Zeilen einer Bewegung
+ev.run(gleich, "0x" + "1".repeat(40), "loss", -427e6);
+ev.run(gleich, "0x" + "1".repeat(40), "drained", -427e6);
+ev.run(vorStunden(3), "0x" + "2".repeat(40), "gain", 5e6);            // zu klein
+ev.run(vorStunden(4), "0x" + "3".repeat(40), "sleeper_wake", 2e6);    // Schlaefer ab 1 Mio.
+ev.run(vorStunden(5), bridgeAdr, "loss", -50e6);                      // Bridge = Migration
+ev.run(vorStunden(24 * 9), "0x" + "4".repeat(40), "gain", 90e6);      // aelter als sieben Tage
+const w = await wale(db, { BRIDGE_ADDRESS: bridgeAdr });
+const adressen = w.eintraege.map((e) => e.address[2]);
+pruef(adressen.join() === "1,3", "nur Grosses und Schlaefer, ohne Bridge und Altes");
+pruef(w.eintraege[0].type === "drained" && w.eintraege[0].auch.includes("loss"), "eine Bewegung = ein Eintrag");
+
 ende();

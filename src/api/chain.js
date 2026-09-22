@@ -2,6 +2,7 @@
 
 import { CHAIN_TOKENS, tradeLink } from "../chain-tokens.js";
 import { tagVor } from "./grundlagen.js";
+import { exchange_flow } from "./wallets.js";
 
 /* ---------- Chain-Reiter ---------------------------------------------------
  *
@@ -20,7 +21,7 @@ export async function chain(db, env) {
   const vorwoche = { von: tagVor(14), bis: tagVor(8) };
 
   const vor7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse, kursJetzt, kursVor7] = await Promise.all([
+  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse, kursJetzt, kursVor7, boersen] = await Promise.all([
     alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
@@ -57,6 +58,8 @@ export async function chain(db, env) {
       woche.von,
       vor7
     ),
+    // Netto auf bzw. von den gelabelten Boersen, gleiche Rechnung wie in Activity.
+    exchange_flow(db, new URL("https://x/?from=" + woche.von + "&to=" + woche.bis)).catch(() => null),
   ]);
 
   // Summe einer Tagesreihe ueber einen Zeitraum samt Zahl der Tage mit Wert:
@@ -150,6 +153,17 @@ export async function chain(db, env) {
   return {
     woche,
     preis,
+    // Groesster Einzelposten dazu: am 18.09. stammten 427 Mio. von 479 Mio. aus
+    // einem einzigen KuCoin-Abfluss an drei unbekannte Wallets - ohne den
+    // Hinweis laese sich das wie ein Ansturm vieler Anleger.
+    boersen: boersen?.boersen_gezaehlt
+      ? {
+          netto: boersen.netto_etn,
+          groesste: boersen.pro_boerse[0]
+            ? { label: boersen.pro_boerse[0].label, netto: boersen.pro_boerse[0].netto_etn }
+            : null,
+        }
+      : null,
     tx: kachel(tx),
     contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
     migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,

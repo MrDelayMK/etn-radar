@@ -1465,6 +1465,18 @@ function zeichneChainWoche() {
     const t = kurz(d.tx.woche.summe) + " transactions";
     fakten.push(["📈", "<b>" + t + "</b>" + mit(chainVergleich(d.tx)), t]);
   }
+  if (d.boersen && Math.abs(d.boersen.netto) >= 10000) {
+    const n = d.boersen.netto;
+    const t = kurz(Math.abs(n)) + " ETN " + (n > 0 ? "moved onto exchanges" : "left the exchanges") + " (net)";
+    // Traegt eine Boerse den Grossteil, steht sie dabei - ein einzelner Umzug
+    // ist etwas anderes als viele Anleger.
+    const g = d.boersen.groesste;
+    const davon = g && Math.sign(g.netto) === Math.sign(n) && Math.abs(g.netto) >= Math.abs(n) * 0.5
+      ? kurz(Math.abs(g.netto)) + " of it " + (n > 0 ? "to " : "from ") + g.label
+      : "";
+    fakten.push(["🏦", "<b>" + t + "</b>" + (davon ? ' <span class="dim3">· ' + esc(davon) + "</span>" : ""),
+      t + (davon ? ", " + davon : "")]);
+  }
   if (d.migration) {
     const m = d.migration;
     const p = m.vorwoche > 0 ? ((m.woche - m.vorwoche) / m.vorwoche) * 100 : null;
@@ -3978,7 +3990,7 @@ function walletStand(d) {
     ? "📅 Balance from the weekly census" + (wann ? " of <b>" + esc(wann) + "</b>" : "")
     : "⚡ Live balance from the explorer" + (wann ? ", fetched " + esc(wann) : "");
   return '<div class="walletstand">' +
-    '<span>' + text + '<span class="dim3"> · no history for wallets outside the top 3,000</span></span>' +
+    '<span>' + text + "</span>" +
     (alt ? '<button type="button" class="ghost" id="walletRefresh" data-addr="' + esc(d.address) + '">🔄 Refresh</button>' : "") +
     "</div>";
 }
@@ -5540,3 +5552,65 @@ if (start !== "overview" && LADER[start]) {
   LADER.overview().catch(console.error);
 }
 fbNeuPruefen();
+
+// ---------- Wal-Alarm ----------
+//
+// Wer wiederkommt, sieht in einer kleinen Karte, welche grossen Bewegungen es
+// seit dem letzten Besuch gab (/api/whales, fuer alle dieselbe Antwort). Der
+// letzte Besuch liegt nur im eigenen Browser; beim ersten Besuch kommt nichts.
+const WAL_BESUCH_KEY = "etnWalBesuch";
+
+function walText(e) {
+  const wer = "<b>" + (e.anzeige ? esc(e.anzeige) : (e.tier_emoji ? e.tier_emoji + " " : "") + kurzAdr(e.address)) + "</b>";
+  const betrag = '<b class="num">' + kurz(Math.abs(e.delta_etn)) + " ETN</b>";
+  if (e.type === "sleeper_wake") return ["😴", wer + " woke up · " + (e.delta_etn < 0 ? "moved out " : "received ") + betrag];
+  // Bei einer Boerse klaenge "emptied" nach Pleite - dort ist es meist ein Umzug.
+  if (e.type === "drained" && e.label_type !== "exchange") return ["🚨", wer + " was emptied · " + betrag + " out"];
+  if (e.delta_etn > 0) return ["🐳", wer + " received " + betrag];
+  return ["🐳", wer + " moved out " + betrag];
+}
+
+async function walAlarm() {
+  // Der Stand rollt nur nach einer echten Pause weiter: wer alle zwanzig
+  // Minuten neu laedt, verpasst sonst jede Meldung.
+  let letzter = null;
+  try {
+    letzter = localStorage.getItem(WAL_BESUCH_KEY);
+    if (letzter && Date.now() - Date.parse(letzter) < BESUCH_PAUSE_MS) return;
+    localStorage.setItem(WAL_BESUCH_KEY, new Date().toISOString());
+  } catch {
+    return;
+  }
+  if (!letzter) return;
+  const d = await hole("/api/whales").catch(() => null);
+  const neu = (d?.eintraege ?? []).filter((e) => e.detected_at > letzter);
+  if (!neu.length) return;
+
+  const karte = document.createElement("div");
+  karte.className = "walalarm";
+  karte.setAttribute("role", "dialog");
+  karte.setAttribute("aria-label", "Big moves since your last visit");
+  karte.innerHTML =
+    '<div class="walkopf"><b>🐳 Since your last visit</b>' +
+    '<button type="button" class="ghost walzu" aria-label="Close">✕</button></div>' +
+    neu.slice(0, 4).map((e) => {
+      const [ic, text] = walText(e);
+      return '<a class="walzeile" href="/wallet/' + esc(e.address) + '" data-wallet="' + esc(e.address) + '">' +
+        "<i>" + ic + "</i><span>" + text + '</span><em class="dim3">' + zeitHer(e.detected_at) + " ago</em></a>";
+    }).join("") +
+    '<a class="walmehr" href="/activity" data-seite="activity">' +
+      (neu.length > 4 ? "+ " + (neu.length - 4) + " more · " : "") + "All events in Activity →</a>";
+  document.body.appendChild(karte);
+
+  karte.addEventListener("click", (ev) => {
+    if (ev.target.closest(".walzu")) return karte.remove();
+    const w = ev.target.closest("a[data-wallet]");
+    const s = ev.target.closest("a[data-seite]");
+    if ((!w && !s) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+    ev.preventDefault();
+    karte.remove();
+    if (w) investigateAddress(w.dataset.wallet);
+    else zeigeSeite(s.dataset.seite);
+  });
+}
+walAlarm().catch(() => {});

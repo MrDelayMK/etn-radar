@@ -728,7 +728,10 @@ export async function exchange_flow(db, u) {
       .all()
   ).results;
 
-  const abTag = tagVor(tage);
+  // Feste Tage statt Zeitraum fuer den Wochenrueckblick (src/api/chain.js):
+  // dieselben sieben abgeschlossenen Tage wie der Rest der Woche.
+  const abTag = u.searchParams.get("from") ?? tagVor(tage);
+  const bisTag = u.searchParams.get("to") ?? "9999";
   const proTag = new Map();      // day -> Wei-Summe (BigInt)
   const proBoerse = new Map();   // address -> { label, wei }
   let letzteAdresse = null;
@@ -743,7 +746,7 @@ export async function exchange_flow(db, u) {
     }
     const delta = wei - letzterWert;
     letzterWert = wei;
-    if (delta === 0n || r.day < abTag) continue;
+    if (delta === 0n || r.day < abTag || r.day > bisTag) continue;
 
     proTag.set(r.day, (proTag.get(r.day) ?? 0n) + delta);
     const b = proBoerse.get(r.address) ?? {
@@ -1096,4 +1099,45 @@ export async function walletVerlauf(db, env, hash, jetzt = Date.now()) {
   // Budget aufgebraucht und noch nichts gespeichert: "gleich nochmal" statt leerer Kurve.
   if (beschaeftigt && !verlauf.length) return { beschaeftigt: true };
   return { verlauf, vollstaendig };
+}
+
+/*
+ * Wal-Alarm fuer das Popup beim Seitenbesuch: die grossen Bewegungen der
+ * letzten sieben Tage. Fuer alle Besucher dieselbe Antwort (zwischengespeichert);
+ * welche davon seit dem letzten Besuch neu sind, entscheidet der Browser.
+ * Die Bridge selbst fehlt - ihr taeglicher Abfluss ist die Migration, kein Wal.
+ */
+const WAL_MIN_ETN = 10e6;
+const WECKER_MIN_ETN = 1e6;
+
+export async function wale(db, env) {
+  const bridge = String(env.BRIDGE_ADDRESS ?? "").toLowerCase();
+  const rows = (
+    await db
+      .prepare(
+        "SELECT e.*, a.label, a.label_type, a.ens_name, c.etn FROM events e" +
+          " LEFT JOIN addresses a ON a.hash = e.address" +
+          " LEFT JOIN current_balances c ON c.address = e.address" +
+          " WHERE e.detected_at >= ? AND e.address != ?" +
+          " AND ((e.type IN ('gain','loss','drained') AND abs(coalesce(e.delta_etn, 0)) >= ?)" +
+          "      OR (e.type = 'sleeper_wake' AND abs(coalesce(e.delta_etn, 0)) >= ?))" +
+          " ORDER BY e.detected_at DESC LIMIT 80"
+      )
+      .bind(tagVor(7) + "T00:00:00Z", bridge, WAL_MIN_ETN, WECKER_MIN_ETN)
+      .all()
+  ).results;
+  return {
+    eintraege: buendeln(rows)
+      .slice(0, 20)
+      .map((r) => ({
+        address: r.address,
+        type: r.type,
+        auch: r.auch ?? [],
+        delta_etn: r.delta_etn,
+        detected_at: r.detected_at,
+        anzeige: r.label ?? r.ens_name ?? null,
+        label_type: r.label_type ?? null,
+        tier_emoji: r.etn != null ? tierFor(r.etn).emoji : null,
+      })),
+  };
 }

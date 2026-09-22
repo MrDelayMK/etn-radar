@@ -10,7 +10,7 @@
 import { handleTelegramWebhook } from "./telegram.js";
 import { stand, overview, preisverlauf, tierVerlauf, network } from "./api/uebersicht.js";
 import { json, fehler, adminOk, cacheSchluessel, liveAntwort, notlaufSchreiben, notlaufLesen } from "./api/grundlagen.js";
-import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche, walletRefresh, walletVerlauf } from "./api/wallets.js";
+import { leaderboard, movers, sleepers, watchlist, events, wallet, clusters_api, exchange_flow, wallet_flows, suche, walletRefresh, walletVerlauf, wale } from "./api/wallets.js";
 import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, job_trigger } from "./api/betreiber.js";
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
@@ -159,6 +159,8 @@ export default {
       else if (pfad === "/api/sleepers") antwort = json(await sleepers(db, env, u));
       else if (pfad === "/api/events") antwort = json(await events(db, u));
       else if (pfad === "/api/watchlist") antwort = json(await watchlist(db, env, u), 200, 30);
+      // Wal-Popup: eine Antwort fuer alle, neu je Snapshot-Lauf.
+      else if (pfad === "/api/whales") antwort = json(await wale(db, env), 200, 300);
       else if (pfad === "/api/exchange-flow") antwort = json(await exchange_flow(db, u));
       // Nur der Snapshot-Zeitstempel. Kurz gecacht, damit offene Seiten
       // haeufig nachfragen koennen, ohne die Datenbank zu belasten.
