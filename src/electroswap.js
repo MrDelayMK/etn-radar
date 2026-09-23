@@ -15,6 +15,7 @@
 // ausschliesslich /public-api/v1.
 
 import { CHAIN_TOKENS } from "./chain-tokens.js";
+import { pruefsummenAdresse } from "./keccak.js";
 
 const BASIS = "https://electroswap.io/public-api/v1";
 const KETTE = 52014; // Electroneum Mainnet, der einzige erlaubte Wert
@@ -147,7 +148,9 @@ export async function walletTokens(db, env, adresse, jetzt = Date.now()) {
     .first().catch(() => null);
   const frisch = stand?.t && jetzt - Date.parse(stand.t) < BESTAND_TAKT_MS;
   if (!frisch && env.ELECTROSWAP_API_KEY && !(await pause(db, jetzt))) {
-    const r = await holen(env, "/balances/" + KETTE + "/" + adr + "?limit=200");
+    // Immer in der Pruefsummen-Schreibweise fragen (EIP-55): klein geschrieben
+    // liefert ElectroSwap ein leeres Bestandsdokument statt der Tokens.
+    const r = await holen(env, "/balances/" + KETTE + "/" + pruefsummenAdresse(adr) + "?limit=200");
     if (r.fehler === "bremse") await pauseSetzen(db, jetzt + r.warten * 1000);
     else if (r.daten) {
       const zeit = new Date(jetzt).toISOString();
