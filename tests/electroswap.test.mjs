@@ -51,16 +51,16 @@ pruef(p1.gefragt && p1.tokens === 2, "erster Preisabruf holt beide Tokens");
 pruef(abrufe[0].auth === "Bearer esk_live_test", "der Schluessel geht als Bearer mit");
 pruef(abrufe[0].u.startsWith("https://electroswap.io/public-api/v1/"), "nur die oeffentliche API, nie /graphql oder /api");
 
-const p2 = await preiseAuffrischen(db, env, [BOLT, DYNO], jetzt + 30 * 60000);
-pruef(!p2.gefragt && abrufe.length === 1, "innerhalb der Stunde wird nicht erneut gefragt");
-const p3 = await preiseAuffrischen(db, env, [BOLT, DYNO], jetzt + 61 * 60000);
-pruef(p3.gefragt && abrufe.length === 2, "nach einer Stunde wieder");
+const p2 = await preiseAuffrischen(db, env, [BOLT, DYNO], jetzt + 12 * 3600000);
+pruef(!p2.gefragt && abrufe.length === 1, "am selben Tag wird nicht erneut gefragt");
+const p3 = await preiseAuffrischen(db, env, [BOLT, DYNO], jetzt + 25 * 3600000);
+pruef(p3.gefragt && abrufe.length === 2, "eine Woche spaeter wieder");
 // Ein fremdes Token ohne Preis muss einen Abruf ausloesen duerfen.
-const p4 = await preiseAuffrischen(db, env, [BOLT, "0x" + "9".repeat(40)], jetzt + 62 * 60000);
+const p4 = await preiseAuffrischen(db, env, [BOLT, "0x" + "9".repeat(40)], jetzt + 25.1 * 3600000);
 pruef(p4.gefragt && abrufe.length === 3, "fehlender Preis fragt sofort nach");
 
 // Wallet-Bestand: Hex-Wei richtig umgerechnet und mit Preis bewertet.
-const w = await walletTokenWerte(db, env, wallet, jetzt + 63 * 60000);
+const w = await walletTokenWerte(db, env, wallet, jetzt + 25.2 * 3600000);
 const bolt = w.tokens.find((t) => t.address === BOLT);
 const dyno = w.tokens.find((t) => t.address === DYNO);
 pruef(Math.abs(bolt.menge - 15000000) < 1 && bolt.symbol === "BOLT", "15 Mio. BOLT mit Symbol");
@@ -71,16 +71,16 @@ pruef(Math.abs(w.gesamt_usd - (bolt.wert_usd + dyno.wert_usd)) < 0.01, "Gesamtwe
 
 const zaehle = (teil) => abrufe.filter((a) => a.u.includes(teil)).length;
 const vorher = zaehle("/balances/");
-await walletTokenWerte(db, env, wallet, jetzt + 64 * 60000);
-pruef(zaehle("/balances/") === vorher, "innerhalb von zwoelf Stunden kein neuer Bestandsabruf");
+await walletTokenWerte(db, env, wallet, jetzt + 25.3 * 3600000);
+pruef(zaehle("/balances/") === vorher, "innerhalb von 24 Stunden kein neuer Bestandsabruf");
 
 // 429: die Pause wird gemerkt, danach fragt nichts mehr nach.
 antworten["/prices/52014"] = () => new Response("{}", { status: 429, headers: { "retry-after": "120" } });
 const fremd = "0x" + "a".repeat(40);
-const p5 = await preiseAuffrischen(db, env, [fremd], jetzt + 80 * 60000);
+const p5 = await preiseAuffrischen(db, env, [fremd], jetzt + 50 * 3600000);
 pruef(!p5.gefragt && p5.grund === "bremse", "429 wird als Bremse erkannt");
 const nach429 = abrufe.length;
-await preiseAuffrischen(db, env, [fremd], jetzt + 81 * 60000);
+await preiseAuffrischen(db, env, [fremd], jetzt + 50.01 * 3600000);
 pruef(abrufe.length === nach429, "waehrend der Pause geht keine Anfrage raus");
 
 // Ohne Schluessel passiert gar nichts - die Seite darf trotzdem funktionieren.
@@ -91,9 +91,9 @@ pruef(falsch.status === 400, "ungueltige Adresse wird abgewiesen");
 
 // Tokenliste: hoechstens einmal am Tag.
 const listeVorher = zaehle("/tokens/52014");
-await tokenListeAuffrischen(db, env, jetzt + 200 * 60000);
-pruef(zaehle("/tokens/52014") === listeVorher, "die Tokenliste wird nicht zweimal am Tag geholt");
-const spaeter = await tokenListeAuffrischen(db, env, jetzt + 30 * 3600000);
-pruef(spaeter.gefragt && zaehle("/tokens/52014") === listeVorher + 1, "am naechsten Tag wieder");
+await tokenListeAuffrischen(db, env, jetzt + 50.2 * 3600000);
+pruef(zaehle("/tokens/52014") === listeVorher, "die Tokenliste wird nicht zweimal die Woche geholt");
+const spaeter = await tokenListeAuffrischen(db, env, jetzt + 10 * 24 * 3600000);
+pruef(spaeter.gefragt && zaehle("/tokens/52014") === listeVorher + 1, "eine Woche spaeter wieder");
 
 ende();

@@ -11,7 +11,6 @@ export const CHAIN_TOKENS = [
   { address: "0x043fAa1b5C5FC9a7dc35171f290c29ECDE0cCff1", symbol: "BOLT", name: "ElectroSwap", logo: "bolt.svg" },
   { address: "0xEe432C220273e4F949007B4c1946562826Efa055", symbol: "DYNO", name: "Dynamo", logo: "dyno.svg" },
   { address: "0xC9FC4AB00911793D99b5c7Bd01f01203C21D4131", symbol: "CLUB", name: "ETN Club", logo: "club.png" },
-  { address: "0xE74e4E7A064310466f3bdBd3F3Ce4e8c8F7CF1d5", symbol: "DCNT", name: "DECENTRONEUM", logo: "dcnt.png" },
   { address: "0x309B916b3A90cb3E071697Ea9680e9217A30066f", symbol: "CORE", name: "Planet Zephyros", logo: "core.png" },
 ];
 

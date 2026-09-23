@@ -19,8 +19,10 @@ import { pruefsummenAdresse } from "./keccak.js";
 
 const BASIS = "https://electroswap.io/public-api/v1";
 const KETTE = 52014; // Electroneum Mainnet, der einzige erlaubte Wert
-export const PREIS_TAKT_MS = 60 * 60000;
-export const BESTAND_TAKT_MS = 12 * 3600000;
+// Einmal am Tag reicht: die Preise auf der Chain bewegen sich langsam, und
+// jeder Abruf kostet Credits (Entscheidung MrDelayMK, 23.09.2026).
+export const PREIS_TAKT_MS = 24 * 3600000;
+export const BESTAND_TAKT_MS = 24 * 3600000;
 // Ein 429 mit Retry-After muss respektiert werden: zwanzig Abfuhren in einer
 // Minute sperren den Schluessel eine Viertelstunde.
 const SPERRE_SCHLUESSEL = "electroswap_pause";
@@ -104,7 +106,8 @@ export async function tokenListeAuffrischen(db, env, jetzt = Date.now()) {
   if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: false };
   const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'tokenliste'")
     .first().catch(() => null);
-  if (stand?.wert && jetzt - Number(stand.wert) < 24 * 3600000) return { gefragt: false, grund: "frisch" };
+  // Namen und Dezimalstellen aendern sich fast nie - woechentlich genuegt.
+  if (stand?.wert && jetzt - Number(stand.wert) < 7 * 24 * 3600000) return { gefragt: false, grund: "frisch" };
   const r = await holen(env, "/tokens/" + KETTE + "?limit=100");
   if (r.fehler === "bremse") {
     await pauseSetzen(db, jetzt + r.warten * 1000);
