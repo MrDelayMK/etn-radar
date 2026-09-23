@@ -15,6 +15,7 @@ import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, 
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
 import { whatif } from "./api/whatif.js";
+import { walletTokenWerte } from "./electroswap.js";
 import { shareSeite } from "./share.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
@@ -170,6 +171,10 @@ export default {
         antwort = q ? liveAntwort(await suche(db, env, q.slice(0, 200))) : fehler("Parameter q fehlt");
       } else if (pfad.startsWith("/api/wallet-flows/")) {
         antwort = liveAntwort(await wallet_flows(db, env, pfad.slice("/api/wallet-flows/".length), u));
+      } else if (pfad.startsWith("/api/wallet-tokens/")) {
+        // Tokenbestand und Wert - ElectroSwap, erst beim Oeffnen, dann 12 h aus D1.
+        const t = await walletTokenWerte(db, env, pfad.slice("/api/wallet-tokens/".length));
+        antwort = t.error ? fehler(t.error, t.status ?? 500) : json(t, 200, 300);
       } else if (pfad.startsWith("/api/wallet-history/")) {
         // Verlauf ausserhalb der Top N: eine Explorer-Anfrage, erst beim Oeffnen.
         antwort = liveAntwort(await walletVerlauf(db, env, pfad.slice("/api/wallet-history/".length)));

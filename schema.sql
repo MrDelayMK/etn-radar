@@ -614,3 +614,33 @@ CREATE TABLE IF NOT EXISTS verlauf_abrufe (
   geholt_am    TEXT NOT NULL,
   vollstaendig INTEGER NOT NULL DEFAULT 0
 );
+
+-- ---------------------------------------------------------------
+-- ElectroSwap: Tokenpreise und Wallet-Tokenbestaende
+--
+-- Preise kommen aus der ElectroSwap-API (siehe src/electroswap.js) und werden
+-- hoechstens stuendlich geholt, Bestaende je Wallet hoechstens alle zwoelf
+-- Stunden - jeder Abruf kostet Credits.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS token_preise (
+  address      TEXT PRIMARY KEY,             -- klein geschrieben
+  symbol       TEXT,
+  name         TEXT,
+  decimals     INTEGER NOT NULL DEFAULT 18,
+  total_supply REAL,
+  preis_usd    REAL,
+  preis_etn    REAL,
+  aktualisiert TEXT                          -- letzter Preisabruf
+);
+CREATE TABLE IF NOT EXISTS wallet_tokens (
+  address   TEXT NOT NULL,
+  token     TEXT NOT NULL,                   -- '-' merkt nur den Abrufzeitpunkt
+  menge_wei TEXT NOT NULL,
+  gesehen   TEXT NOT NULL,
+  PRIMARY KEY (address, token)
+);
+-- Kleine Merkzettel des ElectroSwap-Clients, etwa eine Zwangspause nach 429.
+CREATE TABLE IF NOT EXISTS electroswap_status (
+  schluessel TEXT PRIMARY KEY,
+  wert       TEXT
+);

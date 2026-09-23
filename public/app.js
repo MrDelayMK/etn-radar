@@ -4176,7 +4176,7 @@ function wiederFrei(knopf, ms) {
 // eine Anfrage mehr beim Explorer. daily_balances fuehrt nur Tage MIT
 // Aenderung; dazwischen gilt der letzte Stand. Ausserhalb der Top N kommt der
 // Verlauf erst beim Oeffnen (/api/wallet-history, eine Explorer-Anfrage).
-const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false };
+const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false, tokens: null };
 let kurseLaeuft = null;
 const kursTage = () =>
   (kurseLaeuft ??= hole("/api/price?period=1y")
@@ -4254,6 +4254,35 @@ function wertKopf() {
   return '<div class="wertjetzt">Worth <b class="num">' + dollar(jetzt) + '</b> <span class="dim3">at ' + wiPreis(p1) + " per ETN</span></div>" + zeile;
 }
 
+// Tokens, die im Wallet liegen: Menge, Preis und Wert. Ohne Treffer bleibt der
+// Abschnitt weg - ElectroSwap kennt nur Wallets, die dort gehandelt haben.
+function zeichneWalletTokens() {
+  const wrap = el("invTokensWrap");
+  const d = WV.tokens;
+  if (!d || !d.tokens?.length) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  const zeilen = d.tokens.map((t) => {
+    const name = t.symbol ? esc(t.symbol) : kurzAdr(t.address);
+    return '<a class="tokzeile" href="' + EXPLORER + esc(t.address) + '" target="_blank" rel="noopener">' +
+      '<span class="wer"><b>' + name + "</b>" + (t.name ? '<span class="dim3"> ' + esc(t.name) + "</span>" : "") + "</span>" +
+      '<span class="num menge">' + kurz(t.menge) + "</span>" +
+      '<span class="num wert">' + (t.wert_usd != null ? dollar(t.wert_usd) : '<span class="dim3">no price</span>') + "</span></a>";
+  }).join("");
+  // Tokens und ETN zusammen: der Chart daneben zeigt nur ETN, die Summe gehoert hierher.
+  const etnWert = preisJetzt() > 0 ? WV.etn * preisJetzt() : null;
+  el("invTokens").innerHTML = zeilen +
+    '<div class="tokfuss">' +
+    '<b>Tokens ' + dollar(d.gesamt_usd) + "</b>" +
+    (etnWert != null
+      ? '<span class="dim3"> · plus ' + dollar(etnWert) + " in ETN = </span><b>" + dollar(etnWert + d.gesamt_usd) + " total</b>"
+      : "") +
+    '<span class="dim3"> · prices from ElectroSwap' +
+    (d.ohne_preis ? " · " + d.ohne_preis + " token(s) without a price" : "") + "</span></div>";
+}
+
 function zeichneWallet() {
   if (!WV.address) return;
   el("invWert").innerHTML = WV.laedt ? "" : wertKopf();
@@ -4294,12 +4323,16 @@ function zeichneWallet() {
 // die spaete Antwort nicht mehr.
 async function walletWertLaden(d, mitVerlauf) {
   const adr = d.address;
-  const [kurse, verlauf] = await Promise.all([
+  const [kurse, verlauf, tokens] = await Promise.all([
     kursTage(),
     mitVerlauf ? hole("/api/wallet-history/" + adr).catch(() => null) : null,
+    // Tokens kommen von ElectroSwap - ein Abruf beim Oeffnen, dann zwoelf Stunden Ruhe.
+    hole("/api/wallet-tokens/" + adr).catch(() => null),
   ]);
   if (WV.address !== adr) return;
   KURSE = kurse;
+  WV.tokens = tokens ?? null;
+  zeichneWalletTokens();
   if (mitVerlauf) {
     WV.laedt = false;
     if (verlauf?.verlauf) {
@@ -4366,11 +4399,13 @@ function renderWalletDetail(d, { nurKopf = false } = {}) {
   if (nurKopf && WV.address === d.address) {
     WV.etn = d.etn;
     zeichneWallet();
+    zeichneWalletTokens();
   } else {
     // Ausserhalb der Top N (und fuer herausgefallene) holt der Server den
     // Verlauf erst jetzt - hoechstens alle zwoelf Stunden je Wallet.
     const nachladen = liveOnly || !d.in_top_n;
     Object.assign(WV, {
+      tokens: null,
       address: d.address,
       verlauf: d.verlauf ?? [],
       vollstaendig: !liveOnly,
