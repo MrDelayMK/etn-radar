@@ -996,9 +996,13 @@ function setzePreis(preis, live) {
   el("price").textContent = "$" + nf(preis, 6);
 }
 
+const PREISKARTE = { preis: null, cap: null };
+
 /** Die Preiskarte: aktueller Kurs, Veraenderung ueber den Zeitraum, Spanne. */
 function fuellePreiskarte(d) {
   setzePreis(d.preis, true);
+  PREISKARTE.preis = d.preis ?? null;
+  PREISKARTE.cap = d.marktkapitalisierung ?? null;
   el("prBig").textContent = d.preis != null ? "$" + d.preis.toFixed(6) : "—";
   el("prCap").textContent = d.marktkapitalisierung != null
     ? "$" + kurz(d.marktkapitalisierung) : "—";
@@ -1066,6 +1070,109 @@ function zeitraumText(v) {
   if (stunden < 48) return "over " + Math.round(stunden) + " hours";
   return "over " + Math.round(stunden / 24) + " days";
 }
+
+/*
+ * Den Kurs teilen: drei Fassungen zum selben Stand - laut, ruhig und als
+ * Rechnung. Keine negative Fassung und keine Prognose: die Zahlen sind, was
+ * sie sind. Geteilt wird immer der Zeitraum, den die Karte gerade zeigt.
+ *
+ * Eigene Hashtags ueber die eigene Blase hinaus (Boersen, Krypto allgemein) -
+ * sie ERSETZEN die festen, sonst sprengt der laengere Text die 280 Zeichen,
+ * die ohne X Premium gelten.
+ */
+const PREIS_TAGS = "#ETN #Electroneum #Crypto #Bitcoin #KuCoin #HTX";
+
+// Die Marktkapitalisierungen liegen im What-if-Reiter; fuer den Kurs-Post
+// reicht ein bekannter Coin als Massstab. Faellt der Abruf aus, bleibt die Zeile weg.
+let preisVergleichLaeuft = null;
+const preisVergleich = () =>
+  (preisVergleichLaeuft ??= (WI.daten ? Promise.resolve(WI.daten) : hole("/api/whatif"))
+    .catch(() => { preisVergleichLaeuft = null; return null; }));
+
+function preisTexte(zusatz) {
+  const p = PREISKARTE.preis ?? PREIS_JETZT;
+  const v = KURS.punkte;
+  if (!(p > 0) || v.length < 2) return null;
+  const pct = ((v[v.length - 1].preis - v[0].preis) / v[0].preis) * 100;
+  const spanne = zeitraumText(v).replace("over ", "in ");
+  // Der aktuelle Kurs zaehlt mit: er kommt aus dem letzten Snapshot und kann
+  // juenger sein als der letzte Punkt der Kurve - sonst stuende "high" unter dem Preis.
+  const hoch = Math.max(...v.map((x) => x.preis), p);
+  const tief = Math.min(...v.map((x) => x.preis), p);
+  const cap = PREISKARTE.cap ? wiCap(PREISKARTE.cap) : null;
+  const menge = PREISKARTE.cap && p ? PREISKARTE.cap / p : null;
+  const rang = zusatz?.etn?.rang ? "#" + zusatz.etn.rang + " on CoinGecko" : null;
+  // Ein bekannter Coin als Massstab - was ein ETN bei dessen Groesse kostete.
+  const coin = (zusatz?.coins ?? []).find((c) => c.i === "dogecoin")
+    ?? (zusatz?.coins ?? []).find((c) => c.r >= 20 && c.r <= 60);
+  const zeilen = (...z) => z.filter((x) => x != null).join("\n");
+
+  // Geredet wird wie ein Mensch, gerechnet wird ehrlich. Feuer statt Rakete:
+  // laut ja, aber kein Kursversprechen. Steht der Kurs nicht im Plus, erzaehlt
+  // die laute Fassung von der Chain statt vom Chart - behauptet wird nichts.
+  const steigt = pct >= 1;
+  // Aufbau jedes Posts: Haken, kurze Zahlenzeilen zum Ueberfliegen, zwei
+  // Saetze Stimme, Schlusszeile. Ein Block Fliesstext liest im Feed niemand.
+  const schluss = "Watch it live on ETN Radar \ud83d\udc47";
+  const zahlenBlock = zeilen(
+    "\ud83d\udcb0 " + wiPreis(p) + " per ETN",
+    (pct >= 0 ? "\ud83d\udcc8 +" : "\ud83d\udcc9 -") + nf(Math.abs(pct), 1) + "% " + spanne,
+    "\ud83d\udd3b Low " + wiPreis(tief) + "  \u00b7  \ud83d\udd3a High " + wiPreis(hoch),
+    [cap ? "\ud83c\udff7\ufe0f Market cap " + cap : null, rang].filter(Boolean).join("  \u00b7  ") || null
+  );
+
+  return [
+    ["hype", zeilen(
+      steigt ? "\ud83d\udd25 Electroneum is on the move again." : "\ud83d\udc40 ETN is having one of its quiet spells.",
+      "",
+      zahlenBlock,
+      "",
+      steigt
+        ? "The chart is not being subtle about it. Everyone who called this coin boring has gone remarkably quiet."
+        : "The chart is more of a slow breath than a sprint right now. The numbers stay out in the open either way.",
+      "",
+      schluss), null],
+    // Nachdenklich statt ruhig: Blick nach vorn, aber ohne Prognose - der
+    // Stichtag der Migration ist ein Fakt, alles andere bleibt offen.
+    ["denk", zeilen(
+      "\ud83e\udd14 Where does ETN go over the next few weeks?",
+      "",
+      zahlenBlock,
+      "",
+      "Meanwhile the clock keeps running towards January 2027, when the last legacy ETN has to be across the bridge.",
+      "Nobody knows where the price goes from here - the next few weeks should be interesting.",
+      "",
+      schluss), null],
+    ["napkin", zeilen(
+      "\ud83e\uddee Napkin math on ETN.",
+      "",
+      zeilen(
+        "\ud83d\udcb0 " + wiPreis(p) + " per ETN",
+        cap ? "\ud83c\udff7\ufe0f Market cap " + cap : null,
+        menge ? "\ud83c\udfaf At $0.01 per ETN \u2192 " + wiCap(menge * 0.01) + " market cap" : null,
+        coin && menge
+          ? (coin.i === "dogecoin" ? "\ud83d\udc15" : "\ud83e\ude99") + " At " + coin.n + "'s market cap \u2192 " +
+            wiPreis(coin.c / menge) + " per ETN"
+          : null
+      ),
+      "",
+      "Not a prediction, just a division anyone can do on a napkin.",
+      "",
+      schluss), null],
+  ];
+}
+
+el("prShare").addEventListener("click", async () => {
+  // Der Vergleichscoin darf den Dialog nicht aufhalten - ohne ihn eine Zeile weniger.
+  const varianten = preisTexte(await preisVergleich());
+  if (!varianten) return;
+  shareTextOeffnen({
+    titel: "\ud83d\udce2 Share the ETN price",
+    varianten,
+    tags: PREIS_TAGS,
+    url: location.origin + "/",
+  });
+});
 
 el("prTabs").onclick = (e) => {
   const b = e.target.closest("button[data-kurs]");
@@ -1507,8 +1614,16 @@ function zeichneChainWoche() {
     box.innerHTML = '<div class="empty">Collecting data for the first week&hellip;</div>';
     return;
   }
-  CHAIN.text = "This week on Electroneum (" + el("chainWocheRange").textContent + ")\n" +
-    fakten.map((f) => f[0] + " " + f[2]).join("\n");
+  // Gleicher Aufbau wie die anderen Posts: Haken, Zahlen je Zeile, Schlusszeile.
+  CHAIN.text = [
+    "🗓️ This week on Electroneum (" + el("chainWocheRange").textContent + ")",
+    "",
+    fakten.map((f) => f[0] + " " + f[2]).join("\n"),
+    "",
+    "Seven days, one chain, all of it public.",
+    "",
+    "Watch it live on ETN Radar 👇",
+  ].join("\n");
   CHAIN.bild = wocheBild(d);
   box.innerHTML = '<ul class="wochefakten">' +
     fakten.map((f) => "<li><i>" + f[0] + "</i><span>" + f[1] + "</span></li>").join("") + "</ul>" +
@@ -1594,13 +1709,21 @@ function zeichneChainNeu() {
 const WI = { daten: null, coin: null, nurMigriert: false };
 
 // [Stimmung, Bild, Rechenzeile, Schlusszeile vor dem Link]
+// Aufbau wie bei allen Posts: Haken, Zahlen je Zeile, ein Satz, Schlusszeile.
+// zahl(coin, neuerPreis, faktor, heute) baut den mittleren Block.
 const WI_TEXTE = [
-  ["calm", "whatif-scale", (c, p, x) => "📊 ETN with " + c + "'s market cap: " + p + " per ETN (×" + x + ").",
-    "Not a forecast, just math. Try any coin on ETN Radar:"],
-  ["proud", "whatif-dream", (c, p, x) => "🔭 If ETN were as big as " + c + ": " + p + " per ETN, ×" + x + " from today.",
-    "Dreaming is free, the math is on ETN Radar:"],
-  ["funny", "whatif-napkin", (c, p, x) => "🧮 Napkin math: ETN at " + c + "'s market cap = " + p + " per ETN.",
-    "My calculator needed a minute. Do yours:"],
+  ["calm", "whatif-scale",
+    (c, p, x, h) => ["📊 What if ETN had " + c + "'s market cap?", "",
+      "💰 " + h + " per ETN today", "🎯 With " + c + "'s cap: " + p + " per ETN", "✖️ That is ×" + x + " from here"].join("\n"),
+    "Not a forecast, just math. Try any coin on ETN Radar 👇"],
+  ["proud", "whatif-dream",
+    (c, p, x, h) => ["🔭 Imagine ETN as big as " + c + ".", "",
+      "💰 " + h + " per ETN today", "📈 At " + c + "'s size: " + p + " per ETN", "✖️ ×" + x + " from where we are"].join("\n"),
+    "Dreaming is free, the math is on ETN Radar 👇"],
+  ["funny", "whatif-napkin",
+    (c, p, x, h) => ["🧮 Napkin math, " + c + " edition.", "",
+      "💰 ETN today: " + h, "🎯 At " + c + "'s market cap: " + p, "✖️ That is a ×" + x + " napkin"].join("\n"),
+    "My calculator needed a minute. Do yours on ETN Radar 👇"],
 ];
 
 // Kurse unter einem Cent brauchen mehr Stellen, sonst steht ueberall $0.00.
@@ -1822,7 +1945,8 @@ el("wiErgebnis").addEventListener("click", (e) => {
   // Der Hinweis gehoert zur Zahl, nicht hinter die Aufforderung vor dem Link.
   const zusatz = WI.nurMigriert ? "\nCounting migrated ETN only - an estimate." : "";
   const varianten = WI_TEXTE.map(([ton, bild, zahl, schluss]) =>
-    [ton, zahl(r.coin.n, wiPreis(r.preis), wiFaktor(r.faktor)) + zusatz + "\n\n" + schluss, bild]);
+    [ton, zahl(r.coin.n, wiPreis(r.preis), wiFaktor(r.faktor), wiPreis(WI.daten.etn.preis)) +
+      zusatz + "\n\n" + schluss, bild]);
   shareTextOeffnen({
     titel: "📢 Share this comparison",
     varianten,
@@ -3152,6 +3276,7 @@ const SHARE_SAETZE = {
 // prueft das.
 const SHARE_TON = {
   proud: "😎 Proud", funny: "😂 Funny", calm: "😌 Calm",
+  hype: "🔥 Hype", denk: "🤔 What next", napkin: "🧮 Napkin math",
   // Bildwahl beim Wochenrueckblick: gleicher Text, anderes Bild.
   bridge: "🌉 Bridge", whale: "🐳 Whale", busy: "📈 Busy", radar: "📡 Radar",
 };
@@ -3189,13 +3314,10 @@ function buildShareText(d, zeigeAdresse, format = "text", mitLink = true) {
   const s = SHARE_SAETZE[d.tier]?.[SHARE_WAHL];
   const kopf = d.tier_emoji + " " + ichBin(d);
   const satz = format === "karte" || !s ? kopf + "." : kopf + " - " + s[1];
-  if (format === "karte" && mitLink) {
-    if (!zeigeAdresse) return satz + "\n\nWhat are you?";
-    return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand?"].join("\n");
-  }
-  const verweis = mitLink ? ":" : ": " + location.host;
-  if (!zeigeAdresse) return satz + "\n\nWhat are you? Find your tier on ETN Radar" + verweis;
-  return [satz, "", shareFakten(d).join("\n"), "", "Where do you stand? Check yours on ETN Radar" + verweis].join("\n");
+  // Aufbau wie bei allen Posts: Haken, Zahlen zum Ueberfliegen, Schlusszeile.
+  const ende = (ruf) => (mitLink ? ruf + " 👇" : ruf + " " + location.host);
+  if (!zeigeAdresse) return satz + "\n\n" + ende("What are you? Find your tier on ETN Radar");
+  return [satz, "", shareFakten(d).join("\n"), "", ende("Where do you stand? Check yours on ETN Radar")].join("\n");
 }
 
 /**
@@ -3209,27 +3331,29 @@ function fremdText(d, format) {
   const wer = d.anzeige
     ? d.anzeige + ", " + mitArtikel(d) + " " + d.tier_emoji + ","
     : mitArtikel(d) + " " + d.tier_emoji;
-  const fakten = [d.in_top_n && d.rank_pos ? "Rank #" + nf(d.rank_pos) : null, "Holding " + kurz(d.etn) + " ETN"]
-    .filter(Boolean).join(" · ");
-  const zeilen = ["👀 Spotted " + wer + " on ETN Radar.", fakten];
+  const zeilen = ["👀 Spotted " + wer + " on the Electroneum Smart Chain.", ""];
+  if (d.in_top_n && d.rank_pos) zeilen.push("🏆 Rank #" + nf(d.rank_pos) + " of all ETN holders");
+  zeilen.push("💰 Holding " + kurz(d.etn) + " ETN", "🔑 " + d.address);
   if (format !== "karte" && s) zeilen.push("", "Its message: “" + s[1].charAt(0).toUpperCase() + s[1].slice(1) + "”");
+  zeilen.push("", "Look this wallet up on ETN Radar 👇");
   return zeilen.join("\n");
 }
 
 // Rang, Bestand, naechste Stufe, Adresse - nur wenn die Adresse mitgehen darf.
+// Je Zeile ein Emoji: im Feed liest niemand einen Block Fliesstext.
 function shareFakten(d) {
   const fakten = [];
-  if (d.in_top_n && d.rank_pos) fakten.push("Rank #" + nf(d.rank_pos) + " of all ETN holders");
-  fakten.push("Holding " + kurz(d.etn) + " ETN");
+  if (d.in_top_n && d.rank_pos) fakten.push("🏆 Rank #" + nf(d.rank_pos) + " of all ETN holders");
+  fakten.push("💰 Holding " + kurz(d.etn) + " ETN");
   if (d.bis_naechster_tier != null) {
     // Kein "Only" und kein "I'll make it!": bei Fish -> Dolphin fehlen schnell
     // eine Million, und ein Versprechen gehoert nicht in einen fremden Post.
-    fakten.push("Next stop: " + [d.naechster_tier, TIER_EMOJI[d.naechster_tier]].filter(Boolean).join(" ") +
+    fakten.push("🎯 Next stop: " + [d.naechster_tier, TIER_EMOJI[d.naechster_tier]].filter(Boolean).join(" ") +
       " - " + kurz(d.bis_naechster_tier) + " ETN to go");
   } else {
-    fakten.push("Top tier reached - nowhere left to climb 🎉");
+    fakten.push("🏔️ Top tier reached - nowhere left to climb 🎉");
   }
-  fakten.push("Wallet: " + d.address);
+  fakten.push("🔑 " + d.address);
   return fakten;
 }
 
@@ -3305,7 +3429,9 @@ const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet 
 const SHARE_TAGS = "#ETN #Electroneum #ETNRadar #GalacticSL";
 function shareInhalt(weg) {
   const i = shareInhaltRoh(weg);
-  return { text: i.text + "\n\n" + SHARE_TAGS, url: i.url };
+  // Manche Fassungen bringen eigene Hashtags mit und ersetzen die festen (Kurs-Post).
+  const tags = SHARE_FREMD?.tags ?? SHARE_TAGS;
+  return { text: i.text + "\n\n" + tags, url: i.url };
 }
 
 // Was rausgehen wuerde: { text, url }. weg "datei" = Bild als Foto, "link" = per Adresse.
@@ -3405,10 +3531,19 @@ function shareBildZeigen(id, format) {
   if (istHandy()) fotoVorladen(id, bildArt(format));
 }
 
+// Wie X zaehlt: Emoji zaehlen doppelt, alles andere einfach.
+const xZeichen = (t) => [...t].length + (t.match(/\p{Extended_Pictographic}/gu) ?? []).length;
+
 function shareVorschau() {
   if (!SHARE_FREMD && !CUR_WALLET) return;
   const inhalt = shareInhalt(hauptWeg());
   el("sharePreview").textContent = inhalt.text + (inhalt.url ? "\n" + inhalt.url : "");
+  // X zaehlt jeden Link als 23 Zeichen und Emoji doppelt. Ueber 280 geht der
+  // Post nur mit X Premium raus - besser hier sagen als im Absende-Fenster.
+  const lang = xZeichen(inhalt.text) + (inhalt.url ? 24 : 0);
+  el("shareLaenge").hidden = lang <= 280;
+  el("shareLaenge").textContent = lang + " characters - X posts longer than 280 need X Premium. " +
+    "Telegram, Discord and copying the text are not affected.";
   shareKnoepfe();
 
   // Bildwahl und Vorschaubild gibt es fuer beides: fuer den eigenen Rang und
