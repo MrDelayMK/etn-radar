@@ -630,7 +630,8 @@ CREATE TABLE IF NOT EXISTS token_preise (
   total_supply REAL,
   preis_usd    REAL,
   preis_etn    REAL,
-  aktualisiert TEXT                          -- letzter Preisabruf
+  aktualisiert TEXT,                         -- letzter Preisabruf
+  zuerst_gesehen TEXT                        -- erstmals in der ElectroSwap-Liste
 );
 CREATE TABLE IF NOT EXISTS wallet_tokens (
   address   TEXT NOT NULL,

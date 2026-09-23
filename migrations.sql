@@ -318,3 +318,6 @@ CREATE TABLE IF NOT EXISTS wallet_nfts (
   gesehen   TEXT NOT NULL,
   PRIMARY KEY (address, sammlung)
 );
+
+-- Wann ein Token zum ersten Mal in der ElectroSwap-Liste auftauchte ("neu gelistet").
+ALTER TABLE token_preise ADD COLUMN zuerst_gesehen TEXT;

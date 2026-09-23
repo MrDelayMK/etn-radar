@@ -1722,7 +1722,77 @@ function zeichneChainTokens() {
       '<a href="https://blockexplorer.electroneum.com/token/' + esc(t.address) +
       '" target="_blank" rel="noopener">Explorer ↗</a></div></div>';
   }).join("");
+
+  // Top-Mover der Woche: groesste Veraenderung ueber sieben Tage.
+  el("topMover")?.remove();
+  const mover = [...liste].filter((t) => t.preis_7d != null).sort((a, b) => b.preis_7d - a.preis_7d)[0];
+  if (mover && Math.abs(mover.preis_7d) >= 1) {
+    const rauf = mover.preis_7d > 0;
+    box.insertAdjacentHTML("beforebegin",
+      '<div class="topmover" id="topMover">' + (rauf ? "🚀" : "🧊") + " <b>" + esc(mover.symbol) + "</b> " +
+      (rauf ? "is the top mover this week" : "leads the week") +
+      ' <span class="' + (rauf ? "up" : "down") + '">' + (rauf ? "▲ +" : "▼ ") + nf(Math.abs(mover.preis_7d), 1) + "%</span>" +
+      '<span class="dim3"> · 7 days</span></div>');
+  }
   zeichneHolderChart();
+  zeichneNeuGelistet();
+  zeichneNftListe();
+}
+
+// Tokens, die neu auf ElectroSwap aufgetaucht sind.
+function zeichneNeuGelistet() {
+  const liste = CHAIN.daten?.neu_gelistet ?? [];
+  const wrap = el("neuGelistetWrap");
+  if (!liste.length) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  el("chainNeuGelistet").innerHTML = liste.map((t) =>
+    '<a class="tokrow" href="https://blockexplorer.electroneum.com/token/' + esc(t.address) +
+    '" target="_blank" rel="noopener">' +
+    '<span class="neuicon">✨</span>' +
+    '<span class="wer"><span class="nm">' + esc(t.name ?? t.symbol ?? kurzAdr(t.address)) +
+    "<small>" + esc(t.symbol ?? "") + "</small></span>" +
+    '<span class="meta">listed ' + zeitHer(t.zuerst_gesehen) + " ago</span></span>" +
+    '<span class="zahl"><b class="num">' + (t.preis_usd ? tokenPreisText(t.preis_usd) : "—") + "</b></span></a>"
+  ).join("");
+}
+
+// Alle NFT-Sammlungen des Marktplatzes samt Bodenpreis.
+function zeichneNftListe() {
+  const d = CHAIN.daten?.nft;
+  const wrap = el("nftWrap");
+  if (!d?.sammlungen?.length) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  const s = d.stats ?? {};
+  const kachel = (wert, text) => '<div class="nftkachel"><b class="num">' + wert + "</b><span>" + text + "</span></div>";
+  const zahlen = [
+    s.collections != null ? kachel(nf(s.collections), "collections") : "",
+    s.listings != null ? kachel(nf(s.listings), "open listings") : "",
+    s.owners != null ? kachel(nf(s.owners), "owners") : "",
+    s.volume != null ? kachel(kurz(Number(s.volume)) + " ETN", "traded") : "",
+  ].filter(Boolean).join("");
+  el("nftStats").innerHTML = zahlen;
+  el("nftStats").style.display = zahlen ? "" : "none";
+  const preis = PREIS_JETZT ?? 0;
+  el("nftListe").innerHTML = d.sammlungen.map((c) =>
+    '<a class="tokrow" href="https://blockexplorer.electroneum.com/token/' + esc(c.address) +
+    '" target="_blank" rel="noopener">' +
+    '<span class="neuicon">🖼️</span>' +
+    '<span class="wer"><span class="nm">' + esc(c.name ?? kurzAdr(c.address)) +
+    "<small>" + esc(c.symbol ?? "") + "</small></span>" +
+    '<span class="meta">' + (c.supply != null ? nf(c.supply) + " pieces" : "") +
+    (c.besitzer != null ? " · " + nf(c.besitzer) + " owners" : "") +
+    (c.angebote != null ? " · " + nf(c.angebote) + " listed" : "") + "</span></span>" +
+    '<span class="zahl">' + (c.floor_etn
+      ? '<b class="num">' + kurz(c.floor_etn) + " ETN</b><span>" +
+        (preis > 0 ? "floor ≈ " + dollar(c.floor_etn * preis) : "floor") + "</span>"
+      : '<span class="dim3">no listing</span>') + "</span></a>"
+  ).join("");
 }
 
 // ---------- Holder-Verlauf ----------

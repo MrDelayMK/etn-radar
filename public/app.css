@@ -1204,3 +1204,12 @@ tr.lbcensus td:last-child{white-space:nowrap}
 .tokkarte .links a{color:var(--acc);text-decoration:none}
 .tokkarte .links a:hover{text-decoration:underline}
 @media (max-width:460px){.tokkarten{grid-template-columns:1fr}}
+
+/* Chain: Top-Mover, NFT-Zahlen */
+.topmover{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:linear-gradient(90deg,rgba(34,211,167,.12),transparent);
+  border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:14px}
+.topmover b{font-size:15px}
+.nftzahlen{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px}
+.nftkachel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column}
+.nftkachel b{font-size:17px}
+.nftkachel span{font-size:12px;color:var(--tx2)}

@@ -117,10 +117,12 @@ export async function tokenListeAuffrischen(db, env, jetzt = Date.now()) {
   if (r.fehler || !Array.isArray(r.daten)) return { gefragt: false, grund: r.fehler ?? "leer" };
   const zeilen = r.daten.map((t) =>
     db.prepare(
-      "INSERT INTO token_preise (address, symbol, name, decimals, total_supply) VALUES (?,?,?,?,?)" +
+      // zuerst_gesehen bleibt beim Aktualisieren stehen - daraus entsteht
+      // "neu gelistet" auf dem Chain-Reiter.
+      "INSERT INTO token_preise (address, symbol, name, decimals, total_supply, zuerst_gesehen) VALUES (?,?,?,?,?,?)" +
         " ON CONFLICT(address) DO UPDATE SET symbol = excluded.symbol, name = excluded.name," +
         " decimals = excluded.decimals, total_supply = excluded.total_supply"
-    ).bind(String(t.address).toLowerCase(), t.symbol ?? null, t.name ?? null, Number(t.decimals ?? 18), Number(t.totalSupply ?? 0) || null)
+    ).bind(String(t.address).toLowerCase(), t.symbol ?? null, t.name ?? null, Number(t.decimals ?? 18), Number(t.totalSupply ?? 0) || null, new Date(jetzt).toISOString())
   );
   zeilen.push(
     db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('tokenliste', ?)" +
@@ -455,4 +457,50 @@ export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.no
     ohne_boden: liste.filter((x) => x.wert_usd == null).length,
     stand: new Date(jetzt).toISOString(),
   };
+}
+
+
+/** Marktzahlen des NFT-Marktplatzes, hoechstens einmal pro Woche (25 Credits). */
+export async function nftStatsAuffrischen(db, env, jetzt = Date.now()) {
+  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: false };
+  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftstats_zeit'")
+    .first().catch(() => null);
+  if (stand?.wert && jetzt - Number(stand.wert) < NFT_TAKT_MS) return { gefragt: false, grund: "frisch" };
+  const r = await holen(env, "/nft/stats");
+  if (r.fehler === "bremse") {
+    await pauseSetzen(db, jetzt + r.warten * 1000);
+    return { gefragt: false, grund: "bremse" };
+  }
+  if (r.fehler || !r.daten) return { gefragt: false, grund: r.fehler ?? "leer" };
+  await db.batch([
+    db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftstats', ?)" +
+      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(JSON.stringify(r.daten)),
+    db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftstats_zeit', ?)" +
+      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt)),
+  ]);
+  return { gefragt: true, kosten: r.kosten };
+}
+
+/** Alle bekannten NFT-Sammlungen mit Bodenpreis, teuerste zuerst. */
+export async function nftSammlungenLesen(db) {
+  const rows = (await db
+    .prepare("SELECT address, name, symbol, supply, floor_etn, besitzer, angebote FROM nft_sammlungen ORDER BY coalesce(floor_etn, -1) DESC, coalesce(supply, 0) DESC")
+    .all().catch(() => ({ results: [] }))).results ?? [];
+  return rows;
+}
+
+/** Die gespeicherten Marktzahlen des NFT-Marktplatzes. */
+export async function nftStatsLesen(db) {
+  const r = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftstats'")
+    .first().catch(() => null);
+  try { return r?.wert ? JSON.parse(r.wert) : null; } catch { return null; }
+}
+
+/** Tokens, die zuletzt neu in der ElectroSwap-Liste auftauchten. */
+export async function neueTokens(db, tage = 14) {
+  const ab = new Date(Date.now() - tage * 86400000).toISOString();
+  return ((await db
+    .prepare("SELECT address, symbol, name, preis_usd, zuerst_gesehen FROM token_preise" +
+      " WHERE zuerst_gesehen >= ? ORDER BY zuerst_gesehen DESC LIMIT 12")
+    .bind(ab).all().catch(() => ({ results: [] }))).results ?? []);
 }

@@ -3,7 +3,10 @@
 import { CHAIN_TOKENS, tradeLink } from "../chain-tokens.js";
 import { tagVor } from "./grundlagen.js";
 import { exchange_flow } from "./wallets.js";
-import { preiseAuffrischen, preiseLesen, kerzenAuffrischen, kerzenLesen } from "../electroswap.js";
+import {
+  preiseAuffrischen, preiseLesen, kerzenAuffrischen, kerzenLesen,
+  nftSammlungenAuffrischen, nftSammlungenLesen, nftStatsAuffrischen, nftStatsLesen, neueTokens,
+} from "../electroswap.js";
 
 /* ---------- Chain-Reiter ---------------------------------------------------
  *
@@ -125,8 +128,15 @@ export async function chain(db, env) {
   const adressen = CHAIN_TOKENS.map((t) => t.address.toLowerCase());
   await preiseAuffrischen(db, env, adressen).catch(() => {});
   await kerzenAuffrischen(db, env, adressen).catch(() => {});
+  await nftSammlungenAuffrischen(db, env).catch(() => {});
+  await nftStatsAuffrischen(db, env).catch(() => {});
   const preise = await preiseLesen(db);
   const kerzen = await kerzenLesen(db);
+  const [nftSammlungen, nftStats, neuGelistet] = await Promise.all([
+    nftSammlungenLesen(db).catch(() => []),
+    nftStatsLesen(db).catch(() => null),
+    neueTokens(db).catch(() => []),
+  ]);
 
   const tokens = CHAIN_TOKENS.map((t) => {
     const adresse = t.address.toLowerCase();
@@ -150,6 +160,8 @@ export async function chain(db, env) {
       preis_etn: p?.etn ?? null,
       preis_24h: preisJetzt && gestern > 0 ? ((preisJetzt - gestern) / gestern) * 100 : null,
       kurve: reihe.slice(-7).map((k) => k.schluss),
+      // Woche: aelteste gespeicherte Kerze gegen den aktuellen Preis.
+      preis_7d: preisJetzt && reihe[0]?.schluss > 0 ? ((preisJetzt - reihe[0].schluss) / reihe[0].schluss) * 100 : null,
       // Marktkapitalisierung aus Preis mal Gesamtmenge der Tokenliste.
       cap_usd: preisJetzt && p?.supply ? preisJetzt * p.supply : null,
       holder_reihe: holderReihe,
@@ -189,6 +201,8 @@ export async function chain(db, env) {
         }
       : null,
     tx: kachel(tx),
+    nft: { sammlungen: nftSammlungen, stats: nftStats },
+    neu_gelistet: neuGelistet,
     contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
     migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,
     bewegung: b ? { address: b.address, checksum_hash: b.checksum_hash, label: b.label, etn: b.delta_etn } : null,
