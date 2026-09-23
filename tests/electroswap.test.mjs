@@ -96,4 +96,24 @@ pruef(zaehle("/tokens/52014") === listeVorher, "die Tokenliste wird nicht zweima
 const spaeter = await tokenListeAuffrischen(db, env, jetzt + 10 * 24 * 3600000);
 pruef(spaeter.gefragt && zaehle("/tokens/52014") === listeVorher + 1, "eine Woche spaeter wieder");
 
+
+// --- NFT: Liste und Bodenpreise, hoechstens acht Statistiken je Aufruf ------
+const { nftSammlungenAuffrischen, walletNftWerte } = await import(repoUrl("src/electroswap.js"));
+const sammlungen = Array.from({ length: 11 }, (_, i) => ({
+  address: "0x" + String(i + 1).padStart(40, "c"),
+  name: "Sammlung " + i,
+  symbol: "S" + i,
+  totalSupply: 100 - i,
+}));
+antworten["/nft/collections/52014?"] = () => json(sammlungen, 410);
+antworten["/nft/collections/52014/"] = () => json({ name: "Sammlung", symbol: "S", totalSupply: 50, stats: { floorPrice: 200, uniqueOwners: 9, listingCount: 3 } }, 500);
+
+const nftJetzt = jetzt + 100 * 3600000;
+const n1 = await nftSammlungenAuffrischen(db, env, nftJetzt);
+pruef(n1.gefragt === 8, "erster Lauf holt acht Bodenpreise");
+const n2 = await nftSammlungenAuffrischen(db, env, nftJetzt + 60000);
+pruef(n2.gefragt === 3, "der naechste Aufruf holt den Rest");
+const n3 = await nftSammlungenAuffrischen(db, env, nftJetzt + 120000);
+pruef(n3.gefragt === 0 && n3.grund === "frisch", "danach ist eine Woche Ruhe");
+
 ende();

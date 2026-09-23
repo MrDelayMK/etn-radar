@@ -309,8 +309,53 @@ export async function kerzenLesen(db) {
  * wirklich anzeigen.
  */
 export const NFT_TAKT_MS = 7 * 24 * 3600000;
-// Hoechstens so viele Sammlungen je Wallet nach dem Bodenpreis fragen.
-const NFT_MAX_SAMMLUNGEN = 6;
+// Hoechstens so viele Bodenpreise je Seitenaufruf holen - der Rest folgt beim
+// naechsten. So wartet niemand auf zwanzig Abrufe hintereinander.
+const NFT_JE_LAUF = 8;
+
+/**
+ * Alle gelisteten NFT-Sammlungen samt Bodenpreis, hoechstens einmal pro Woche.
+ * Die Liste kostet 300 + 10 je Sammlung, jede Statistik 500. Je Aufruf werden
+ * hoechstens NFT_JE_LAUF Statistiken geholt, damit niemand lange wartet - der
+ * Rest kommt beim naechsten Seitenaufruf dran.
+ */
+export async function nftSammlungenAuffrischen(db, env, jetzt = Date.now()) {
+  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: 0 };
+  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftliste'")
+    .first().catch(() => null);
+  if (!stand?.wert || jetzt - Number(stand.wert) >= NFT_TAKT_MS) {
+    const r = await holen(env, "/nft/collections/" + KETTE + "?limit=50");
+    if (r.fehler === "bremse") {
+      await pauseSetzen(db, jetzt + r.warten * 1000);
+      return { gefragt: 0, grund: "bremse" };
+    }
+    if (Array.isArray(r.daten)) {
+      const zeilen = r.daten.map((c) =>
+        db.prepare(
+          "INSERT INTO nft_sammlungen (address, name, symbol, supply) VALUES (?,?,?,?)" +
+            " ON CONFLICT(address) DO UPDATE SET name = excluded.name, symbol = excluded.symbol," +
+            " supply = excluded.supply"
+        ).bind(String(c.address).toLowerCase(), c.name ?? null, c.symbol ?? null, c.totalSupply ?? null)
+      );
+      zeilen.push(
+        db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftliste', ?)" +
+          " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
+      );
+      await db.batch(zeilen);
+    }
+  }
+  // Sammlungen ohne frischen Bodenpreis, groesste zuerst.
+  const offen = ((await db
+    .prepare(
+      "SELECT address FROM nft_sammlungen WHERE aktualisiert IS NULL OR aktualisiert < ?" +
+        " ORDER BY coalesce(supply, 0) DESC LIMIT ?"
+    )
+    .bind(new Date(jetzt - NFT_TAKT_MS).toISOString(), NFT_JE_LAUF)
+    .all().catch(() => ({ results: [] }))).results ?? []).map((r) => r.address);
+  if (!offen.length) return { gefragt: 0, grund: "frisch" };
+  await bodenpreise(db, env, offen, jetzt);
+  return { gefragt: offen.length };
+}
 
 async function bodenpreise(db, env, sammlungen, jetzt) {
   if (!env.ELECTROSWAP_API_KEY || !sammlungen.length) return;
@@ -380,15 +425,9 @@ export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.no
     .bind(adr).all().catch(() => ({ results: [] }))).results ?? [];
   if (!rows.length) return { sammlungen: [], gesamt_usd: 0, stueck: 0, stand: stand?.t ?? new Date(jetzt).toISOString() };
 
-  // Bodenpreise kosten 500 Credits je Sammlung. Darum nur fuer die groessten
-  // Posten und nicht fuer Liquiditaets-Belege wie "ElectroSwap V3 Positions",
-  // die zwar NFTs sind, aber nie auf dem Marktplatz liegen.
-  const gefragt = [...rows]
-    .filter((r) => !/position/i.test(r.name ?? ""))
-    .sort((a, b) => b.anzahl - a.anzahl)
-    .slice(0, NFT_MAX_SAMMLUNGEN)
-    .map((r) => r.sammlung);
-  await bodenpreise(db, env, gefragt, jetzt).catch(() => {});
+  // Die Bodenpreise liegen bereits in nft_sammlungen (woechentlich fuer alle
+  // gelisteten Sammlungen geholt) - hier kostet das keine Anfrage mehr.
+  await nftSammlungenAuffrischen(db, env, jetzt).catch(() => {});
   const platz = rows.map(() => "?").join(",");
   const boden = new Map(((await db
     .prepare("SELECT address, name, floor_etn, besitzer, angebote FROM nft_sammlungen WHERE address IN (" + platz + ")")
