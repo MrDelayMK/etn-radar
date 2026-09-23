@@ -541,7 +541,7 @@ function zeichneChart(svg, punkte, totalSupply) {
     tip.innerHTML = usd
       ? '<b class="num">' + dollar(p.etn) + "</b>" + datum +
         '<span class="num">' + kurz(p.menge) + " ETN × " + wiPreis(p.preis) + "</span>"
-      : '<b class="num">' + nf(p.etn, 0) + " ETN</b>" + datum +
+      : '<b class="num">' + nf(p.etn, 0) + " " + (svg._einheit ?? "ETN") + "</b>" + datum +
       (i > 0 && p.etn !== daten[i - 1].etn
         ? '<span class="num ' + (p.etn - daten[i - 1].etn < 0 ? "down" : "up") + '">' +
           kurz(p.etn - daten[i - 1].etn, true) + " vs. previous point</span>"
@@ -1652,33 +1652,112 @@ el("chainWoche").addEventListener("click", (e) => {
   });
 });
 
+// Token-Karten: Preis, 24-Stunden-Veraenderung, kleine Wochenkurve, Holder
+// und Marktkapitalisierung. Preise und Kurve kommen von ElectroSwap (einmal
+// taeglich geholt), Holder vom Explorer aus unserer eigenen Tagesreihe.
+function tokenPreisText(v) {
+  if (!(v > 0)) return "—";
+  if (v >= 1) return "$" + nf(v, 2);
+  if (v >= 0.01) return "$" + nf(v, 4);
+  if (v >= 0.0001) return "$" + nf(v, 6);
+  // Sehr kleine Preise als $0.0₈535 statt einer Nullwueste.
+  const exp = Math.floor(Math.log10(v));
+  const nullen = -exp - 1;
+  const ziffern = Math.round(v * Math.pow(10, nullen + 3));
+  return "$0.0" + String(nullen).split("").map((z) => "₀₁₂₃₄₅₆₇₈₉"[Number(z)]).join("") + ziffern;
+}
+
+// Marktkapitalisierung der Tokens: wiCap rundet alles unter einer Million auf
+// $0M - bei Tokens ist genau das der haeufige Fall.
+function capText(v) {
+  if (!(v > 0)) return "";
+  if (v >= 1e9) return "$" + nf(v / 1e9, 2) + "B";
+  if (v >= 1e6) return "$" + nf(v / 1e6, v < 1e7 ? 1 : 0) + "M";
+  return "$" + kurz(v);
+}
+
+/** Kleine Kurve ohne Achsen - nur die Richtung der letzten sieben Tage. */
+function sparkPfad(werte, breite = 108, hoehe = 30) {
+  if (!werte || werte.length < 2) return "";
+  const min = Math.min(...werte), max = Math.max(...werte);
+  const spanne = max - min || Math.abs(max) * 0.05 || 1;
+  return werte.map((v, i) => {
+    const x = (i / (werte.length - 1)) * breite;
+    const y = hoehe - ((v - min) / spanne) * (hoehe - 4) - 2;
+    return (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+  }).join(" ");
+}
+
 function zeichneChainTokens() {
   const liste = CHAIN.daten?.tokens ?? [];
   const box = el("chainTokens");
-  if (!liste.some((t) => t.holders != null)) {
+  if (!liste.some((t) => t.holders != null || t.preis_usd != null)) {
     box.innerHTML = '<div class="empty">Collecting token data&hellip;</div>';
     return;
   }
   box.innerHTML = liste.map((t) => {
+    const p = t.preis_24h;
+    const rauf = (p ?? 0) >= 0;
+    const farbe = p == null ? "dim3" : rauf ? "up" : "down";
+    const wandel = p == null ? "" :
+      '<span class="' + farbe + '">' + (rauf ? "▲ +" : "▼ ") + nf(Math.abs(p), 1) + "% 24h</span>";
     const d = t.holders_7d;
-    const woche = d == null ? "&nbsp;"
-      : d > 0 ? '<span class="up">+' + nf(d) + "</span> this week"
-      : d < 0 ? '<span class="down">−' + nf(-d) + "</span> this week"
-      : "no change this week";
-    const meta = [
-      t.transfers != null ? kurz(t.transfers) + " transfers" : null,
-      t.supply != null ? "supply " + kurz(Number(t.supply)) : null,
-    ].filter(Boolean).join(" · ");
-    return '<div class="tokrow">' +
-      '<img src="/assets/tokens/' + esc(t.logo) + '" alt="" width="34" height="34" loading="lazy">' +
-      '<span class="wer"><span class="nm">' + esc(t.name) + "<small>" + esc(t.symbol) + "</small></span>" +
-        '<span class="meta">' + meta + "</span></span>" +
-      '<span class="zahl"><b class="num">' + nf(t.holders) + " <small>holders</small></b><span>" + woche + "</span></span>" +
-      '<span class="links"><a href="' + esc(t.trade) + '" target="_blank" rel="noopener">Trade ↗</a>' +
-        '<a href="https://blockexplorer.electroneum.com/token/' + esc(t.address) +
-        '" target="_blank" rel="noopener">Explorer ↗</a></span></div>';
+    const holder = t.holders == null ? "" :
+      "<b>" + nf(t.holders) + "</b> holders" +
+      (d ? ' <span class="' + (d > 0 ? "up" : "down") + '">' + (d > 0 ? "+" : "−") + nf(Math.abs(d)) + "</span>" : "");
+    const pfad = sparkPfad(t.kurve);
+    const kurve = pfad
+      ? '<svg class="spark" viewBox="0 0 108 30" preserveAspectRatio="none" aria-hidden="true">' +
+        '<path d="' + pfad + '" fill="none" stroke="' + (rauf ? "#22d3a7" : "#f4635e") + '" stroke-width="2" ' +
+        'stroke-linejoin="round" stroke-linecap="round"/></svg>'
+      : '<span class="dim3 keinekurve">no chart yet</span>';
+    return '<div class="tokkarte">' +
+      '<div class="kopf"><img src="/assets/tokens/' + esc(t.logo) + '" alt="" width="34" height="34" loading="lazy">' +
+      '<span class="nm"><b>' + esc(t.symbol) + "</b><span>" + esc(t.name) + "</span></span></div>" +
+      '<div class="preis"><b class="num">' + tokenPreisText(t.preis_usd) + "</b>" + wandel + "</div>" +
+      kurve +
+      '<div class="fuss"><span>' + holder + "</span>" +
+      (t.cap_usd ? '<span class="dim3">Cap ' + capText(t.cap_usd) + "</span>" : "") + "</div>" +
+      '<div class="links"><a href="' + esc(t.trade) + '" target="_blank" rel="noopener">Trade ↗</a>' +
+      '<a href="https://blockexplorer.electroneum.com/token/' + esc(t.address) +
+      '" target="_blank" rel="noopener">Explorer ↗</a></div></div>';
   }).join("");
+  zeichneHolderChart();
 }
+
+// ---------- Holder-Verlauf ----------
+// Eine Linie je Token, umschaltbar. Die Reihe kommt aus token_tage und kostet
+// keine einzige zusaetzliche Anfrage.
+const HOLDER = { token: null };
+
+function zeichneHolderChart(wahl) {
+  const liste = (CHAIN.daten?.tokens ?? []).filter((t) => (t.holder_reihe ?? []).length >= 2);
+  const box = el("holderTabs");
+  if (!liste.length) {
+    box.innerHTML = "";
+    el("holderHolder").innerHTML = '<div class="empty">Not enough holder history yet</div>';
+    return;
+  }
+  if (wahl) HOLDER.token = wahl;
+  if (!liste.some((t) => t.symbol === HOLDER.token)) HOLDER.token = liste[0].symbol;
+  box.innerHTML = liste.map((t) =>
+    '<button class="ghost' + (t.symbol === HOLDER.token ? " on" : "") + '" data-holder="' + esc(t.symbol) + '">' +
+    esc(t.symbol) + "</button>").join("");
+  const gewaehlt = liste.find((t) => t.symbol === HOLDER.token);
+  if (!el("holderChart")) {
+    el("holderHolder").innerHTML = '<svg class="chart" id="holderChart"></svg><div class="tip"></div>';
+  }
+  const punkte = gewaehlt.holder_reihe.map((h) => ({ day: h.day, etn: h.n }));
+  el("holderChart")._usd = false;
+  el("holderChart")._einheit = "holders";
+  zeichneChart(el("holderChart"), punkte);
+}
+
+el("holderTabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-holder]");
+  if (b) zeichneHolderChart(b.dataset.holder);
+});
+beobachte("holderHolder", () => { if (el("holderChart")?._punkte) zeichneChart(el("holderChart")); });
 
 function zeichneChainNeu() {
   const c = CHAIN.daten?.contracts;
@@ -4176,7 +4255,7 @@ function wiederFrei(knopf, ms) {
 // eine Anfrage mehr beim Explorer. daily_balances fuehrt nur Tage MIT
 // Aenderung; dazwischen gilt der letzte Stand. Ausserhalb der Top N kommt der
 // Verlauf erst beim Oeffnen (/api/wallet-history, eine Explorer-Anfrage).
-const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false, tokens: null };
+const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false, tokens: null, nfts: null };
 let kurseLaeuft = null;
 const kursTage = () =>
   (kurseLaeuft ??= hole("/api/price?period=1y")
@@ -4283,6 +4362,33 @@ function zeichneWalletTokens() {
     (d.ohne_preis ? " · " + d.ohne_preis + " token(s) without a price" : "") + "</span></div>";
 }
 
+// NFT-Sammlungen des Wallets mit Mindestwert zum Bodenpreis.
+function zeichneWalletNfts() {
+  const wrap = el("invNftsWrap");
+  const d = WV.nfts;
+  if (!d || !d.sammlungen?.length) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  const zeilen = d.sammlungen.map((s) => {
+    const name = s.name ? esc(s.name) : kurzAdr(s.address);
+    const boden = s.floor_etn
+      ? "floor " + kurz(s.floor_etn) + " ETN"
+      : '<span class="dim3">no listing</span>';
+    return '<a class="tokzeile" href="' + EXPLORER + esc(s.address) + '" target="_blank" rel="noopener">' +
+      '<span class="wer"><b>' + name + "</b>" +
+      (s.symbol ? '<span class="dim3"> ' + esc(s.symbol) + "</span>" : "") + "</span>" +
+      '<span class="num menge">' + s.anzahl + (s.anzahl === 1 ? " NFT" : " NFTs") + "</span>" +
+      '<span class="num wert">' + (s.wert_usd != null ? dollar(s.wert_usd) : boden) + "</span></a>";
+  }).join("");
+  el("invNfts").innerHTML = zeilen +
+    '<div class="tokfuss"><b>' + d.stueck + (d.stueck === 1 ? " NFT" : " NFTs") +
+    (d.gesamt_usd > 0 ? " worth at least " + dollar(d.gesamt_usd) : "") + "</b>" +
+    '<span class="dim3"> · at floor price, not a valuation' +
+    (d.ohne_boden ? " · " + d.ohne_boden + " collection(s) without a listing" : "") + "</span></div>";
+}
+
 function zeichneWallet() {
   if (!WV.address) return;
   el("invWert").innerHTML = WV.laedt ? "" : wertKopf();
@@ -4323,16 +4429,20 @@ function zeichneWallet() {
 // die spaete Antwort nicht mehr.
 async function walletWertLaden(d, mitVerlauf) {
   const adr = d.address;
-  const [kurse, verlauf, tokens] = await Promise.all([
+const [kurse, verlauf, tokens, nfts] = await Promise.all([
     kursTage(),
     mitVerlauf ? hole("/api/wallet-history/" + adr).catch(() => null) : null,
-    // Tokens kommen von ElectroSwap - ein Abruf beim Oeffnen, dann zwoelf Stunden Ruhe.
+    // Tokens kommen von ElectroSwap - ein Abruf beim Oeffnen, dann 24 Stunden Ruhe.
     hole("/api/wallet-tokens/" + adr).catch(() => null),
+    // NFTs: Sammlungen vom Explorer, Bodenpreis von ElectroSwap.
+    hole("/api/wallet-nfts/" + adr).catch(() => null),
   ]);
   if (WV.address !== adr) return;
   KURSE = kurse;
   WV.tokens = tokens ?? null;
+  WV.nfts = nfts ?? null;
   zeichneWalletTokens();
+  zeichneWalletNfts();
   if (mitVerlauf) {
     WV.laedt = false;
     if (verlauf?.verlauf) {
@@ -4400,12 +4510,14 @@ function renderWalletDetail(d, { nurKopf = false } = {}) {
     WV.etn = d.etn;
     zeichneWallet();
     zeichneWalletTokens();
+    zeichneWalletNfts();
   } else {
     // Ausserhalb der Top N (und fuer herausgefallene) holt der Server den
     // Verlauf erst jetzt - hoechstens alle zwoelf Stunden je Wallet.
     const nachladen = liveOnly || !d.in_top_n;
     Object.assign(WV, {
       tokens: null,
+      nfts: null,
       address: d.address,
       verlauf: d.verlauf ?? [],
       vollstaendig: !liveOnly,

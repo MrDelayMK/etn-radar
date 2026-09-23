@@ -456,8 +456,19 @@
 <!-- ================= CHAIN ================= -->
 <div class="page" id="page-chain">
   <section style="margin-top:22px">
-    <h2>💎 Ecosystem tokens</h2>
-    <div class="card tokliste" id="chainTokens"><div class="empty">Loading&hellip;</div></div>
+    <h2>💎 Ecosystem tokens
+      <button class="infoBtn" data-info="Prices, the 24h change and the small curve come from ElectroSwap, fetched once a day. Holders come from the block explorer. Market cap is price times total supply.">ⓘ</button></h2>
+    <div class="tokkarten" id="chainTokens"><div class="empty">Loading&hellip;</div></div>
+  </section>
+  <section>
+    <h2>👥 Holder growth <span class="hint">how many wallets hold each token</span></h2>
+    <div class="card">
+      <div class="tabs" id="holderTabs"></div>
+      <div class="chartholder" id="holderHolder">
+        <svg class="chart" id="holderChart"></svg>
+        <div class="tip"></div>
+      </div>
+    </div>
   </section>
   <section>
     <h2>🧱 New on chain <span class="hint">verified contracts, last 7 days</span></h2>
@@ -590,6 +601,11 @@
     <h2>🪙 Tokens in this wallet
       <button class="infoBtn" data-info="Token balances and prices come from ElectroSwap, fetched once when you open a wallet and then reused for twelve hours. ElectroSwap only knows wallets that have traded there, so a wallet can show no tokens even if it holds some.">ⓘ</button></h2>
     <div class="card" id="invTokens"></div>
+  </section>
+  <section id="invNftsWrap" style="display:none">
+    <h2>🖼️ NFTs in this wallet
+      <button class="infoBtn" data-info="Which collections a wallet holds comes from the block explorer. The floor price is the cheapest listing on ElectroSwap, refreshed weekly. Floor value is a lower bound, not a valuation of the actual pieces.">ⓘ</button></h2>
+    <div class="card" id="invNfts"></div>
   </section>
   <section id="invChartWrap" style="display:none">
     <h2 id="invChartTitel">Balance over time</h2>

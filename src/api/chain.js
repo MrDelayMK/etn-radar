@@ -3,6 +3,7 @@
 import { CHAIN_TOKENS, tradeLink } from "../chain-tokens.js";
 import { tagVor } from "./grundlagen.js";
 import { exchange_flow } from "./wallets.js";
+import { preiseAuffrischen, preiseLesen, kerzenAuffrischen, kerzenLesen } from "../electroswap.js";
 
 /* ---------- Chain-Reiter ---------------------------------------------------
  *
@@ -25,7 +26,7 @@ export async function chain(db, env) {
     alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
-      tagVor(15)
+      tagVor(92)
     ),
     alle(
       "SELECT address, name, impl_name, verified_at, tx_count FROM chain_contracts" +
@@ -120,6 +121,13 @@ export async function chain(db, env) {
   const migriert = (z) =>
     bridgeTage.filter((t) => t.day >= z.von && t.day <= z.bis).reduce((a, t) => a + inEtn(t.abfluss_wei), 0);
 
+  // ElectroSwap: Preise und Tageskerzen, beides hoechstens einmal taeglich.
+  const adressen = CHAIN_TOKENS.map((t) => t.address.toLowerCase());
+  await preiseAuffrischen(db, env, adressen).catch(() => {});
+  await kerzenAuffrischen(db, env, adressen).catch(() => {});
+  const preise = await preiseLesen(db);
+  const kerzen = await kerzenLesen(db);
+
   const tokens = CHAIN_TOKENS.map((t) => {
     const adresse = t.address.toLowerCase();
     const zeilen = tokenZeilen.filter((z) => z.address === adresse);
@@ -128,7 +136,23 @@ export async function chain(db, env) {
     // hiesse "this week" in Wahrheit zwei.
     const vorher = [...zeilen].reverse().find((z) => z.day <= tagVor(7) && z.day >= tagVor(9));
     const diff = (feld) => (jetzt?.[feld] != null && vorher?.[feld] != null ? jetzt[feld] - vorher[feld] : null);
+    // Holder je Tag fuer den Verlaufs-Chart (kostet nichts, liegt ohnehin da).
+    const holderReihe = zeilen
+      .filter((z) => z.holders != null)
+      .map((z) => ({ day: z.day, n: z.holders }));
+    const p = preise.get(adresse);
+    const reihe = (kerzen.get(adresse) ?? []).slice(-8);
+    // 24 Stunden: aktueller Preis gegen den Schluss des Vortags.
+    const gestern = reihe.length >= 2 ? reihe[reihe.length - 2].schluss : null;
+    const preisJetzt = p?.usd ?? reihe[reihe.length - 1]?.schluss ?? null;
     return {
+      preis_usd: preisJetzt,
+      preis_etn: p?.etn ?? null,
+      preis_24h: preisJetzt && gestern > 0 ? ((preisJetzt - gestern) / gestern) * 100 : null,
+      kurve: reihe.slice(-7).map((k) => k.schluss),
+      // Marktkapitalisierung aus Preis mal Gesamtmenge der Tokenliste.
+      cap_usd: preisJetzt && p?.supply ? preisJetzt * p.supply : null,
+      holder_reihe: holderReihe,
       symbol: t.symbol,
       name: t.name,
       address: t.address,

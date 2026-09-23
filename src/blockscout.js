@@ -463,3 +463,23 @@ export async function fetchInternalTransactions(apiBase, hash, opts = {}) {
   }
   return { transfers: out, seiten: seite, gedeckelt: next != null, cursor: next };
 }
+
+/**
+ * NFT-Sammlungen einer Adresse: welche Sammlung, wie viele Stueck.
+ * Eine Anfrage je Wallet, nur wenn jemand das Wallet oeffnet. Die Bilder und
+ * Metadaten der einzelnen Stuecke interessieren uns nicht - nur die Anzahl.
+ */
+export async function fetchNftCollections(apiBase, hash) {
+  const d = await getJson(
+    `${apiBase}/addresses/${hash}/nft/collections?type=ERC-721,ERC-1155`
+  );
+  return (d.items ?? [])
+    .map((i) => ({
+      address: String(i.token?.address ?? "").toLowerCase(),
+      name: i.token?.name ?? null,
+      symbol: i.token?.symbol ?? null,
+      typ: i.token?.type ?? null,
+      anzahl: toInt(i.amount) ?? 0,
+    }))
+    .filter((s) => s.address && s.anzahl > 0);
+}

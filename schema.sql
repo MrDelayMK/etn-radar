@@ -644,3 +644,35 @@ CREATE TABLE IF NOT EXISTS electroswap_status (
   schluessel TEXT PRIMARY KEY,
   wert       TEXT
 );
+
+-- Tageskerzen der verfolgten Tokens (ElectroSwap), fuer die kleine Kurve auf
+-- den Token-Karten. Einmal am Tag geholt, acht Tage reichen fuer 7 Tage Kurve
+-- plus Vergleichswert.
+CREATE TABLE IF NOT EXISTS token_kerzen (
+  address TEXT NOT NULL,
+  tag     TEXT NOT NULL,                    -- YYYY-MM-DD
+  schluss REAL NOT NULL,                    -- Schlusskurs in USD
+  PRIMARY KEY (address, tag)
+);
+
+-- NFT-Sammlungen: Bodenpreis von ElectroSwap (woechentlich) und welche
+-- Sammlung ein Wallet haelt (vom Explorer, beim Oeffnen, dann 24 h).
+CREATE TABLE IF NOT EXISTS nft_sammlungen (
+  address      TEXT PRIMARY KEY,
+  name         TEXT,
+  symbol       TEXT,
+  supply       INTEGER,
+  floor_etn    REAL,                        -- Bodenpreis in ETN
+  besitzer     INTEGER,
+  angebote     INTEGER,
+  aktualisiert TEXT
+);
+CREATE TABLE IF NOT EXISTS wallet_nfts (
+  address   TEXT NOT NULL,
+  sammlung  TEXT NOT NULL,                  -- '-' merkt nur den Abrufzeitpunkt
+  anzahl    INTEGER NOT NULL,
+  name      TEXT,
+  symbol    TEXT,
+  gesehen   TEXT NOT NULL,
+  PRIMARY KEY (address, sammlung)
+);

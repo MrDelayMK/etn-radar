@@ -15,7 +15,7 @@ import { feedbackSenden, besuchMelden, besucheLesen, feedbackLesen, job_status, 
 import { bridgeVerlauf, bilanz, migrationen } from "./api/migration.js";
 import { chain } from "./api/chain.js";
 import { whatif } from "./api/whatif.js";
-import { walletTokenWerte } from "./electroswap.js";
+import { walletTokenWerte, walletNftWerte } from "./electroswap.js";
 import { shareSeite } from "./share.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
@@ -175,6 +175,11 @@ export default {
         // Tokenbestand und Wert - ElectroSwap, erst beim Oeffnen, dann 12 h aus D1.
         const t = await walletTokenWerte(db, env, pfad.slice("/api/wallet-tokens/".length));
         antwort = t.error ? fehler(t.error, t.status ?? 500) : json(t, 200, 300);
+      } else if (pfad.startsWith("/api/wallet-nfts/")) {
+        // NFT-Sammlungen (Explorer) plus Bodenpreis (ElectroSwap, woechentlich).
+        const kurs = await db.prepare("SELECT etn_price FROM snapshots WHERE status='ok' AND etn_price > 0 ORDER BY id DESC LIMIT 1").first().catch(() => null);
+        const n = await walletNftWerte(db, env, pfad.slice("/api/wallet-nfts/".length), kurs?.etn_price ?? 0);
+        antwort = n.error ? fehler(n.error, n.status ?? 500) : json(n, 200, 300);
       } else if (pfad.startsWith("/api/wallet-history/")) {
         // Verlauf ausserhalb der Top N: eine Explorer-Anfrage, erst beim Oeffnen.
         antwort = liveAntwort(await walletVerlauf(db, env, pfad.slice("/api/wallet-history/".length)));

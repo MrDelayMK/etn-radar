@@ -16,6 +16,7 @@
 
 import { CHAIN_TOKENS } from "./chain-tokens.js";
 import { pruefsummenAdresse } from "./keccak.js";
+import { fetchNftCollections } from "./blockscout.js";
 
 const BASIS = "https://electroswap.io/public-api/v1";
 const KETTE = 52014; // Electroneum Mainnet, der einzige erlaubte Wert
@@ -132,10 +133,10 @@ export async function tokenListeAuffrischen(db, env, jetzt = Date.now()) {
 /** Alle gespeicherten Preise als Map Adresse (klein) -> { usd, etn, stand }. */
 export async function preiseLesen(db) {
   const rows = (await db.prepare(
-    "SELECT address, symbol, name, decimals, preis_usd, preis_etn, aktualisiert FROM token_preise"
+    "SELECT address, symbol, name, decimals, total_supply, preis_usd, preis_etn, aktualisiert FROM token_preise"
   ).all().catch(() => ({ results: [] }))).results ?? [];
   return new Map(rows.map((r) => [r.address, {
-    symbol: r.symbol, name: r.name, decimals: r.decimals ?? 18,
+    symbol: r.symbol, name: r.name, decimals: r.decimals ?? 18, supply: r.total_supply,
     usd: r.preis_usd, etn: r.preis_etn, stand: r.aktualisiert,
   }]));
 }
@@ -216,5 +217,203 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
     stand: stand ?? new Date(jetzt).toISOString(),
     // Wie viele Tokens ohne Preis dabei sind - ehrlicher als sie stumm wegzulassen.
     ohne_preis: liste.filter((t) => t.wert_usd == null).length,
+  };
+}
+
+/*
+ * Tageskerzen der verfolgten Tokens - Grundlage der kleinen Kurve auf den
+ * Token-Karten und der 24-Stunden-Veraenderung. Einmal am Tag, acht Tage je
+ * Token: 100 + 1 je Kerze, also rund 108 Credits pro Token.
+ *
+ * Die Doku beschreibt die Felder einer Kerze nicht, darum wird nachsichtig
+ * gelesen: Zeit aus t/time/timestamp/start, Schlusskurs aus c/close.
+ */
+const KERZEN_TAGE = 8;
+
+function kerzeLesen(k) {
+  if (Array.isArray(k)) return { zeit: k[0], schluss: Number(k[4] ?? k[1]) };
+  const zeit = k?.t ?? k?.time ?? k?.timestamp ?? k?.start ?? k?.date ?? k?.bucket;
+  const schluss = Number(k?.c ?? k?.close ?? k?.closePrice ?? k?.price);
+  return { zeit, schluss };
+}
+const alsTag = (zeit) => {
+  if (zeit == null) return null;
+  const zahl = Number(zeit);
+  if (Number.isFinite(zahl) && String(zeit).length >= 10) {
+    return new Date(zahl < 1e12 ? zahl * 1000 : zahl).toISOString().slice(0, 10);
+  }
+  const d = Date.parse(zeit);
+  return Number.isFinite(d) ? new Date(d).toISOString().slice(0, 10) : null;
+};
+
+export async function kerzenAuffrischen(db, env, adressen, jetzt = Date.now()) {
+  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: 0 };
+  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'kerzen'")
+    .first().catch(() => null);
+  if (stand?.wert && jetzt - Number(stand.wert) < 24 * 3600000) return { gefragt: 0, grund: "frisch" };
+
+  let geholt = 0;
+  const zeilen = [];
+  for (const adresse of adressen) {
+    const r = await holen(
+      env,
+      "/tokens/" + KETTE + "/" + pruefsummenAdresse(adresse) + "/candles?limit=" + KERZEN_TAGE + "&bucket=1d&currency=USD"
+    );
+    if (r.fehler === "bremse") {
+      await pauseSetzen(db, jetzt + r.warten * 1000);
+      break;
+    }
+    const kerzen = Array.isArray(r.daten) ? r.daten : r.daten?.candles;
+    if (!Array.isArray(kerzen)) continue;
+    geholt++;
+    for (const k of kerzen) {
+      const { zeit, schluss } = kerzeLesen(k);
+      const tag = alsTag(zeit);
+      if (!tag || !(schluss > 0)) continue;
+      zeilen.push(
+        db.prepare(
+          "INSERT INTO token_kerzen (address, tag, schluss) VALUES (?,?,?)" +
+            " ON CONFLICT(address, tag) DO UPDATE SET schluss = excluded.schluss"
+        ).bind(String(adresse).toLowerCase(), tag, schluss)
+      );
+    }
+  }
+  if (geholt) {
+    zeilen.push(
+      db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('kerzen', ?)" +
+        " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
+    );
+    // Aelteres als zwei Wochen brauchen wir nicht.
+    zeilen.push(db.prepare("DELETE FROM token_kerzen WHERE tag < ?").bind(new Date(jetzt - 15 * 86400000).toISOString().slice(0, 10)));
+    await db.batch(zeilen);
+  }
+  return { gefragt: geholt, kerzen: zeilen.length };
+}
+
+/** Kerzen je Token, aelteste zuerst: Map Adresse -> [{ tag, schluss }]. */
+export async function kerzenLesen(db) {
+  const rows = (await db.prepare("SELECT address, tag, schluss FROM token_kerzen ORDER BY tag").all()
+    .catch(() => ({ results: [] }))).results ?? [];
+  const nach = new Map();
+  for (const r of rows) {
+    if (!nach.has(r.address)) nach.set(r.address, []);
+    nach.get(r.address).push({ tag: r.tag, schluss: r.schluss });
+  }
+  return nach;
+}
+
+/*
+ * NFTs: welche Sammlungen ein Wallet haelt, kommt vom Explorer (eine Anfrage
+ * beim Oeffnen). Der Bodenpreis kommt von ElectroSwap - 500 Credits je
+ * Sammlung, hoechstens einmal pro Woche, und nur fuer Sammlungen, die wir
+ * wirklich anzeigen.
+ */
+export const NFT_TAKT_MS = 7 * 24 * 3600000;
+// Hoechstens so viele Sammlungen je Wallet nach dem Bodenpreis fragen.
+const NFT_MAX_SAMMLUNGEN = 6;
+
+async function bodenpreise(db, env, sammlungen, jetzt) {
+  if (!env.ELECTROSWAP_API_KEY || !sammlungen.length) return;
+  const platz = sammlungen.map(() => "?").join(",");
+  const bekannt = (await db
+    .prepare("SELECT address, aktualisiert FROM nft_sammlungen WHERE address IN (" + platz + ")")
+    .bind(...sammlungen).all().catch(() => ({ results: [] }))).results ?? [];
+  const stand = new Map(bekannt.map((r) => [r.address, r.aktualisiert]));
+  const zeit = new Date(jetzt).toISOString();
+  for (const s of sammlungen) {
+    const alt = stand.get(s);
+    if (alt && jetzt - Date.parse(alt) < NFT_TAKT_MS) continue;
+    if (await pause(db, jetzt)) return;
+    const r = await holen(env, "/nft/collections/" + KETTE + "/" + pruefsummenAdresse(s));
+    if (r.fehler === "bremse") {
+      await pauseSetzen(db, jetzt + r.warten * 1000);
+      return;
+    }
+    // Sammlungen, die ElectroSwap nicht kennt, bekommen trotzdem einen
+    // Zeitstempel - sonst fragen wir sie bei jedem Aufruf erneut.
+    const d = r.daten ?? {};
+    await db
+      .prepare(
+        "INSERT INTO nft_sammlungen (address, name, symbol, supply, floor_etn, besitzer, angebote, aktualisiert)" +
+          " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(address) DO UPDATE SET name = excluded.name," +
+          " symbol = excluded.symbol, supply = excluded.supply, floor_etn = excluded.floor_etn," +
+          " besitzer = excluded.besitzer, angebote = excluded.angebote, aktualisiert = excluded.aktualisiert"
+      )
+      .bind(s, d.name ?? null, d.symbol ?? null, d.totalSupply ?? null,
+        Number(d.stats?.floorPrice) > 0 ? Number(d.stats.floorPrice) : null,
+        d.stats?.uniqueOwners ?? null, d.stats?.listingCount ?? null, zeit)
+      .run()
+      .catch(() => {});
+  }
+}
+
+/**
+ * Antwort fuer /api/wallet-nfts/<adresse>: Sammlungen, Stueckzahl und der
+ * Mindestwert zum Bodenpreis. Ausdruecklich KEINE Bewertung - der Bodenpreis
+ * ist das billigste Angebot, nicht der Wert eines bestimmten Stuecks.
+ */
+export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.now()) {
+  const adr = String(adresse ?? "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(adr)) return { error: "Keine gueltige Adresse", status: 400 };
+  const stand = await db.prepare("SELECT max(gesehen) t FROM wallet_nfts WHERE address = ?").bind(adr)
+    .first().catch(() => null);
+  if (!stand?.t || jetzt - Date.parse(stand.t) >= BESTAND_TAKT_MS) {
+    const zeit = new Date(jetzt).toISOString();
+    const gefunden = await fetchNftCollections(env.EXPLORER_API, adr).catch(() => null);
+    if (gefunden) {
+      const zeilen = [db.prepare("DELETE FROM wallet_nfts WHERE address = ?").bind(adr)];
+      for (const s of gefunden) {
+        zeilen.push(
+          db.prepare("INSERT INTO wallet_nfts (address, sammlung, anzahl, name, symbol, gesehen) VALUES (?,?,?,?,?,?)")
+            .bind(adr, s.address, s.anzahl, s.name, s.symbol, zeit)
+        );
+      }
+      zeilen.push(
+        db.prepare("INSERT INTO wallet_nfts (address, sammlung, anzahl, gesehen) VALUES (?, '-', 0, ?)" +
+          " ON CONFLICT(address, sammlung) DO UPDATE SET gesehen = excluded.gesehen").bind(adr, zeit)
+      );
+      await db.batch(zeilen).catch(() => {});
+    }
+  }
+  const rows = (await db
+    .prepare("SELECT sammlung, anzahl, name, symbol FROM wallet_nfts WHERE address = ? AND sammlung != '-'")
+    .bind(adr).all().catch(() => ({ results: [] }))).results ?? [];
+  if (!rows.length) return { sammlungen: [], gesamt_usd: 0, stueck: 0, stand: stand?.t ?? new Date(jetzt).toISOString() };
+
+  // Bodenpreise kosten 500 Credits je Sammlung. Darum nur fuer die groessten
+  // Posten und nicht fuer Liquiditaets-Belege wie "ElectroSwap V3 Positions",
+  // die zwar NFTs sind, aber nie auf dem Marktplatz liegen.
+  const gefragt = [...rows]
+    .filter((r) => !/position/i.test(r.name ?? ""))
+    .sort((a, b) => b.anzahl - a.anzahl)
+    .slice(0, NFT_MAX_SAMMLUNGEN)
+    .map((r) => r.sammlung);
+  await bodenpreise(db, env, gefragt, jetzt).catch(() => {});
+  const platz = rows.map(() => "?").join(",");
+  const boden = new Map(((await db
+    .prepare("SELECT address, name, floor_etn, besitzer, angebote FROM nft_sammlungen WHERE address IN (" + platz + ")")
+    .bind(...rows.map((r) => r.sammlung)).all().catch(() => ({ results: [] }))).results ?? [])
+    .map((r) => [r.address, r]));
+
+  const liste = rows.map((r) => {
+    const b = boden.get(r.sammlung) ?? {};
+    const wert = b.floor_etn && etnPreis > 0 ? b.floor_etn * r.anzahl * etnPreis : null;
+    return {
+      address: r.sammlung,
+      name: r.name ?? b.name ?? null,
+      symbol: r.symbol ?? null,
+      anzahl: r.anzahl,
+      floor_etn: b.floor_etn ?? null,
+      angebote: b.angebote ?? null,
+      wert_usd: wert,
+    };
+  });
+  liste.sort((a, b) => (b.wert_usd ?? -1) - (a.wert_usd ?? -1) || b.anzahl - a.anzahl);
+  return {
+    sammlungen: liste,
+    stueck: liste.reduce((s, x) => s + x.anzahl, 0),
+    gesamt_usd: liste.reduce((s, x) => s + (x.wert_usd ?? 0), 0),
+    ohne_boden: liste.filter((x) => x.wert_usd == null).length,
+    stand: new Date(jetzt).toISOString(),
   };
 }
