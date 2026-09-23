@@ -72,11 +72,15 @@ export const SHARE_SONDER = {
   "whatif-scale": "Not a forecast. Just math.",
   "whatif-dream": "What if ETN were that big?",
   "whatif-napkin": "Napkin math for ETN.",
+  "price-hype": "Electroneum is on the move.",
+  "price-next": "Where does ETN go from here?",
+  "price-napkin": "Napkin math on ETN.",
 };
 // Emoji, Name, Titel und Ziel je Art der Sonderbilder.
 const SONDER_ART = {
   week: ["\u{1F5D3}", "This week", "This week on Electroneum - the full recap on ETN Radar", "/"],
   whatif: ["\u{1F9EE}", "What if", "What would one ETN cost? Do the math on ETN Radar", "/whatif"],
+  price: ["\u{1F4B0}", "ETN price", "The ETN price, live on ETN Radar", "/"],
 };
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

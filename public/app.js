@@ -1131,7 +1131,7 @@ function preisTexte(zusatz) {
         ? "The chart is not being subtle about it. Everyone who called this coin boring has gone remarkably quiet."
         : "The chart is more of a slow breath than a sprint right now. The numbers stay out in the open either way.",
       "",
-      schluss), null],
+      schluss), "price-hype"],
     // Nachdenklich statt ruhig: Blick nach vorn, aber ohne Prognose - der
     // Stichtag der Migration ist ein Fakt, alles andere bleibt offen.
     ["denk", zeilen(
@@ -1142,7 +1142,7 @@ function preisTexte(zusatz) {
       "Meanwhile the clock keeps running towards January 2027, when the last legacy ETN has to be across the bridge.",
       "Nobody knows where the price goes from here - the next few weeks should be interesting.",
       "",
-      schluss), null],
+      schluss), "price-next"],
     ["napkin", zeilen(
       "\ud83e\uddee Napkin math on ETN.",
       "",
@@ -1158,7 +1158,7 @@ function preisTexte(zusatz) {
       "",
       "Not a prediction, just a division anyone can do on a napkin.",
       "",
-      schluss), null],
+      schluss), "price-napkin"],
   ];
 }
 
@@ -3726,9 +3726,13 @@ const GAL_SONDER = [
   ["whatif", "whatif-scale", "Not a forecast. Just math."],
   ["whatif", "whatif-dream", "What if ETN were that big?"],
   ["whatif", "whatif-napkin", "Napkin math for ETN"],
+  ["price", "price-hype", "Electroneum is on the move"],
+  ["price", "price-next", "Where does ETN go from here?"],
+  ["price", "price-napkin", "Napkin math on ETN"],
 ];
 const GAL_GRUPPEN = [
-  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["whatif", "🧮 What if"], ["banner", "📡 Banner"],
+  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["whatif", "🧮 What if"],
+  ["price", "💰 ETN price"], ["banner", "📡 Banner"],
 ];
 const GAL = { filter: "alle" };
 

@@ -41,6 +41,9 @@ const SONDER = {
   "whatif-scale": ["What if", "Market cap", "#fbbf24", "Not a forecast. Just math."],
   "whatif-dream": ["What if", "Market cap", "#fbbf24", "What if ETN were that big?"],
   "whatif-napkin": ["What if", "Market cap", "#fbbf24", "Napkin math for ETN."],
+  "price-hype": ["ETN price", "Electroneum", "#22d3a7", "Electroneum is on the move."],
+  "price-next": ["ETN price", "Electroneum", "#22d3a7", "Where does ETN go from here?"],
+  "price-napkin": ["ETN price", "Electroneum", "#22d3a7", "Napkin math on ETN."],
 };
 // Die Saetze kommen aus SHARE_SAETZE in public/app.js - so steht auf dem Bild
 // immer genau der Satz, den der Teilen-Dialog daneben anbietet.

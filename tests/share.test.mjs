@@ -83,7 +83,7 @@ const ohneThumb = [...Object.keys(SHARE_BILDER), ...Object.keys(SHARE_SONDER), "
   .filter((id) => !existsSync(join(REPO, "public/assets/share", id + "-thumb.jpg")));
 pruef(ohneThumb.length === 0, "Galerie: alle Vorschaubilder vorhanden" + (ohneThumb.length ? " - fehlt: " + ohneThumb.join(", ") : ""));
 const galerie = appJs.match(/const GAL_SONDER = \[([\s\S]*?)\n\];/);
-const galIds = galerie ? [...galerie[1].matchAll(/"((?:week|whatif)-[a-z]+)"/g)].map((m) => m[1]).sort() : [];
+const galIds = galerie ? [...galerie[1].matchAll(/"((?:week|whatif|price)-[a-z]+)"/g)].map((m) => m[1]).sort() : [];
 pruef(JSON.stringify(galIds) === JSON.stringify(Object.keys(SHARE_SONDER).sort()), "Galerie zeigt genau die Sonderbilder, die es gibt");
 pruef((await holen("/images")).status === 200, "/images liefert die Seite aus");
 
