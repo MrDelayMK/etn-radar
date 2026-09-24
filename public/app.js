@@ -4377,6 +4377,25 @@ function wertReihe() {
   return erster > 0 ? reihe.slice(erster - 1) : reihe;
 }
 
+/**
+ * Tageswerte der Tokens - und auf Wunsch samt ETN-Wert. ElectroSwap liefert nur
+ * den heutigen Bestand, darum schreibt der Server bei jedem Abruf einen Punkt
+ * mit; die Kurve beginnt also beim ersten Besuch dieses Wallets.
+ */
+function tokenWertReihe(mitEtn) {
+  const tage = WV.tokens?.verlauf ?? [];
+  if (!tage.length) return [];
+  const etnReihe = mitEtn ? new Map(wertReihe().map((p) => [p.day, p.etn])) : null;
+  const heute = heuteTag();
+  const p1 = preisJetzt();
+  return tage.map((t) => {
+    const etnWert = mitEtn
+      ? (t.tag === heute ? WV.etn * (p1 ?? 0) : etnReihe.get(t.tag) ?? 0)
+      : 0;
+    return { day: t.tag, etn: t.tokens_usd + etnWert, tokens: t.tokens_usd, menge: WV.etn, preis: p1 };
+  });
+}
+
 // Woher die Veraenderung der letzten 30 Tage kommt: vom Kurs oder vom Bestand.
 // Kurs-Anteil = alter Bestand x Kursdifferenz, Bestands-Anteil = Mengendifferenz
 // x heutiger Kurs - zusammen genau die Wertdifferenz.
@@ -4405,6 +4424,20 @@ function wertKopf() {
 
 // Tokens, die im Wallet liegen: Menge, Preis und Wert. Ohne Treffer bleibt der
 // Abschnitt weg - ElectroSwap kennt nur Wallets, die dort gehandelt haben.
+// Logo eines Tokens: die vier verfolgten haben eine Datei, alle anderen einen
+// Kreis mit dem Anfangsbuchstaben - die API liefert zu Tokens kein Bild.
+const TOKEN_BILDER = {
+  "0x043faa1b5c5fc9a7dc35171f290c29ecde0ccff1": "bolt.svg",
+  "0xee432c220273e4f949007b4c1946562826efa055": "dyno.svg",
+  "0xc9fc4ab00911793d99b5c7bd01f01203c21d4131": "club.png",
+  "0x309b916b3a90cb3e071697ea9680e9217a30066f": "core.png",
+};
+function tokenBild(adresse, symbol) {
+  const datei = TOKEN_BILDER[String(adresse).toLowerCase()];
+  if (datei) return '<img class="toklogo" src="/assets/tokens/' + datei + '" alt="" width="26" height="26" loading="lazy">';
+  return '<span class="toklogo platzhalter">' + esc((symbol ?? "?").slice(0, 1).toUpperCase()) + "</span>";
+}
+
 function zeichneWalletTokens() {
   const wrap = el("invTokensWrap");
   const d = WV.tokens;
@@ -4415,8 +4448,9 @@ function zeichneWalletTokens() {
   wrap.style.display = "";
   const zeilen = d.tokens.map((t) => {
     const name = t.symbol ? esc(t.symbol) : kurzAdr(t.address);
+    const bild = tokenBild(t.address, t.symbol);
     return '<a class="tokzeile" href="' + EXPLORER + esc(t.address) + '" target="_blank" rel="noopener">' +
-      '<span class="wer"><b>' + name + "</b>" + (t.name ? '<span class="dim3"> ' + esc(t.name) + "</span>" : "") + "</span>" +
+      bild + '<span class="wer"><b>' + name + "</b>" + (t.name ? '<span class="dim3"> ' + esc(t.name) + "</span>" : "") + "</span>" +
       '<span class="num menge">' + kurz(t.menge) + "</span>" +
       '<span class="num wert">' + (t.wert_usd != null ? dollar(t.wert_usd) : '<span class="dim3">no price</span>') + "</span></a>";
   }).join("");
@@ -4432,38 +4466,47 @@ function zeichneWalletTokens() {
     (d.ohne_preis ? " · " + d.ohne_preis + " token(s) without a price" : "") + "</span></div>";
 }
 
-// NFT-Sammlungen des Wallets mit Mindestwert zum Bodenpreis.
+// NFT-Sammlungen des Wallets: zugeklappt nur die Summe, aufgeklappt die Liste.
+// Gezeigt werden nur Sammlungen mit Bodenpreis - ohne Angebot gibt es keinen Wert.
 function zeichneWalletNfts() {
   const wrap = el("invNftsWrap");
   const d = WV.nfts;
-  if (!d || !d.sammlungen?.length) {
+  const mitPreis = (d?.sammlungen ?? []).filter((s) => s.wert_usd != null);
+  if (!mitPreis.length) {
     wrap.style.display = "none";
     return;
   }
   wrap.style.display = "";
-  const zeilen = d.sammlungen.map((s) => {
-    const name = s.name ? esc(s.name) : kurzAdr(s.address);
-    const boden = s.floor_etn
-      ? "floor " + kurz(s.floor_etn) + " ETN"
-      : '<span class="dim3">no listing</span>';
+  const stueck = mitPreis.reduce((a, s) => a + s.anzahl, 0);
+  const summe = mitPreis.reduce((a, s) => a + s.wert_usd, 0);
+  el("invNftsKopf").innerHTML =
+    "<span>" + stueck + (stueck === 1 ? " NFT in " : " NFTs in ") + mitPreis.length +
+    (mitPreis.length === 1 ? " collection" : " collections") + "</span>" +
+    '<b class="num">' + dollar(summe) + "</b>";
+  el("invNfts").innerHTML = mitPreis.map((s) => {
+    const bild = s.bild
+      ? '<img class="toklogo" src="' + esc(s.bild) + '" alt="" width="26" height="26" loading="lazy">'
+      : '<span class="toklogo platzhalter">🖼️</span>';
     return '<a class="tokzeile" href="' + EXPLORER + esc(s.address) + '" target="_blank" rel="noopener">' +
-      '<span class="wer"><b>' + name + "</b>" +
-      (s.symbol ? '<span class="dim3"> ' + esc(s.symbol) + "</span>" : "") + "</span>" +
+      bild + '<span class="wer"><b>' + esc(s.name ?? kurzAdr(s.address)) + "</b>" +
+      (s.floor_etn ? '<span class="dim3"> floor ' + kurz(s.floor_etn) + " ETN</span>" : "") + "</span>" +
       '<span class="num menge">' + s.anzahl + (s.anzahl === 1 ? " NFT" : " NFTs") + "</span>" +
-      '<span class="num wert">' + (s.wert_usd != null ? dollar(s.wert_usd) : boden) + "</span></a>";
-  }).join("");
-  el("invNfts").innerHTML = zeilen +
-    '<div class="tokfuss"><b>' + d.stueck + (d.stueck === 1 ? " NFT" : " NFTs") +
-    (d.gesamt_usd > 0 ? " worth at least " + dollar(d.gesamt_usd) : "") + "</b>" +
-    '<span class="dim3"> · at floor price, not a valuation' +
-    (d.ohne_boden ? " · " + d.ohne_boden + " collection(s) without a listing" : "") + "</span></div>";
+      '<span class="num wert">' + dollar(s.wert_usd) + "</span></a>";
+  }).join("") +
+    '<div class="tokfuss"><b>Sum ' + dollar(summe) + "</b>" +
+    '<span class="dim3"> · at floor price, not a valuation</span></div>';
 }
 
 function zeichneWallet() {
   if (!WV.address) return;
   el("invWert").innerHTML = WV.laedt ? "" : wertKopf();
   el("invEinheit").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.einheit === WV.modus));
-  el("invChartTitel").textContent = WV.modus === "usd" ? "Value over time" : "Balance over time";
+  el("invChartTitel").textContent = {
+    etn: "Balance over time",
+    usd: "ETN value over time",
+    tokens: "Token value over time",
+    total: "Total wallet value over time",
+  }[WV.modus] ?? "Balance over time";
   const holder = el("invChartHolder");
   if (WV.laedt) {
     holder.innerHTML = '<div class="empty">⏳ Loading history from the explorer…</div>';
@@ -4472,6 +4515,8 @@ function zeichneWallet() {
   let punkte;
   if (WV.modus === "usd") {
     punkte = wertReihe();
+  } else if (WV.modus === "tokens" || WV.modus === "total") {
+    punkte = tokenWertReihe(WV.modus === "total");
   } else {
     // Tag fuer Tag bis heute: daily_balances fuehrt nur Tage mit Aenderung, und
     // die Achse verteilt Punkte gleichmaessig - sonst laegen bei einem ruhigen
@@ -4486,11 +4531,15 @@ function zeichneWallet() {
     }
   }
   if (punkte.length < 2) {
-    holder.innerHTML = '<div class="empty">' + (WV.modus === "usd" ? "No price history for this period yet" : "Not enough history for a chart yet") + "</div>";
+    holder.innerHTML = '<div class="empty">' +
+      (WV.modus === "tokens" || WV.modus === "total"
+        ? "The token curve starts the first time this wallet is opened - come back tomorrow for a line."
+        : WV.modus === "usd" ? "No price history for this period yet" : "Not enough history for a chart yet") +
+      "</div>";
     return;
   }
   if (!el("invChart")) holder.innerHTML = '<svg class="chart" id="invChart"></svg><div class="tip"></div>';
-  el("invChart")._usd = WV.modus === "usd";
+  el("invChart")._usd = WV.modus !== "etn";
   zeichneChart(el("invChart"), punkte);
 }
 
@@ -5269,7 +5318,7 @@ leerenVerdrahten("q", () => {
   el("searchResult").innerHTML = "";
 });
 leerenVerdrahten("invQ", () => {
-  ["invResultWrap", "invChartWrap", "invClusterWrap", "invEventsWrap", "invFlowWrap"]
+  ["invResultWrap", "invChartWrap", "invTokensWrap", "invNftsWrap", "invClusterWrap", "invEventsWrap", "invFlowWrap"]
     .forEach((id) => { if (el(id)) el(id).style.display = "none"; });
   el("invHead").innerHTML = "";
   CUR_WALLET = null;

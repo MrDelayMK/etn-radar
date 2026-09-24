@@ -56,14 +56,18 @@ export async function whatif(db, env) {
     .filter((z) => z.id !== ETN_ID && !RAUS.has(z.id) && Number(z.market_cap) > 0)
     .map((z) => ({ i: z.id, s: z.symbol, n: z.name, r: z.rang, c: Number(z.market_cap) }));
 
+  // Je Bereich drei feste Stellen: Anfang, Mitte, Ende. So sieht man die
+  // Spannweite des Bereichs (#51, #75, #100) statt drei Nachbarn aus der Mitte.
+  // Fehlt genau dieser Platz (Stablecoins fliegen raus), zaehlt der naechste.
   const schnell = [];
   for (const [titel, von, bis] of BEREICHE) {
-    const drin = coins.filter((c) => c.r >= von && c.r <= bis);
-    const bekannt = BEKANNT.map((id) => drin.find((c) => c.i === id)).filter(Boolean);
-    // Ausgewaehlt nach Bekanntheit, angezeigt nach dem Rang von heute: sonst stuende
-    // Polkadot (#50) ueber Hedera (#31), nur weil es in BEKANNT frueher kommt.
-    const wahl = [...new Set([...bekannt, ...drin])].slice(0, JE_BEREICH).sort((a, b) => a.r - b.r);
-    if (wahl.length) schnell.push({ titel, ids: wahl.map((c) => c.i) });
+    const drin = coins.filter((c) => c.r >= von && c.r <= bis).sort((a, b) => a.r - b.r);
+    if (!drin.length) continue;
+    const naechster = (platz) =>
+      drin.reduce((best, c) => (Math.abs(c.r - platz) < Math.abs(best.r - platz) ? c : best), drin[0]);
+    const wahl = [naechster(von), naechster(Math.floor((von + bis) / 2)), naechster(bis)];
+    const ids = [...new Set(wahl.map((c) => c.i))];
+    if (ids.length) schnell.push({ titel, ids });
   }
 
   return {

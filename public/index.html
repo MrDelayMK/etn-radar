@@ -607,16 +607,6 @@
   <section id="invResultWrap" style="display:none">
     <div class="card" id="invHead"></div>
   </section>
-  <section id="invTokensWrap" style="display:none">
-    <h2>🪙 Tokens in this wallet
-      <button class="infoBtn" data-info="Token balances and prices come from ElectroSwap, fetched once when you open a wallet and then reused for twelve hours. ElectroSwap only knows wallets that have traded there, so a wallet can show no tokens even if it holds some.">ⓘ</button></h2>
-    <div class="card" id="invTokens"></div>
-  </section>
-  <section id="invNftsWrap" style="display:none">
-    <h2>🖼️ NFTs in this wallet
-      <button class="infoBtn" data-info="Which collections a wallet holds comes from the block explorer. The floor price is the cheapest listing on ElectroSwap, refreshed weekly. Floor value is a lower bound, not a valuation of the actual pieces.">ⓘ</button></h2>
-    <div class="card" id="invNfts"></div>
-  </section>
   <section id="invChartWrap" style="display:none">
     <h2 id="invChartTitel">Balance over time</h2>
     <div class="card">
@@ -624,7 +614,9 @@
         <div id="invWert"></div>
         <div class="tabs" id="invEinheit" role="group" aria-label="Show balance in">
           <button class="ghost on" type="button" data-einheit="etn">ETN</button>
-          <button class="ghost" type="button" data-einheit="usd">$ Value</button>
+          <button class="ghost" type="button" data-einheit="usd">ETN $</button>
+          <button class="ghost" type="button" data-einheit="tokens">Tokens $</button>
+          <button class="ghost" type="button" data-einheit="total">Total $</button>
         </div>
       </div>
       <div class="chartholder" id="invChartHolder">
@@ -632,6 +624,19 @@
         <div class="tip"></div>
       </div>
     </div>
+  </section>
+  <section id="invTokensWrap" style="display:none">
+    <h2>🪙 Tokens in this wallet
+      <button class="infoBtn" data-info="Token balances and prices come from ElectroSwap, fetched once when you open a wallet and then reused for twelve hours. ElectroSwap only knows wallets that have traded there, so a wallet can show no tokens even if it holds some.">ⓘ</button></h2>
+    <div class="card" id="invTokens"></div>
+  </section>
+  <section id="invNftsWrap" style="display:none">
+    <h2>🖼️ NFTs in this wallet
+      <button class="infoBtn" data-info="Which collections a wallet holds comes from the block explorer. The floor price is the cheapest listing on ElectroSwap, refreshed weekly. Only collections with an open listing are shown, because only those have a price. Floor value is a lower bound, not a valuation of the actual pieces.">ⓘ</button></h2>
+    <details class="card auswahl" id="invNftsBox">
+      <summary id="invNftsKopf"></summary>
+      <div id="invNfts"></div>
+    </details>
   </section>
   <section id="invFlowWrap" style="display:none">
     <h2>Money flow

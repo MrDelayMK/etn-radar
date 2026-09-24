@@ -631,6 +631,7 @@ CREATE TABLE IF NOT EXISTS token_preise (
   preis_usd    REAL,
   preis_etn    REAL,
   aktualisiert TEXT,                         -- letzter Preisabruf
+  gelistet     INTEGER NOT NULL DEFAULT 1,   -- steht der Token auf ElectroSwap?
   zuerst_gesehen TEXT                        -- erstmals in der ElectroSwap-Liste
 );
 CREATE TABLE IF NOT EXISTS wallet_tokens (
@@ -663,6 +664,7 @@ CREATE TABLE IF NOT EXISTS nft_sammlungen (
   name         TEXT,
   symbol       TEXT,
   supply       INTEGER,
+  bild         TEXT,                         -- Logo der Sammlung
   floor_etn    REAL,                        -- Bodenpreis in ETN
   besitzer     INTEGER,
   angebote     INTEGER,
@@ -676,4 +678,14 @@ CREATE TABLE IF NOT EXISTS wallet_nfts (
   symbol    TEXT,
   gesehen   TEXT NOT NULL,
   PRIMARY KEY (address, sammlung)
+);
+
+-- Tageswert der Tokens eines Wallets. ElectroSwap kennt nur den heutigen
+-- Bestand, darum schreiben wir bei jedem Abruf mit - die Kurve waechst ab dem
+-- ersten Besuch.
+CREATE TABLE IF NOT EXISTS wallet_wert (
+  address    TEXT NOT NULL,
+  tag        TEXT NOT NULL,
+  tokens_usd REAL NOT NULL,
+  PRIMARY KEY (address, tag)
 );

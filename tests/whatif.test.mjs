@@ -62,11 +62,14 @@ pruef(!d.coins.some((c) => c.i === "electroneum"), "Electroneum steht nicht in d
 pruef(!d.coins.some((c) => c.i === "tether"), "Stablecoins sind nicht in der Liste");
 pruef(d.coins.length === 299 && d.coins[0].i === "bitcoin", "Liste nach Rang, Bitcoin zuerst");
 pruef(d.schnell.map((g) => g.titel).join() === "Top 10,Top 30,Top 50,Top 100,Top 150,Top 300", "Schnellauswahl in sechs Bereichen");
-pruef(d.schnell[0].ids[0] === "bitcoin" && d.schnell[1].ids.includes("stellar"), "bekannte Namen werden ausgewaehlt");
+pruef(d.schnell[0].ids[0] === "bitcoin", "der Bereich beginnt bei seinem ersten Platz");
 const rangVon = (id) => d.coins.find((c) => c.i === id).r;
 pruef(d.schnell.every((g) => g.ids.every((id, i) => !i || rangVon(g.ids[i - 1]) < rangVon(id))),
   "im Bereich nach heutigem Rang sortiert");
-pruef(d.schnell.every((g) => g.ids.length === 2), "zwei Coins je Bereich");
+pruef(d.schnell.every((g) => g.ids.length === 3), "drei Coins je Bereich: Anfang, Mitte, Ende");
+// Top 100 heisst Plaetze 51 bis 100 - gezeigt werden #51, #75 und #100.
+const top100 = d.schnell.find((g) => g.titel === "Top 100").ids.map(rangVon);
+pruef(JSON.stringify(top100) === JSON.stringify([51, 75, 100]), "Top 100 zeigt #51, #75 und #100");
 pruef(d.stand === new Date(jetzt + 25 * 3600000).toISOString(), "Stand der Daten wird mitgeliefert");
 
 const leer = await whatif(await frischeDb("whatif-leer"), {});

@@ -97,23 +97,29 @@ const spaeter = await tokenListeAuffrischen(db, env, jetzt + 10 * 24 * 3600000);
 pruef(spaeter.gefragt && zaehle("/tokens/52014") === listeVorher + 1, "eine Woche spaeter wieder");
 
 
-// --- NFT: Liste und Bodenpreise, hoechstens acht Statistiken je Aufruf ------
-const { nftSammlungenAuffrischen, walletNftWerte } = await import(repoUrl("src/electroswap.js"));
-const sammlungen = Array.from({ length: 11 }, (_, i) => ({
-  address: "0x" + String(i + 1).padStart(40, "c"),
-  name: "Sammlung " + i,
-  symbol: "S" + i,
-  totalSupply: 100 - i,
-}));
-antworten["/nft/collections/52014?"] = () => json(sammlungen, 410);
-antworten["/nft/collections/52014/"] = () => json({ name: "Sammlung", symbol: "S", totalSupply: 50, stats: { floorPrice: 200, uniqueOwners: 9, listingCount: 3 } }, 500);
+// --- NFT: alle Sammlungen in EINEM Abruf (/nft/stats, 25 Credits) ----------
+const { nftSammlungenAuffrischen, nftSammlungenLesen } = await import(repoUrl("src/electroswap.js"));
+antworten["/nft/stats"] = () => json({
+  updatedAt: "2026-09-23T20:53:55.378Z",
+  collections: [
+    { address: "0x0dD500d9eDEF4d0c4B0c50fa0C4faccB711FDA43", name: "ElectroPunks", symbol: "EPUNKS",
+      image: "https://static.electroswap.io/images/ElectroPunk-Logo.gif", floorPrice: 1000, uniqueOwners: 66, listingCount: 19 },
+    { address: "0x939548A645AD1C3164d82A168735DB1558c9EFDD", name: "Ohne Angebot", symbol: "ER",
+      image: null, floorPrice: null, uniqueOwners: 110, listingCount: 0 },
+  ],
+}, 25);
 
 const nftJetzt = jetzt + 100 * 3600000;
 const n1 = await nftSammlungenAuffrischen(db, env, nftJetzt);
-pruef(n1.gefragt === 8, "erster Lauf holt acht Bodenpreise");
-const n2 = await nftSammlungenAuffrischen(db, env, nftJetzt + 60000);
-pruef(n2.gefragt === 3, "der naechste Aufruf holt den Rest");
-const n3 = await nftSammlungenAuffrischen(db, env, nftJetzt + 120000);
-pruef(n3.gefragt === 0 && n3.grund === "frisch", "danach ist eine Woche Ruhe");
+pruef(n1.gefragt && n1.sammlungen === 2 && n1.kosten === 25, "ein Abruf bringt alle Sammlungen fuer 25 Credits");
+const vorherNft = zaehle("/nft/stats");
+const n2 = await nftSammlungenAuffrischen(db, env, nftJetzt + 3 * 24 * 3600000);
+pruef(!n2.gefragt && zaehle("/nft/stats") === vorherNft, "innerhalb der Woche kein zweiter Abruf");
+const n3 = await nftSammlungenAuffrischen(db, env, nftJetzt + 8 * 24 * 3600000);
+pruef(n3.gefragt, "nach einer Woche wieder");
+
+const sammlungen = await nftSammlungenLesen(db);
+pruef(sammlungen.length === 1 && sammlungen[0].symbol === "EPUNKS", "nur Sammlungen mit Bodenpreis");
+pruef(sammlungen[0].bild?.endsWith(".gif") && sammlungen[0].angebote === 19, "Logo und Angebote kommen mit");
 
 ende();

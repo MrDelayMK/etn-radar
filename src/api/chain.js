@@ -5,7 +5,7 @@ import { tagVor } from "./grundlagen.js";
 import { exchange_flow } from "./wallets.js";
 import {
   preiseAuffrischen, preiseLesen, kerzenAuffrischen, kerzenLesen,
-  nftSammlungenAuffrischen, nftSammlungenLesen, nftStatsAuffrischen, nftStatsLesen, neueTokens,
+  nftSammlungenAuffrischen, nftSammlungenLesen, neueTokens,
 } from "../electroswap.js";
 
 /* ---------- Chain-Reiter ---------------------------------------------------
@@ -129,12 +129,10 @@ export async function chain(db, env) {
   await preiseAuffrischen(db, env, adressen).catch(() => {});
   await kerzenAuffrischen(db, env, adressen).catch(() => {});
   await nftSammlungenAuffrischen(db, env).catch(() => {});
-  await nftStatsAuffrischen(db, env).catch(() => {});
   const preise = await preiseLesen(db);
   const kerzen = await kerzenLesen(db);
-  const [nftSammlungen, nftStats, neuGelistet] = await Promise.all([
+  const [nftSammlungen, neuGelistet] = await Promise.all([
     nftSammlungenLesen(db).catch(() => []),
-    nftStatsLesen(db).catch(() => null),
     neueTokens(db).catch(() => []),
   ]);
 
@@ -201,7 +199,18 @@ export async function chain(db, env) {
         }
       : null,
     tx: kachel(tx),
-    nft: { sammlungen: nftSammlungen, stats: nftStats },
+    // Die Kennzahlen des Marktplatzes rechnen wir aus den Sammlungen aus.
+    nft: {
+      sammlungen: nftSammlungen,
+      stats: nftSammlungen.length
+        ? {
+            collections: nftSammlungen.length,
+            listings: nftSammlungen.reduce((a, c) => a + (c.angebote ?? 0), 0),
+            owners: nftSammlungen.reduce((a, c) => a + (c.besitzer ?? 0), 0),
+            floor_etn: Math.min(...nftSammlungen.filter((c) => c.floor_etn > 0).map((c) => c.floor_etn)),
+          }
+        : null,
+    },
     neu_gelistet: neuGelistet,
     contracts: { ...kachel(contractReihe), gruppen: neu.slice(0, 6), weitere: Math.max(0, neu.length - 6) },
     migration: bridgeTage.length ? { woche: migriert(woche), vorwoche: migriert(vorwoche) } : null,

@@ -119,10 +119,12 @@ export async function tokenListeAuffrischen(db, env, jetzt = Date.now()) {
     db.prepare(
       // zuerst_gesehen bleibt beim Aktualisieren stehen - daraus entsteht
       // "neu gelistet" auf dem Chain-Reiter.
-      "INSERT INTO token_preise (address, symbol, name, decimals, total_supply, zuerst_gesehen) VALUES (?,?,?,?,?,?)" +
+      "INSERT INTO token_preise (address, symbol, name, decimals, total_supply, gelistet, zuerst_gesehen)" +
+        " VALUES (?,?,?,?,?,?,?)" +
         " ON CONFLICT(address) DO UPDATE SET symbol = excluded.symbol, name = excluded.name," +
-        " decimals = excluded.decimals, total_supply = excluded.total_supply"
-    ).bind(String(t.address).toLowerCase(), t.symbol ?? null, t.name ?? null, Number(t.decimals ?? 18), Number(t.totalSupply ?? 0) || null, new Date(jetzt).toISOString())
+        " decimals = excluded.decimals, total_supply = excluded.total_supply, gelistet = excluded.gelistet"
+    ).bind(String(t.address).toLowerCase(), t.symbol ?? null, t.name ?? null, Number(t.decimals ?? 18),
+      Number(t.totalSupply ?? 0) || null, t.listed === false ? 0 : 1, new Date(jetzt).toISOString())
   );
   zeilen.push(
     db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('tokenliste', ?)" +
@@ -178,7 +180,11 @@ export async function walletTokens(db, env, adresse, jetzt = Date.now()) {
       await db.batch(zeilen).catch(() => {});
     }
   }
-  const rows = (await db.prepare("SELECT token, menge_wei, gesehen FROM wallet_tokens WHERE address = ? AND token != '-'")
+  const rows = (await db.prepare(
+    "SELECT w.token, w.menge_wei, w.gesehen FROM wallet_tokens w" +
+      " JOIN token_preise p ON p.address = w.token AND p.gelistet = 1" +
+      " WHERE w.address = ? AND w.token != '-'"
+  )
     .bind(adr).all().catch(() => ({ results: [] }))).results ?? [];
   return { tokens: rows, stand: stand?.t ?? null };
 }
@@ -213,9 +219,21 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
     };
   });
   liste.sort((a, b) => (b.wert_usd ?? -1) - (a.wert_usd ?? -1));
+  const gesamt = liste.reduce((s, t) => s + (t.wert_usd ?? 0), 0);
+  // Tageswert mitschreiben: ElectroSwap kennt nur das Heute, die Kurve entsteht
+  // erst dadurch, dass wir bei jedem Abruf einen Punkt sichern.
+  const tag = new Date(jetzt).toISOString().slice(0, 10);
+  await db
+    .prepare('INSERT INTO wallet_wert (address, tag, tokens_usd) VALUES (?,?,?)' +
+      ' ON CONFLICT(address, tag) DO UPDATE SET tokens_usd = excluded.tokens_usd')
+    .bind(adr, tag, gesamt).run().catch(() => {});
+  const verlauf = ((await db
+    .prepare('SELECT tag, tokens_usd FROM wallet_wert WHERE address = ? ORDER BY tag')
+    .bind(adr).all().catch(() => ({ results: [] }))).results ?? []);
   return {
+    verlauf,
     tokens: liste,
-    gesamt_usd: liste.reduce((s, t) => s + (t.wert_usd ?? 0), 0),
+    gesamt_usd: gesamt,
     stand: stand ?? new Date(jetzt).toISOString(),
     // Wie viele Tokens ohne Preis dabei sind - ehrlicher als sie stumm wegzulassen.
     ohne_preis: liste.filter((t) => t.wert_usd == null).length,
@@ -316,82 +334,42 @@ export const NFT_TAKT_MS = 7 * 24 * 3600000;
 const NFT_JE_LAUF = 8;
 
 /**
- * Alle gelisteten NFT-Sammlungen samt Bodenpreis, hoechstens einmal pro Woche.
- * Die Liste kostet 300 + 10 je Sammlung, jede Statistik 500. Je Aufruf werden
- * hoechstens NFT_JE_LAUF Statistiken geholt, damit niemand lange wartet - der
- * Rest kommt beim naechsten Seitenaufruf dran.
+ * Alle NFT-Sammlungen des Marktplatzes samt Bodenpreis, Besitzern, Angeboten
+ * und Logo - EIN Abruf fuer 25 Credits (/nft/stats), hoechstens woechentlich.
+ * Die Einzelstatistik je Sammlung kostet 500 und bringt dasselbe; sie wird
+ * darum nicht mehr benutzt.
  */
 export async function nftSammlungenAuffrischen(db, env, jetzt = Date.now()) {
-  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: 0 };
-  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftliste'")
+  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: false };
+  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftstats_zeit'")
     .first().catch(() => null);
-  if (!stand?.wert || jetzt - Number(stand.wert) >= NFT_TAKT_MS) {
-    const r = await holen(env, "/nft/collections/" + KETTE + "?limit=50");
-    if (r.fehler === "bremse") {
-      await pauseSetzen(db, jetzt + r.warten * 1000);
-      return { gefragt: 0, grund: "bremse" };
-    }
-    if (Array.isArray(r.daten)) {
-      const zeilen = r.daten.map((c) =>
-        db.prepare(
-          "INSERT INTO nft_sammlungen (address, name, symbol, supply) VALUES (?,?,?,?)" +
-            " ON CONFLICT(address) DO UPDATE SET name = excluded.name, symbol = excluded.symbol," +
-            " supply = excluded.supply"
-        ).bind(String(c.address).toLowerCase(), c.name ?? null, c.symbol ?? null, c.totalSupply ?? null)
-      );
-      zeilen.push(
-        db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftliste', ?)" +
-          " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
-      );
-      await db.batch(zeilen);
-    }
+  if (stand?.wert && jetzt - Number(stand.wert) < NFT_TAKT_MS) return { gefragt: false, grund: "frisch" };
+  const r = await holen(env, "/nft/stats");
+  if (r.fehler === "bremse") {
+    await pauseSetzen(db, jetzt + r.warten * 1000);
+    return { gefragt: false, grund: "bremse" };
   }
-  // Sammlungen ohne frischen Bodenpreis, groesste zuerst.
-  const offen = ((await db
-    .prepare(
-      "SELECT address FROM nft_sammlungen WHERE aktualisiert IS NULL OR aktualisiert < ?" +
-        " ORDER BY coalesce(supply, 0) DESC LIMIT ?"
-    )
-    .bind(new Date(jetzt - NFT_TAKT_MS).toISOString(), NFT_JE_LAUF)
-    .all().catch(() => ({ results: [] }))).results ?? []).map((r) => r.address);
-  if (!offen.length) return { gefragt: 0, grund: "frisch" };
-  await bodenpreise(db, env, offen, jetzt);
-  return { gefragt: offen.length };
-}
-
-async function bodenpreise(db, env, sammlungen, jetzt) {
-  if (!env.ELECTROSWAP_API_KEY || !sammlungen.length) return;
-  const platz = sammlungen.map(() => "?").join(",");
-  const bekannt = (await db
-    .prepare("SELECT address, aktualisiert FROM nft_sammlungen WHERE address IN (" + platz + ")")
-    .bind(...sammlungen).all().catch(() => ({ results: [] }))).results ?? [];
-  const stand = new Map(bekannt.map((r) => [r.address, r.aktualisiert]));
+  const sammlungen = r.daten?.collections;
+  if (!Array.isArray(sammlungen)) return { gefragt: false, grund: r.fehler ?? "leer" };
   const zeit = new Date(jetzt).toISOString();
-  for (const s of sammlungen) {
-    const alt = stand.get(s);
-    if (alt && jetzt - Date.parse(alt) < NFT_TAKT_MS) continue;
-    if (await pause(db, jetzt)) return;
-    const r = await holen(env, "/nft/collections/" + KETTE + "/" + pruefsummenAdresse(s));
-    if (r.fehler === "bremse") {
-      await pauseSetzen(db, jetzt + r.warten * 1000);
-      return;
-    }
-    // Sammlungen, die ElectroSwap nicht kennt, bekommen trotzdem einen
-    // Zeitstempel - sonst fragen wir sie bei jedem Aufruf erneut.
-    const d = r.daten ?? {};
-    await db
-      .prepare(
-        "INSERT INTO nft_sammlungen (address, name, symbol, supply, floor_etn, besitzer, angebote, aktualisiert)" +
-          " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(address) DO UPDATE SET name = excluded.name," +
-          " symbol = excluded.symbol, supply = excluded.supply, floor_etn = excluded.floor_etn," +
-          " besitzer = excluded.besitzer, angebote = excluded.angebote, aktualisiert = excluded.aktualisiert"
-      )
-      .bind(s, d.name ?? null, d.symbol ?? null, d.totalSupply ?? null,
-        Number(d.stats?.floorPrice) > 0 ? Number(d.stats.floorPrice) : null,
-        d.stats?.uniqueOwners ?? null, d.stats?.listingCount ?? null, zeit)
-      .run()
-      .catch(() => {});
-  }
+  const zeilen = sammlungen.map((c) =>
+    db.prepare(
+      "INSERT INTO nft_sammlungen (address, name, symbol, bild, floor_etn, besitzer, angebote, aktualisiert)" +
+        " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(address) DO UPDATE SET name = excluded.name," +
+        " symbol = excluded.symbol, bild = excluded.bild, floor_etn = excluded.floor_etn," +
+        " besitzer = excluded.besitzer, angebote = excluded.angebote, aktualisiert = excluded.aktualisiert"
+    ).bind(
+      String(c.address).toLowerCase(), c.name ?? null, c.symbol ?? null, c.image ?? null,
+      Number(c.floorPrice) > 0 ? Number(c.floorPrice) : null,
+      c.uniqueOwners ?? null, c.listingCount ?? null, zeit
+    )
+  );
+  zeilen.push(
+    db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftstats_zeit', ?)" +
+      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
+  );
+  await db.batch(zeilen);
+  return { gefragt: true, sammlungen: sammlungen.length, kosten: r.kosten };
 }
 
 /**
@@ -432,7 +410,7 @@ export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.no
   await nftSammlungenAuffrischen(db, env, jetzt).catch(() => {});
   const platz = rows.map(() => "?").join(",");
   const boden = new Map(((await db
-    .prepare("SELECT address, name, floor_etn, besitzer, angebote FROM nft_sammlungen WHERE address IN (" + platz + ")")
+    .prepare("SELECT address, name, bild, floor_etn, besitzer, angebote FROM nft_sammlungen WHERE address IN (" + platz + ")")
     .bind(...rows.map((r) => r.sammlung)).all().catch(() => ({ results: [] }))).results ?? [])
     .map((r) => [r.address, r]));
 
@@ -441,7 +419,8 @@ export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.no
     const wert = b.floor_etn && etnPreis > 0 ? b.floor_etn * r.anzahl * etnPreis : null;
     return {
       address: r.sammlung,
-      name: r.name ?? b.name ?? null,
+      name: b.name ?? r.name ?? null,
+      bild: b.bild ?? null,
       symbol: r.symbol ?? null,
       anzahl: r.anzahl,
       floor_etn: b.floor_etn ?? null,
@@ -460,41 +439,18 @@ export async function walletNftWerte(db, env, adresse, etnPreis, jetzt = Date.no
 }
 
 
-/** Marktzahlen des NFT-Marktplatzes, hoechstens einmal pro Woche (25 Credits). */
-export async function nftStatsAuffrischen(db, env, jetzt = Date.now()) {
-  if (!env.ELECTROSWAP_API_KEY || (await pause(db, jetzt))) return { gefragt: false };
-  const stand = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftstats_zeit'")
-    .first().catch(() => null);
-  if (stand?.wert && jetzt - Number(stand.wert) < NFT_TAKT_MS) return { gefragt: false, grund: "frisch" };
-  const r = await holen(env, "/nft/stats");
-  if (r.fehler === "bremse") {
-    await pauseSetzen(db, jetzt + r.warten * 1000);
-    return { gefragt: false, grund: "bremse" };
-  }
-  if (r.fehler || !r.daten) return { gefragt: false, grund: r.fehler ?? "leer" };
-  await db.batch([
-    db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftstats', ?)" +
-      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(JSON.stringify(r.daten)),
-    db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('nftstats_zeit', ?)" +
-      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt)),
-  ]);
-  return { gefragt: true, kosten: r.kosten };
-}
-
 /** Alle bekannten NFT-Sammlungen mit Bodenpreis, teuerste zuerst. */
-export async function nftSammlungenLesen(db) {
+export async function nftSammlungenLesen(db, nurMitPreis = true) {
   const rows = (await db
-    .prepare("SELECT address, name, symbol, supply, floor_etn, besitzer, angebote FROM nft_sammlungen ORDER BY coalesce(floor_etn, -1) DESC, coalesce(supply, 0) DESC")
+    .prepare(
+      "SELECT address, name, symbol, bild, supply, floor_etn, besitzer, angebote FROM nft_sammlungen" +
+        (nurMitPreis ? " WHERE floor_etn > 0" : "") +
+        " ORDER BY coalesce(floor_etn, -1) DESC"
+    )
     .all().catch(() => ({ results: [] }))).results ?? [];
   return rows;
 }
 
-/** Die gespeicherten Marktzahlen des NFT-Marktplatzes. */
-export async function nftStatsLesen(db) {
-  const r = await db.prepare("SELECT wert FROM electroswap_status WHERE schluessel = 'nftstats'")
-    .first().catch(() => null);
-  try { return r?.wert ? JSON.parse(r.wert) : null; } catch { return null; }
-}
 
 /** Tokens, die zuletzt neu in der ElectroSwap-Liste auftauchten. */
 export async function neueTokens(db, tage = 14) {

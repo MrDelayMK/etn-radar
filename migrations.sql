@@ -321,3 +321,17 @@ CREATE TABLE IF NOT EXISTS wallet_nfts (
 
 -- Wann ein Token zum ersten Mal in der ElectroSwap-Liste auftauchte ("neu gelistet").
 ALTER TABLE token_preise ADD COLUMN zuerst_gesehen TEXT;
+
+-- Logo der NFT-Sammlung (aus /nft/stats) und ob ein Token wirklich gelistet ist.
+ALTER TABLE nft_sammlungen ADD COLUMN bild TEXT;
+ALTER TABLE token_preise ADD COLUMN gelistet INTEGER NOT NULL DEFAULT 1;
+
+-- Tageswert der Tokens eines Wallets. ElectroSwap kennt nur den heutigen
+-- Bestand, darum schreiben wir bei jedem Abruf mit - die Kurve waechst ab dem
+-- ersten Besuch.
+CREATE TABLE IF NOT EXISTS wallet_wert (
+  address    TEXT NOT NULL,
+  tag        TEXT NOT NULL,
+  tokens_usd REAL NOT NULL,
+  PRIMARY KEY (address, tag)
+);
