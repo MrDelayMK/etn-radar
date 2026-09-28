@@ -1617,7 +1617,8 @@ function zeichneChainWoche() {
 
   if (!fakten.length) {
     CHAIN.text = "";
-    box.innerHTML = '<div class="empty">Collecting data for the first week&hellip;</div>';
+    el("wocheKopf").innerHTML = '<span class="dim3">Collecting data for the first week&hellip;</span>';
+    box.innerHTML = "";
     return;
   }
   // Gleicher Aufbau wie die anderen Posts: Haken, Zahlen je Zeile, Schlusszeile.
@@ -1634,6 +1635,7 @@ function zeichneChainWoche() {
   box.innerHTML = '<ul class="wochefakten">' +
     fakten.map((f) => "<li><i>" + f[0] + "</i><span>" + f[1] + "</span></li>").join("") + "</ul>" +
     '<div class="sharebar"><button data-teilen>📢 Share this week</button></div>';
+  rueckblickKopf("wocheBox", "wocheKopf", fakten, "etnWocheOffen");
 }
 
 el("chainWoche").addEventListener("click", (e) => {
@@ -1775,6 +1777,24 @@ function zeichneChainMonat() {
   el("monatKarte").innerHTML = '<ul class="wochefakten">' +
     fakten.map((x) => "<li><i>" + x[0] + "</i><span>" + x[1] + "</span></li>").join("") + "</ul>" +
     '<div class="sharebar"><button data-teilen>📢 Share ' + esc(m.name.split(" ")[0]) + "</button></div>";
+  rueckblickKopf("monatBox", "monatKopf", fakten, "etnMonatOffen");
+}
+
+/**
+ * Kurzfassung fuer die zugeklappte Karte: die drei wichtigsten Zahlen. Ob
+ * jemand aufgeklappt hat, merkt sich der Browser - zugeklappt sitzen Kurs-Chart
+ * und Kennzahlen weiter oben, und das ist der haeufigere Wunsch.
+ */
+function rueckblickKopf(box, kopf, fakten, schluessel) {
+  el(kopf).innerHTML = '<span class="kurz">' +
+    fakten.slice(0, 3).map((f) => f[0] + " " + esc(f[2])).join(" · ") + "</span>";
+  const d = el(box);
+  if (d.dataset.verdrahtet) return;
+  d.dataset.verdrahtet = "1";
+  try { d.open = localStorage.getItem(schluessel) === "1"; } catch { /* privater Modus */ }
+  d.addEventListener("toggle", () => {
+    try { localStorage.setItem(schluessel, d.open ? "1" : "0"); } catch { /* egal */ }
+  });
 }
 
 el("monatKarte").addEventListener("click", (e) => {
