@@ -4756,22 +4756,20 @@ function nftHoeheAngleichen() {
   const liste = box?.querySelector(".nftrollen");
   if (!liste || !box) return;
   const nebeneinander = window.matchMedia("(min-width:901px)").matches;
-  if (!nebeneinander || !box.open || el("invTokensWrap").style.display === "none") {
+  if (!nebeneinander || el("invTokensWrap").style.display === "none") {
     liste.style.maxHeight = "";
     return;
   }
   const stil = getComputedStyle(box);
   const polster = parseFloat(stil.paddingTop) + parseFloat(stil.paddingBottom);
-  const kopf = box.querySelector("summary")?.getBoundingClientRect().height ?? 0;
   const fuss = box.querySelector(".tokfuss")?.getBoundingClientRect().height ?? 0;
-  const platz = karte.getBoundingClientRect().height - kopf - fuss - polster - 4;
+  const platz = karte.getBoundingClientRect().height - fuss - polster - 4;
   // Auf ganze Zeilen abrunden: eine halb abgeschnittene Zeile sieht nach Fehler
   // aus, zwei ganze nach Absicht. Weniger als zwei Zeilen nie.
   const zeile = liste.querySelector(".tokzeile")?.getBoundingClientRect().height ?? 44;
   liste.style.maxHeight = Math.round(Math.max(2, Math.floor(platz / zeile)) * zeile) + "px";
 }
 
-el("invNftsBox").addEventListener("toggle", nftHoeheAngleichen);
 let hoehenTakt = null;
 addEventListener("resize", () => {
   clearTimeout(hoehenTakt);
@@ -4819,10 +4817,6 @@ function zeichneWalletNfts() {
   wrap.style.display = "";
   const stueck = mitPreis.reduce((a, s) => a + s.anzahl, 0);
   const summe = mitPreis.reduce((a, s) => a + s.wert_usd, 0);
-  el("invNftsKopf").innerHTML =
-    "<span>" + stueck + (stueck === 1 ? " NFT in " : " NFTs in ") + mitPreis.length +
-    (mitPreis.length === 1 ? " collection" : " collections") + "</span>" +
-    '<b class="num">' + dollar(summe) + "</b>";
   el("invNfts").innerHTML = '<div class="nftrollen">' + mitPreis.map((s) => {
     const bild = s.bild
       ? '<img class="toklogo" src="' + esc(s.bild) + '" alt="" width="26" height="26" loading="lazy">'
@@ -4833,8 +4827,10 @@ function zeichneWalletNfts() {
       '<span class="num menge">' + s.anzahl + (s.anzahl === 1 ? " NFT" : " NFTs") + "</span>" +
       '<span class="num wert">' + dollar(s.wert_usd) + "</span></a>";
   }).join("") + "</div>" +
-    '<div class="tokfuss"><b>Sum ' + dollar(summe) + "</b>" +
-    '<span class="dim3"> · at floor price, not a valuation</span></div>';
+    '<div class="tokfuss"><b>NFTs ' + dollar(summe) + "</b>" +
+    '<span class="dim3"> · ' + stueck + (stueck === 1 ? " NFT in " : " NFTs in ") + mitPreis.length +
+    (mitPreis.length === 1 ? " collection" : " collections") +
+    " · at floor price, not a valuation</span></div>";
 }
 
 /**
