@@ -235,17 +235,34 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
   // der Oberflaeche dabei, dass die Menge von heute gerechnet wird.
   const kerzen = await kerzenLesen(db);
   const abTag = new Date(jetzt - KURVE_TAGE * 86400000).toISOString().slice(0, 10);
-  const proTag = new Map();
-  for (const t of liste) {
-    const reihe = (kerzen.get(t.address) ?? []).filter((k) => k.tag >= abTag);
-    if (!reihe.length) continue;
-    for (const k of reihe) {
-      proTag.set(k.tag, (proTag.get(k.tag) ?? 0) + k.schluss * t.menge);
+  // Fuer jeden Tag: Bestand mal letztem bekannten Kurs je Token. Fehlt zu einem
+  // Token an diesem Tag noch jeder Kurs, zaehlt sein heutiger Wert als Luecke -
+  // uebersteigt die Luecke ein Zwanzigstel des Depots, faellt der Tag raus.
+  // Sonst begaenne die Kurve scheinbar bei null und stiege nur deshalb an,
+  // weil nach und nach Tokens einen Kurs bekommen.
+  const reihen = liste.map((t) => ({
+    menge: t.menge,
+    heute: t.wert_usd ?? 0,
+    kerzen: (kerzen.get(t.address) ?? []).filter((k) => k.tag >= abTag),
+  })).filter((t) => t.kerzen.length);
+  const luecke = gesamt * 0.05;
+  const tage = [...new Set(reihen.flatMap((t) => t.kerzen.map((k) => k.tag)))].sort();
+  const verlauf = [];
+  for (const t of tage) {
+    let wert = 0;
+    let fehlt = 0;
+    for (const reihe of reihen) {
+      let kurs = null;
+      for (const k of reihe.kerzen) {
+        if (k.tag > t) break;
+        kurs = k.schluss;
+      }
+      if (kurs == null) fehlt += reihe.heute;
+      else wert += kurs * reihe.menge;
     }
+    if (fehlt <= luecke) verlauf.push({ tag: t, tokens_usd: wert });
   }
-  const verlauf = [...proTag.entries()]
-    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([t, wert]) => ({ tag: t, tokens_usd: wert }));
+
   // Heute immer mit dem aktuellen Preis, nicht mit der Tageskerze.
   if (verlauf.length && verlauf[verlauf.length - 1].tag === tag) verlauf[verlauf.length - 1].tokens_usd = gesamt;
   else verlauf.push({ tag, tokens_usd: gesamt });
