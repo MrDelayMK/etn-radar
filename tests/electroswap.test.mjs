@@ -122,4 +122,24 @@ const sammlungen = await nftSammlungenLesen(db);
 pruef(sammlungen.length === 1 && sammlungen[0].symbol === "EPUNKS", "nur Sammlungen mit Bodenpreis");
 pruef(sammlungen[0].bild?.endsWith(".gif") && sammlungen[0].angebote === 19, "Logo und Angebote kommen mit");
 
+
+// --- Nur offiziell gelistete Tokens im Wallet ------------------------------
+// Das ElectroSwap-Wallet bekommt jeden neuen Token als Gebuehr zugeschickt.
+// Was nicht in der offiziellen Liste steht, darf nicht als Bestand erscheinen.
+const gebuehr = "0x" + "f".repeat(40);
+db.db.prepare("INSERT OR REPLACE INTO wallet_tokens (address, token, menge_wei, gesehen) VALUES (?,?,?,?)")
+  .run(wallet, gebuehr, (10n ** 20n).toString(), new Date().toISOString());
+db.db.prepare("INSERT OR REPLACE INTO token_preise (address, symbol, preis_usd, gelistet) VALUES (?,?,?,1)")
+  .run(gebuehr, null, 0.5);
+const wf = await walletTokenWerte(db, env, wallet, jetzt + 26 * 3600000);
+pruef(!wf.tokens.some((t) => t.address === gebuehr), "Token ohne Symbol erscheint nicht im Wallet");
+
+db.db.prepare("UPDATE token_preise SET symbol = 'FEE', gelistet = 0 WHERE address = ?").run(gebuehr);
+const wf2 = await walletTokenWerte(db, env, wallet, jetzt + 26.1 * 3600000);
+pruef(!wf2.tokens.some((t) => t.address === gebuehr), "nicht gelisteter Token erscheint nicht im Wallet");
+
+db.db.prepare("UPDATE token_preise SET gelistet = 1 WHERE address = ?").run(gebuehr);
+const wf3 = await walletTokenWerte(db, env, wallet, jetzt + 26.2 * 3600000);
+pruef(wf3.tokens.some((t) => t.address === gebuehr), "gelistet und benannt: der Token zaehlt wieder");
+
 ende();

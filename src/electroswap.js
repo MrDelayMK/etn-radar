@@ -89,7 +89,7 @@ export async function preiseAuffrischen(db, env, adressen, jetzt = Date.now()) {
     .filter(([, p]) => Number(p?.usd) > 0)
     .map(([adresse, p]) =>
       db.prepare(
-        "INSERT INTO token_preise (address, preis_usd, preis_etn, aktualisiert) VALUES (?,?,?,?)" +
+        "INSERT INTO token_preise (address, preis_usd, preis_etn, aktualisiert, gelistet) VALUES (?,?,?,?,0)" +
           " ON CONFLICT(address) DO UPDATE SET preis_usd = excluded.preis_usd," +
           " preis_etn = excluded.preis_etn, aktualisiert = excluded.aktualisiert"
       ).bind(adresse.toLowerCase(), Number(p.usd), Number(p.etn), zeit)
@@ -126,6 +126,14 @@ export async function tokenListeAuffrischen(db, env, jetzt = Date.now()) {
     ).bind(String(t.address).toLowerCase(), t.symbol ?? null, t.name ?? null, Number(t.decimals ?? 18),
       Number(t.totalSupply ?? 0) || null, t.listed === false ? 0 : 1, new Date(jetzt).toISOString())
   );
+  const adressen = r.daten.map((t) => String(t.address).toLowerCase());
+  if (adressen.length) {
+    zeilen.push(
+      db.prepare(
+        "UPDATE token_preise SET gelistet = 0 WHERE address NOT IN (" + adressen.map(() => "?").join(",") + ")"
+      ).bind(...adressen)
+    );
+  }
   zeilen.push(
     db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('tokenliste', ?)" +
       " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
@@ -182,8 +190,10 @@ export async function walletTokens(db, env, adresse, jetzt = Date.now()) {
   }
   const rows = (await db.prepare(
     "SELECT w.token, w.menge_wei, w.gesehen FROM wallet_tokens w" +
-      " JOIN token_preise p ON p.address = w.token AND p.gelistet = 1" +
-      " WHERE w.address = ? AND w.token != '-'"
+      " JOIN token_preise p ON p.address = w.token" +
+      " WHERE w.address = ? AND w.token != '-'" +
+      // Nur, was ElectroSwap offiziell listet, einen Namen und einen Preis hat.
+      " AND p.gelistet = 1 AND p.symbol IS NOT NULL AND p.preis_usd > 0"
   )
     .bind(adr).all().catch(() => ({ results: [] }))).results ?? [];
   return { tokens: rows, stand: stand?.t ?? null };
