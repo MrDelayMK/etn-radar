@@ -142,4 +142,41 @@ db.db.prepare("UPDATE token_preise SET gelistet = 1 WHERE address = ?").run(gebu
 const wf3 = await walletTokenWerte(db, env, wallet, jetzt + 26.2 * 3600000);
 pruef(wf3.tokens.some((t) => t.address === gebuehr), "gelistet und benannt: der Token zaehlt wieder");
 
+// --- Kurse aufheben, nicht jede Woche neu kaufen --------------------------
+// Die Wertkurve eines Wallets lebt von alten Tageskursen. Werden sie geloescht,
+// ist die Kurve kurz UND jeder Besuch kauft dieselben Kerzen noch einmal.
+const { kerzenAuffrischen, kurvenKerzen, kerzenLesen } = await import(repoUrl("src/electroswap.js"));
+const basis = jetzt + 200 * 3600000;
+const tagVor = (n, ab = basis) => new Date(ab - n * 86400000).toISOString().slice(0, 10);
+const setzKerze = (adr, tag, kurs) =>
+  db.db.prepare("INSERT OR REPLACE INTO token_kerzen (address, tag, schluss) VALUES (?,?,?)").run(adr, tag, kurs);
+// Der Kerzen-Pfad liegt unter /tokens/52014/..., darum muss er vor der Liste stehen.
+let kerzenBis = basis;
+antworten = { "/candles": () => json([0, 1, 2].map((n) => ({ t: Math.floor((kerzenBis - n * 86400000) / 1000), c: 0.004 + n / 1000 })), 103), ...antworten };
+
+setzKerze(BOLT, tagVor(200), 0.003);
+setzKerze(BOLT, tagVor(500), 0.002);
+const k1 = await kerzenAuffrischen(db, env, [BOLT, DYNO], basis);
+pruef(k1.gefragt === 2, "Tageskerzen fuer beide Tokens geholt");
+const bestand = await kerzenLesen(db, [BOLT], null);
+pruef(bestand.get(BOLT).some((k) => k.tag === tagVor(200)), "200 Tage alte Kurse bleiben liegen");
+pruef(!bestand.get(BOLT).some((k) => k.tag === tagVor(500)), "erst nach gut einem Jahr faellt ein Kurs raus");
+pruef((await kerzenLesen(db, [DYNO], tagVor(3))).get(DYNO)?.length === 3, "kerzenLesen liest nur das verlangte Fenster");
+
+// Liegt die Reihe schon da, wird nur die Luecke nachgekauft.
+for (let n = 3; n <= 42; n++) setzKerze(BOLT, tagVor(n), 0.0041);
+kerzenBis = basis + 4 * 86400000;
+abrufe.length = 0;
+await kurvenKerzen(db, env, [BOLT], basis + 4 * 86400000);
+const limit = (u) => Number(new URL(u).searchParams.get("limit"));
+pruef(abrufe.length === 1 && limit(abrufe[0].u) <= 10, "fehlende Tage kosten ein paar Kerzen, nicht neunzig");
+
+abrufe.length = 0;
+await kurvenKerzen(db, env, ["0x" + "7".repeat(40)], basis + 4 * 86400000);
+pruef(abrufe.length === 1 && limit(abrufe[0].u) === 90, "ein unbekannter Token bringt die vollen 90 Tage mit");
+
+abrufe.length = 0;
+await kurvenKerzen(db, env, [BOLT], basis + 4.2 * 86400000);
+pruef(abrufe.length === 0, "am selben Tag wird dieselbe Reihe nicht zweimal geholt");
+
 ende();

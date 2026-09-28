@@ -4930,7 +4930,7 @@ function zeichneWallet() {
   if (punkte.length < 2) {
     holder.innerHTML = '<div class="empty">' +
       (WV.modus === "tokens" || WV.modus === "total"
-        ? "The token curve starts the first time this wallet is opened - come back tomorrow for a line."
+        ? "No token prices for this wallet yet"
         : WV.modus === "usd" ? "No price history for this period yet" : "Not enough history for a chart yet") +
       "</div>";
     return;

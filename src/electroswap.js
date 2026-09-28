@@ -243,8 +243,8 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
   // Wertkurve: heutiger Bestand, bewertet mit den Tageskursen der Vergangenheit.
   // Der Bestand von damals ist bei ElectroSwap nicht abrufbar - darum steht in
   // der Oberflaeche dabei, dass die Menge von heute gerechnet wird.
-  const kerzen = await kerzenLesen(db);
-  const abTag = new Date(jetzt - KURVE_TAGE * 86400000).toISOString().slice(0, 10);
+  const abTag = new Date(jetzt - KURSE_BEHALTEN * 86400000).toISOString().slice(0, 10);
+  const kerzen = await kerzenLesen(db, liste.map((t) => t.address), abTag);
   // Fuer jeden Tag: Bestand mal letztem bekannten Kurs je Token. Fehlt zu einem
   // Token an diesem Tag noch jeder Kurs, zaehlt sein heutiger Wert als Luecke -
   // uebersteigt die Luecke ein Zwanzigstel des Depots, faellt der Tag raus.
@@ -298,6 +298,10 @@ const KERZEN_TAGE = 8;
 // Fuer die Wertkurve eines Wallets: 90 Tage je Token, einmal am Tag geholt und
 // dann von allen Besuchern geteilt (100 + 1 je Kerze = rund 190 Credits).
 const KURVE_TAGE = 90;
+// So weit zurueck reicht die Kurve hoechstens, und so lange bleiben die Kurse
+// liegen. Die ersten 90 Tage kommen von ElectroSwap, alles danach waechst von
+// selbst, weil jeder Tag einmal geholt und dann behalten wird.
+const KURSE_BEHALTEN = 400;
 
 function kerzeLesen(k) {
   if (Array.isArray(k)) return { zeit: k[0], schluss: Number(k[4] ?? k[1]) };
@@ -352,8 +356,10 @@ export async function kerzenAuffrischen(db, env, adressen, jetzt = Date.now()) {
       db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES ('kerzen', ?)" +
         " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind(String(jetzt))
     );
-    // Aelteres als zwei Wochen brauchen wir nicht.
-    zeilen.push(db.prepare("DELETE FROM token_kerzen WHERE tag < ?").bind(new Date(jetzt - 15 * 86400000).toISOString().slice(0, 10)));
+    // Alte Kurse bleiben liegen: sie sind die Wertkurve der Wallets, kosten
+    // nach dem ersten Abruf nichts mehr und waeren spaeter nicht mehr zu haben.
+    // Erst nach gut einem Jahr faellt raus, was keine Ansicht mehr zeigt.
+    zeilen.push(db.prepare("DELETE FROM token_kerzen WHERE tag < ?").bind(new Date(jetzt - KURSE_BEHALTEN * 86400000).toISOString().slice(0, 10)));
     await db.batch(zeilen);
   }
   return { gefragt: geholt, kerzen: zeilen.length };
@@ -366,7 +372,7 @@ export async function kerzenAuffrischen(db, env, adressen, jetzt = Date.now()) {
  */
 export async function kurvenKerzen(db, env, adressen, jetzt = Date.now()) {
   if (!env.ELECTROSWAP_API_KEY || !adressen.length || (await pause(db, jetzt))) return { gefragt: 0 };
-  const abTag = new Date(jetzt - KURVE_TAGE * 86400000).toISOString().slice(0, 10);
+  const abTag = new Date(jetzt - KURSE_BEHALTEN * 86400000).toISOString().slice(0, 10);
   const platz = adressen.map(() => "?").join(",");
   const vorhanden = new Map(((await db
     .prepare(
@@ -378,23 +384,40 @@ export async function kurvenKerzen(db, env, adressen, jetzt = Date.now()) {
 
   const heute = new Date(jetzt).toISOString().slice(0, 10);
   const gestern = new Date(jetzt - 86400000).toISOString().slice(0, 10);
+  // Je Token hoechstens ein Abruf am Tag - auch wenn er seit Wochen keine neue
+  // Kerze hat, sonst kostet jeder Wallet-Aufruf denselben Token noch einmal.
+  const schluessel = adressen.map((a) => "kurve:" + a);
+  const gefragt = new Map((((await db
+    .prepare("SELECT schluessel, wert FROM electroswap_status WHERE schluessel IN (" +
+      schluessel.map(() => "?").join(",") + ")")
+    .bind(...schluessel).all().catch(() => ({ results: [] }))).results ?? [])
+    .map((z) => [z.schluessel, Number(z.wert)])));
   let geholt = 0;
   for (const adresse of adressen) {
     const da = vorhanden.get(adresse);
     // Genug Punkte und von heute oder gestern: nichts zu tun.
     if (da && da.n >= 30 && da.neuste >= gestern) continue;
+    if (jetzt - (gefragt.get("kurve:" + adresse) ?? 0) < 24 * 3600000) continue;
+    // Liegt die Reihe schon hier und fehlen nur ein paar Tage, kosten diese
+    // Tage 1 Credit je Kerze statt 90 - der Rest steht ja in der Datenbank.
+    const fehlende = da && da.n >= 30 && da.neuste
+      ? Math.min(KURVE_TAGE, Math.max(2, Math.ceil((Date.parse(heute) - Date.parse(da.neuste)) / 86400000) + 2))
+      : KURVE_TAGE;
     const r = await holen(
       env,
-      "/tokens/" + KETTE + "/" + pruefsummenAdresse(adresse) + "/candles?limit=" + KURVE_TAGE + "&bucket=1d&currency=USD"
+      "/tokens/" + KETTE + "/" + pruefsummenAdresse(adresse) + "/candles?limit=" + fehlende + "&bucket=1d&currency=USD"
     );
     if (r.fehler === "bremse") {
       await pauseSetzen(db, jetzt + r.warten * 1000);
       break;
     }
     const kerzen = Array.isArray(r.daten) ? r.daten : r.daten?.candles;
-    if (!Array.isArray(kerzen) || !kerzen.length) continue;
+    // Auch ein leeres Ergebnis zaehlt als Versuch - sonst fragt der naechste
+    // Besucher denselben Token sofort wieder.
+    const zeilen = [db.prepare("INSERT INTO electroswap_status (schluessel, wert) VALUES (?,?)" +
+      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert").bind("kurve:" + adresse, String(jetzt))];
+    if (!Array.isArray(kerzen) || !kerzen.length) { await db.batch(zeilen); continue; }
     geholt++;
-    const zeilen = [];
     for (const k of kerzen) {
       const { zeit, schluss } = kerzeLesen(k);
       const tag = alsTag(zeit);
@@ -406,15 +429,26 @@ export async function kurvenKerzen(db, env, adressen, jetzt = Date.now()) {
         ).bind(adresse, tag, schluss)
       );
     }
-    if (zeilen.length) await db.batch(zeilen);
-    void heute;
+    await db.batch(zeilen);
   }
   return { gefragt: geholt };
 }
 
-/** Kerzen je Token, aelteste zuerst: Map Adresse -> [{ tag, schluss }]. */
-export async function kerzenLesen(db) {
-  const rows = (await db.prepare("SELECT address, tag, schluss FROM token_kerzen ORDER BY tag").all()
+/**
+ * Kerzen je Token, aelteste zuerst: Map Adresse -> [{ tag, schluss }]. Ohne
+ * Einschraenkung waere das die ganze Tabelle - mit wachsender Historie waere
+ * das die teuerste Abfrage der Seite, darum immer mit Tokens und Zeitfenster.
+ */
+export async function kerzenLesen(db, adressen = null, abTag = null) {
+  const wo = [], werte = [];
+  if (adressen?.length) {
+    wo.push("address IN (" + adressen.map(() => "?").join(",") + ")");
+    werte.push(...adressen.map((a) => String(a).toLowerCase()));
+  }
+  if (abTag) { wo.push("tag >= ?"); werte.push(abTag); }
+  const satz = db.prepare("SELECT address, tag, schluss FROM token_kerzen" +
+    (wo.length ? " WHERE " + wo.join(" AND ") : "") + " ORDER BY tag");
+  const rows = (await (werte.length ? satz.bind(...werte) : satz).all()
     .catch(() => ({ results: [] }))).results ?? [];
   const nach = new Map();
   for (const r of rows) {

@@ -170,7 +170,8 @@ export async function chain(db, env) {
   await kerzenAuffrischen(db, env, adressen).catch(() => {});
   await nftSammlungenAuffrischen(db, env).catch(() => {});
   const preise = await preiseLesen(db);
-  const kerzen = await kerzenLesen(db);
+  const kerzen = await kerzenLesen(db, adressen,
+    new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10));
   const [nftSammlungen, neuGelistet] = await Promise.all([
     nftSammlungenLesen(db).catch(() => []),
     neueTokens(db).catch(() => []),
