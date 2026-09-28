@@ -622,11 +622,19 @@
     <div class="card">
       <div class="wertzeile">
         <div id="invWert"></div>
-        <div class="tabs" id="invEinheit" role="group" aria-label="Show balance in">
-          <button class="ghost on" type="button" data-einheit="etn">ETN</button>
-          <button class="ghost" type="button" data-einheit="usd">ETN $</button>
-          <button class="ghost" type="button" data-einheit="tokens">Tokens $</button>
-          <button class="ghost" type="button" data-einheit="total">Total $</button>
+        <div class="wertwahl">
+          <div class="tabs" id="invEinheit" role="group" aria-label="Show balance in">
+            <button class="ghost on" type="button" data-einheit="etn">ETN</button>
+            <button class="ghost" type="button" data-einheit="usd">ETN $</button>
+            <button class="ghost" type="button" data-einheit="tokens">Tokens $</button>
+            <button class="ghost" type="button" data-einheit="total">Total $</button>
+          </div>
+          <div class="tabs" id="invZeit" role="group" aria-label="Period">
+            <button class="ghost" type="button" data-zeit="30">30D</button>
+            <button class="ghost" type="button" data-zeit="90">90D</button>
+            <button class="ghost" type="button" data-zeit="365">1Y</button>
+            <button class="ghost on" type="button" data-zeit="all">All</button>
+          </div>
         </div>
       </div>
       <div class="chartholder" id="invChartHolder">
@@ -635,18 +643,25 @@
       </div>
     </div>
   </section>
-  <section id="invTokensWrap" style="display:none">
-    <h2>🪙 Tokens in this wallet
-      <button class="infoBtn" data-info="Token balances and prices come from ElectroSwap, fetched once when you open a wallet and then reused for twelve hours. ElectroSwap only knows wallets that have traded there, so a wallet can show no tokens even if it holds some.">ⓘ</button></h2>
-    <div class="card" id="invTokens"></div>
-  </section>
-  <section id="invNftsWrap" style="display:none">
-    <h2>🖼️ NFTs in this wallet
-      <button class="infoBtn" data-info="Which collections a wallet holds comes from the block explorer. The floor price is the cheapest listing on ElectroSwap, refreshed weekly. Only collections with an open listing are shown, because only those have a price. Floor value is a lower bound, not a valuation of the actual pieces.">ⓘ</button></h2>
-    <details class="card auswahl" id="invNftsBox">
-      <summary id="invNftsKopf"></summary>
-      <div id="invNfts"></div>
-    </details>
+  <section id="invBestandWrap" style="display:none">
+    <div class="grid bestandgrid">
+      <div class="spalte" id="invTokensWrap" style="display:none">
+        <h2>🪙 Tokens in this wallet
+          <button class="infoBtn" data-info="Token balances and prices come from ElectroSwap, fetched once when you open a wallet and then reused for twelve hours. ElectroSwap only knows wallets that have traded there, so a wallet can show no tokens even if it holds some.">ⓘ</button></h2>
+        <div class="card" id="invTokens"></div>
+      </div>
+      <div class="spalte" id="invNftsWrap" style="display:none">
+        <h2>🖼️ NFTs in this wallet
+          <button class="infoBtn" data-info="Which collections a wallet holds comes from the block explorer. The floor price is the cheapest listing on ElectroSwap, refreshed weekly. Only collections with an open listing are shown, because only those have a price. Floor value is a lower bound, not a valuation of the actual pieces.">ⓘ</button></h2>
+        <details class="card auswahl" id="invNftsBox">
+          <summary id="invNftsKopf"></summary>
+          <div id="invNfts"></div>
+        </details>
+      </div>
+    </div>
+    <div class="sharebar bestandshare" id="invBestandShare">
+      <button type="button" data-teilen-bestand>📢 Share these holdings</button>
+    </div>
   </section>
   <section id="invFlowWrap" style="display:none">
     <h2>Money flow
@@ -896,6 +911,14 @@
 
     <div class="sharebild" id="shareBild" hidden><img id="shareBildImg" alt="Image that goes out with the post"></div>
 
+    <div class="shareopt" id="shareOpt" hidden>
+      <div class="shareformat" role="radiogroup" aria-label="Whose wallet is this">
+        <button type="button" class="ghost on" role="radio" aria-checked="true" data-optwer="fremd">👀 Someone else's</button>
+        <button type="button" class="ghost" role="radio" aria-checked="false" data-optwer="mein">🙋 My wallet</button>
+      </div>
+      <label class="switchrow"><input type="checkbox" id="shareOptPreis" checked><span>Show $ values in the post</span></label>
+      <label class="switchrow"><input type="checkbox" id="shareOptAdr" checked><span>Include the wallet address</span></label>
+    </div>
     <div class="shareauswahl" id="shareAuswahl" hidden>
       <div class="kopf"><span>What goes into the post?</span>
         <span class="knoepfe"><button type="button" class="ghost" data-auswahl="alle">All</button>

@@ -3709,7 +3709,17 @@ let SHARE_AUSWAHL = null;
 function shareAuswahlZeigen() {
   const a = SHARE_AUSWAHL;
   el("shareAuswahl").hidden = !a;
+  el("shareOpt").hidden = !a?.opt;
   if (!a) return;
+  if (a.opt) {
+    el("shareOptPreis").checked = a.opt.preis;
+    el("shareOptAdr").checked = a.opt.adresse;
+    el("shareOpt").querySelectorAll("button[data-optwer]").forEach((b) => {
+      const an = (b.dataset.optwer === "mein") === !!a.opt.mein;
+      b.classList.toggle("on", an);
+      b.setAttribute("aria-checked", String(an));
+    });
+  }
   el("shareAuswahlListe").innerHTML = a.eintraege.map((e) => {
     const bild = e.bild
       ? '<img src="' + esc(e.bild) + '" alt="" width="20" height="20" loading="lazy">'
@@ -3719,6 +3729,28 @@ function shareAuswahlZeigen() {
       (e.wert != null ? '<b class="num">' + dollar(e.wert) + "</b>" : "") + "</button>";
   }).join("");
 }
+
+// Wessen Wallet und ob Dollarwerte mitgehen - beides aendert den Text sofort.
+el("shareOpt").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-optwer]");
+  if (!b || !SHARE_AUSWAHL?.opt) return;
+  SHARE_AUSWAHL.opt.mein = b.dataset.optwer === "mein";
+  shareAuswahlZeigen();
+  shareVorschau();
+});
+el("shareOptPreis").addEventListener("change", () => {
+  if (!SHARE_AUSWAHL?.opt) return;
+  SHARE_AUSWAHL.opt.preis = el("shareOptPreis").checked;
+  shareVorschau();
+});
+// Ohne Adresse zeigt auch der Link nur die Startseite - sonst stuende sie dort.
+el("shareOptAdr").addEventListener("change", () => {
+  const o = SHARE_AUSWAHL?.opt;
+  if (!o) return;
+  o.adresse = el("shareOptAdr").checked;
+  if (SHARE_FREMD && o.urlMit) SHARE_FREMD.url = o.adresse ? o.urlMit : location.origin + "/";
+  shareVorschau();
+});
 
 el("shareAuswahl").addEventListener("click", (e) => {
   const a = SHARE_AUSWAHL;
@@ -3750,7 +3782,7 @@ function shareInhaltRoh(weg) {
   if (SHARE_FREMD) {
     const ton = SHARE_FREMD.varianten?.[SHARE_WAHL]?.[0];
     const text = SHARE_AUSWAHL
-      ? SHARE_AUSWAHL.bauen(SHARE_AUSWAHL.aktiv, ton)
+      ? SHARE_AUSWAHL.bauen(SHARE_AUSWAHL.aktiv, ton, SHARE_AUSWAHL.opt)
       : SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
     // Als Karte fuehrt der Link ueber /s/<bild>, damit X und Telegram genau
     // dieses Bild als Vorschau zeigen; als Foto geht die Datei selbst raus.
@@ -4497,7 +4529,20 @@ function wiederFrei(knopf, ms) {
 // eine Anfrage mehr beim Explorer. daily_balances fuehrt nur Tage MIT
 // Aenderung; dazwischen gilt der letzte Stand. Ausserhalb der Top N kommt der
 // Verlauf erst beim Oeffnen (/api/wallet-history, eine Explorer-Anfrage).
-const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", laedt: false, tokens: null, nfts: null };
+const WV = { address: null, verlauf: [], vollstaendig: true, etn: 0, modus: "etn", zeit: "all", laedt: false, tokens: null, nfts: null };
+const tagVor = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+
+/**
+ * Zeitraum der gewaehlten Ansicht: ab wann gerechnet wird und wie die Zeile
+ * darueber heisst. "All" beginnt bei der ersten Bewegung des Wallets.
+ */
+function zeitFenster() {
+  if (WV.zeit !== "all") {
+    const n = Number(WV.zeit);
+    return { tag0: tagVor(n), label: n === 365 ? "Last year" : "Last " + n + " days" };
+  }
+  return { tag0: WV.verlauf[0]?.day ?? tagVor(30), label: "All time" };
+}
 let kurseLaeuft = null;
 const kursTage = () =>
   (kurseLaeuft ??= hole("/api/price?period=1y")
@@ -4587,13 +4632,13 @@ function wertKopf() {
   const stark = (v) => '<b class="num">' + v + "</b>";
 
   if (WV.modus === "etn") {
-    const tag0 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const { tag0, label } = zeitFenster();
     const b0 = bestandAm(tag0);
     let zeile = "";
     if (b0 !== undefined) {
       const diff = WV.etn - b0;
       const pz = b0 > 0 ? " (" + (diff >= 0 ? "▲ +" : "▼ -") + nf(Math.abs(diff / b0) * 100, 1) + "%)" : "";
-      zeile = '<div class="wertteile"><span>Last 30 days: ' +
+      zeile = '<div class="wertteile"><span>' + label + ": " +
         (Math.abs(diff) < 0.000001
           ? '<b class="num dim3">no change</b>'
           : '<b class="num ' + (diff >= 0 ? "up" : "down") + '">' + (diff >= 0 ? "+" : "") + nf(diff, 0) + " ETN</b>" + pz) +
@@ -4623,7 +4668,9 @@ function wertKopf() {
   // ETN $ - der Wert des ETN-Bestands, wie bisher mit der 30-Tage-Aufteilung.
   if (!(p1 > 0)) return "";
   const b1 = WV.etn, jetzt = b1 * p1;
-  const tag0 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const fenster = zeitFenster();
+  // "All" heisst hier: ab dem ersten Tag, an dem es Bestand UND Kurs gab.
+  const tag0 = WV.zeit === "all" ? (wertReihe()[0]?.day ?? fenster.tag0) : fenster.tag0;
   const b0 = bestandAm(tag0), p0 = kursAm(tag0);
   let zeile = "";
   if (b0 !== undefined && p0 > 0) {
@@ -4631,9 +4678,13 @@ function wertKopf() {
     const kurs = b0 * (p1 - p0), bestand = (b1 - b0) * p1;
     const farbe = (v) => (v >= 0 ? "up" : "down");
     const pz = vorher > 0 ? " (" + (diff >= 0 ? "▲ +" : "▼ -") + nf(Math.abs(diff / vorher) * 100, 1) + "%)" : "";
-    zeile = '<div class="wertteile"><span>Last 30 days: <b class="num ' + farbe(diff) + '">' +
+    zeile = '<div class="wertteile"><span>' + fenster.label + ': <b class="num ' + farbe(diff) + '">' +
       (diff >= 0 ? "+" : "") + dollar(diff) + "</b>" + pz + "</span>" +
-      (Math.abs(bestand) < Math.max(1, Math.abs(diff) * 0.005)
+      // Faengt der Zeitraum bei einem leeren Wallet an, ist die Aufteilung in
+      // Kurs und Bestand sinnlos - dann kam alles ueber den Bestand herein.
+      (b0 === 0
+        ? '<span class="dim3">the wallet was empty at the start of this period</span>'
+        : Math.abs(bestand) < Math.max(1, Math.abs(diff) * 0.005)
         ? '<span class="dim3">all from the price - the balance did not change</span>'
         : '<span>from the price <b class="num ' + farbe(kurs) + '">' + (kurs >= 0 ? "+" : "") + dollar(kurs) + "</b></span>" +
           '<span>from the balance <b class="num ' + farbe(bestand) + '">' + (bestand >= 0 ? "+" : "") + dollar(bestand) + "</b></span>") +
@@ -4658,6 +4709,15 @@ function tokenBild(adresse, symbol) {
   return '<span class="toklogo platzhalter">' + esc((symbol ?? "?").slice(0, 1).toUpperCase()) + "</span>";
 }
 
+// Die beiden Spalten stehen nebeneinander; der Rahmen samt Teilen-Knopf
+// erscheint, sobald eine von beiden etwas zu zeigen hat.
+function zeichneBestandRahmen() {
+  const tok = el("invTokensWrap").style.display !== "none";
+  const nft = el("invNftsWrap").style.display !== "none";
+  el("invBestandWrap").style.display = tok || nft ? "" : "none";
+  el("invBestandShare").hidden = !(tok || nft);
+}
+
 function zeichneWalletTokens() {
   const wrap = el("invTokensWrap");
   const d = WV.tokens;
@@ -4677,7 +4737,6 @@ function zeichneWalletTokens() {
   // Tokens und ETN zusammen: der Chart daneben zeigt nur ETN, die Summe gehoert hierher.
   const etnWert = preisJetzt() > 0 ? WV.etn * preisJetzt() : null;
   el("invTokens").innerHTML = zeilen +
-    '<div class="sharebar"><button type="button" data-teilen-bestand>📢 Share these holdings</button></div>' +
     '<div class="tokfuss">' +
     '<b>Tokens ' + dollar(d.gesamt_usd) + "</b>" +
     (etnWert != null
@@ -4728,6 +4787,31 @@ const BESTAND_TON = [
   ["calm", (kopf) => "📊 " + kopf],
   ["funny", (kopf) => "🧺 " + kopf],
 ];
+// Derselbe Bestand klingt anders, je nachdem ob es das eigene Wallet ist.
+const BESTAND_KOPF = {
+  fremd: {
+    proud: "This Electroneum wallet is holding a lot more than ETN.",
+    calm: "What one Electroneum wallet actually holds right now.",
+    funny: "Somebody out here is collecting the whole Electroneum ecosystem.",
+  },
+  mein: {
+    proud: "My Electroneum wallet is holding a lot more than ETN.",
+    calm: "What my Electroneum wallet holds right now.",
+    funny: "Turns out I am collecting the whole Electroneum ecosystem.",
+  },
+};
+const BESTAND_SCHLUSS = {
+  fremd: {
+    proud: "Every balance on this chain is public. Look this one up 👇",
+    calm: "Balances, tokens and NFTs, straight from the chain 👇",
+    funny: "Yes, you can look up any wallet. Go on 👇",
+  },
+  mein: {
+    proud: "All of it public on chain. Go check your own bag 👇",
+    calm: "Straight from the chain, nothing estimated. Check yours 👇",
+    funny: "No regrets, only tokens. Count your own 👇",
+  },
+};
 
 function bestandTeilen() {
   const d = CUR_WALLET;
@@ -4737,61 +4821,59 @@ function bestandTeilen() {
   const nfts = (WV.nfts?.sammlungen ?? []).filter((n) => n.wert_usd > 0);
   const etnWert = preis > 0 ? WV.etn * preis : 0;
 
+  // Jeder Posten kann mit oder ohne Dollarwert in den Post - das entscheidet
+  // der Besucher im Dialog, denn nicht jeder haengt seinen Wert an die Zeile.
   const eintraege = [];
-  if (etnWert > 0) {
-    eintraege.push({ id: "etn", label: kurz(WV.etn) + " ETN", wert: etnWert, zeichen: "💰",
-      zeile: "💰 " + kurz(WV.etn) + " ETN · " + dollar(etnWert) });
+  if (WV.etn > 0) {
+    eintraege.push({ id: "etn", label: kurz(WV.etn) + " ETN", wert: etnWert || null, zeichen: "💰",
+      zeile: (p) => "💰 " + kurz(WV.etn) + " ETN" + (p && etnWert > 0 ? " · " + dollar(etnWert) : "") });
   }
   for (const t of tokens) {
     const name = t.symbol ?? kurzAdr(t.address);
     eintraege.push({ id: "t:" + t.address, label: name, wert: t.wert_usd,
-      bild: TOKEN_BILDER[t.address] ? "/assets/tokens/" + TOKEN_BILDER[t.address] : null,
+      bild: TOKEN_BILDER[String(t.address).toLowerCase()]
+        ? "/assets/tokens/" + TOKEN_BILDER[String(t.address).toLowerCase()] : null,
       zeichen: name.slice(0, 1),
-      zeile: "🪙 " + kurz(t.menge) + " " + name + " · " + dollar(t.wert_usd) });
+      zeile: (p) => "🪙 " + kurz(t.menge) + " " + name + (p ? " · " + dollar(t.wert_usd) : "") });
   }
   for (const n of nfts) {
-    eintraege.push({ id: "n:" + n.address, label: n.name ?? kurzAdr(n.address), wert: n.wert_usd, bild: n.bild,
+    const name = n.name ?? kurzAdr(n.address);
+    eintraege.push({ id: "n:" + n.address, label: name, wert: n.wert_usd, bild: n.bild,
       zeichen: "🖼️",
-      zeile: "🖼️ " + n.anzahl + "× " + (n.name ?? kurzAdr(n.address)) + " · " + dollar(n.wert_usd) + " at floor" });
+      zeile: (p) => "🖼️ " + n.anzahl + "× " + name + (p ? " · " + dollar(n.wert_usd) + " at floor" : "") });
   }
   if (!eintraege.length) return;
 
-  const bauen = (aktiv, ton) => {
+  const bauen = (aktiv, ton, opt) => {
     const gewaehlt = eintraege.filter((e) => aktiv.has(e.id));
     if (!gewaehlt.length) return "Pick at least one line for the post.";
-    const summe = gewaehlt.reduce((a, e) => a + e.wert, 0);
+    const mitPreis = opt?.preis !== false;
+    const wer = opt?.mein ? "mein" : "fremd";
+    const summe = gewaehlt.reduce((a, e) => a + (e.wert ?? 0), 0);
     const mitNft = gewaehlt.some((e) => e.id.startsWith("n:"));
-    const kopf = {
-      proud: "This wallet is holding more than ETN.",
-      calm: "What one Electroneum wallet actually holds.",
-      funny: "Somebody really likes the Electroneum ecosystem.",
-    }[ton] ?? "Inside one Electroneum wallet.";
-    const schluss = {
-      proud: "Every balance on this chain is public. Look this one up 👇",
-      calm: "Balances, tokens and NFTs, all from the chain 👇",
-      funny: "Yes, you can look this up yourself 👇",
-    }[ton] ?? "Look it up on ETN Radar 👇";
+    const kopf = BESTAND_KOPF[wer][ton] ?? BESTAND_KOPF[wer].calm;
+    const schluss = BESTAND_SCHLUSS[wer][ton] ?? BESTAND_SCHLUSS[wer].calm;
+    const summeZeile = mitPreis && summe > 0
+      ? "Total " + dollar(summe) + (mitNft ? " (NFTs at floor price)" : "")
+      : null;
     return [
       (BESTAND_TON.find((x) => x[0] === ton)?.[1] ?? ((k) => k))(kopf),
-      "",
-      gewaehlt.map((e) => e.zeile).join("\n"),
-      "",
-      "Total " + dollar(summe) + (mitNft ? " (NFTs at floor price)" : ""),
-      "🔑 " + d.address,
-      "",
+      gewaehlt.map((e) => e.zeile(mitPreis)).join("\n"),
+      [summeZeile, opt?.adresse === false ? null : "🔑 " + d.address].filter(Boolean).join("\n"),
       schluss,
-    ].join("\n");
+    ].filter(Boolean).join("\n\n");
   };
 
   shareTextOeffnen({
     titel: "📢 Share these holdings",
     varianten: BESTAND_TON.map(([ton]) => [ton, "", null]),
-    auswahl: { eintraege, aktiv: new Set(eintraege.map((e) => e.id)), bauen },
+    auswahl: { eintraege, aktiv: new Set(eintraege.map((e) => e.id)), bauen,
+      opt: { mein: false, preis: true, adresse: true, urlMit: location.origin + "/wallet/" + d.address } },
     url: location.origin + "/wallet/" + d.address,
   });
 }
 
-el("invTokens").addEventListener("click", (e) => {
+el("invBestandShare").addEventListener("click", (e) => {
   if (e.target.closest("[data-teilen-bestand]")) bestandTeilen();
 });
 
@@ -4828,6 +4910,23 @@ function zeichneWallet() {
       }
     }
   }
+  // Erst rechnen, dann zuschneiden: so weiss der Knopf, ob es so weit zurueck
+  // ueberhaupt Daten gibt, und ein zu grosser Zeitraum faellt auf "All" zurueck.
+  const spanne = punkte.length > 1
+    ? Math.round((Date.parse(punkte[punkte.length - 1].day) - Date.parse(punkte[0].day)) / 86400000)
+    : 0;
+  let zeit = WV.zeit;
+  el("invZeit").querySelectorAll("button").forEach((b) => {
+    const z = b.dataset.zeit;
+    b.disabled = z !== "all" && spanne < Number(z) * 0.6;
+    if (b.disabled && z === zeit) zeit = "all";
+  });
+  el("invZeit").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.zeit === zeit));
+  if (zeit !== "all") {
+    const ab = tagVor(Number(zeit));
+    const teil = punkte.filter((p) => p.day >= ab);
+    if (teil.length >= 2) punkte = teil;
+  }
   if (punkte.length < 2) {
     holder.innerHTML = '<div class="empty">' +
       (WV.modus === "tokens" || WV.modus === "total"
@@ -4860,6 +4959,7 @@ const [kurse, verlauf, tokens, nfts] = await Promise.all([
   WV.nfts = nfts ?? null;
   zeichneWalletTokens();
   zeichneWalletNfts();
+  zeichneBestandRahmen();
   if (mitVerlauf) {
     WV.laedt = false;
     if (verlauf?.verlauf) {
@@ -4874,6 +4974,13 @@ el("invEinheit").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-einheit]");
   if (!b || b.dataset.einheit === WV.modus) return;
   WV.modus = b.dataset.einheit;
+  zeichneWallet();
+});
+
+el("invZeit").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-zeit]");
+  if (!b || b.disabled || b.dataset.zeit === WV.zeit) return;
+  WV.zeit = b.dataset.zeit;
   zeichneWallet();
 });
 
@@ -5616,7 +5723,7 @@ leerenVerdrahten("q", () => {
   el("searchResult").innerHTML = "";
 });
 leerenVerdrahten("invQ", () => {
-  ["invResultWrap", "invChartWrap", "invTokensWrap", "invNftsWrap", "invClusterWrap", "invEventsWrap", "invFlowWrap"]
+  ["invResultWrap", "invChartWrap", "invBestandWrap", "invTokensWrap", "invNftsWrap", "invClusterWrap", "invEventsWrap", "invFlowWrap"]
     .forEach((id) => { if (el(id)) el(id).style.display = "none"; });
   el("invHead").innerHTML = "";
   CUR_WALLET = null;
