@@ -3683,6 +3683,40 @@ const shareLink = (wallet) => location.origin + "/s/" + shareBildId() + (wallet 
 // Unter jedem Post dieselben Hashtags - der Link bleibt ganz am Ende, dann
 // blendet X ihn aus und zeigt nur die Vorschaukarte.
 const SHARE_TAGS = "#ETN #Electroneum #ETNRadar #GalacticSL";
+// Posten, die der Besucher im Dialog an- und abwaehlen kann (Tokens, NFTs, ETN).
+let SHARE_AUSWAHL = null;
+
+function shareAuswahlZeigen() {
+  const a = SHARE_AUSWAHL;
+  el("shareAuswahl").hidden = !a;
+  if (!a) return;
+  el("shareAuswahlListe").innerHTML = a.eintraege.map((e) => {
+    const bild = e.bild
+      ? '<img src="' + esc(e.bild) + '" alt="" width="20" height="20" loading="lazy">'
+      : '<span class="platz">' + esc(e.zeichen ?? "•") + "</span>";
+    return '<button type="button" class="apost' + (a.aktiv.has(e.id) ? " on" : "") + '" data-post="' + esc(e.id) + '">' +
+      bild + "<span>" + esc(e.label) + "</span>" +
+      (e.wert != null ? '<b class="num">' + dollar(e.wert) + "</b>" : "") + "</button>";
+  }).join("");
+}
+
+el("shareAuswahl").addEventListener("click", (e) => {
+  const a = SHARE_AUSWAHL;
+  if (!a) return;
+  const alle = e.target.closest("button[data-auswahl]");
+  if (alle) {
+    a.aktiv = alle.dataset.auswahl === "alle" ? new Set(a.eintraege.map((x) => x.id)) : new Set();
+  } else {
+    const b = e.target.closest("button[data-post]");
+    if (!b) return;
+    const id = b.dataset.post;
+    if (a.aktiv.has(id)) a.aktiv.delete(id);
+    else a.aktiv.add(id);
+  }
+  shareAuswahlZeigen();
+  shareVorschau();
+});
+
 function shareInhalt(weg) {
   const i = shareInhaltRoh(weg);
   // Manche Fassungen bringen eigene Hashtags mit und ersetzen die festen (Kurs-Post).
@@ -3694,7 +3728,10 @@ function shareInhalt(weg) {
 function shareInhaltRoh(weg) {
   const format = aktivesFormat();
   if (SHARE_FREMD) {
-    const text = SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
+    const ton = SHARE_FREMD.varianten?.[SHARE_WAHL]?.[0];
+    const text = SHARE_AUSWAHL
+      ? SHARE_AUSWAHL.bauen(SHARE_AUSWAHL.aktiv, ton)
+      : SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
     // Als Karte fuehrt der Link ueber /s/<bild>, damit X und Telegram genau
     // dieses Bild als Vorschau zeigen; als Foto geht die Datei selbst raus.
     if (format === "karte" && weg === "link") return { text, url: location.origin + "/s/" + shareBildId() };
@@ -3853,6 +3890,8 @@ function shareTexteZeigen() {
 function shareDialogOeffnen() {
   if (!CUR_WALLET) return;
   SHARE_FREMD = null;
+  SHARE_AUSWAHL = null;
+  shareAuswahlZeigen();
   SHARE_WER = "fremd";
   el("sharePrivat").hidden = false;
   el("shareFormat").hidden = false;
@@ -3874,6 +3913,8 @@ function shareDialogSchliessen() { el("shareModal").classList.remove("on"); }
 function shareTextOeffnen(fremd) {
   if (!fremd?.text && !fremd?.varianten?.length) return;
   SHARE_FREMD = fremd;
+  SHARE_AUSWAHL = fremd.auswahl ?? null;
+  shareAuswahlZeigen();
   el("shareTitel").textContent = fremd.titel;
   el("sharePrivat").hidden = true;
   el("shareWer").hidden = true;
@@ -4616,6 +4657,7 @@ function zeichneWalletTokens() {
   // Tokens und ETN zusammen: der Chart daneben zeigt nur ETN, die Summe gehoert hierher.
   const etnWert = preisJetzt() > 0 ? WV.etn * preisJetzt() : null;
   el("invTokens").innerHTML = zeilen +
+    '<div class="sharebar"><button type="button" data-teilen-bestand>📢 Share these holdings</button></div>' +
     '<div class="tokfuss">' +
     '<b>Tokens ' + dollar(d.gesamt_usd) + "</b>" +
     (etnWert != null
@@ -4655,6 +4697,83 @@ function zeichneWalletNfts() {
     '<div class="tokfuss"><b>Sum ' + dollar(summe) + "</b>" +
     '<span class="dim3"> · at floor price, not a valuation</span></div>';
 }
+
+/**
+ * Post ueber die Bestaende eines Wallets. Der Besucher hakt im Dialog ab, was
+ * hineinsoll: einzelne Tokens, NFT-Sammlungen und der ETN-Bestand selbst.
+ * Gezeigt wird nur, was einen Preis hat - eine Menge ohne Wert sagt nichts.
+ */
+const BESTAND_TON = [
+  ["proud", (kopf) => "💼 " + kopf],
+  ["calm", (kopf) => "📊 " + kopf],
+  ["funny", (kopf) => "🧺 " + kopf],
+];
+
+function bestandTeilen() {
+  const d = CUR_WALLET;
+  if (!d) return;
+  const preis = preisJetzt() ?? 0;
+  const tokens = (WV.tokens?.tokens ?? []).filter((t) => t.wert_usd > 0);
+  const nfts = (WV.nfts?.sammlungen ?? []).filter((n) => n.wert_usd > 0);
+  const etnWert = preis > 0 ? WV.etn * preis : 0;
+
+  const eintraege = [];
+  if (etnWert > 0) {
+    eintraege.push({ id: "etn", label: kurz(WV.etn) + " ETN", wert: etnWert, zeichen: "💰",
+      zeile: "💰 " + kurz(WV.etn) + " ETN · " + dollar(etnWert) });
+  }
+  for (const t of tokens) {
+    const name = t.symbol ?? kurzAdr(t.address);
+    eintraege.push({ id: "t:" + t.address, label: name, wert: t.wert_usd,
+      bild: TOKEN_BILDER[t.address] ? "/assets/tokens/" + TOKEN_BILDER[t.address] : null,
+      zeichen: name.slice(0, 1),
+      zeile: "🪙 " + kurz(t.menge) + " " + name + " · " + dollar(t.wert_usd) });
+  }
+  for (const n of nfts) {
+    eintraege.push({ id: "n:" + n.address, label: n.name ?? kurzAdr(n.address), wert: n.wert_usd, bild: n.bild,
+      zeichen: "🖼️",
+      zeile: "🖼️ " + n.anzahl + "× " + (n.name ?? kurzAdr(n.address)) + " · " + dollar(n.wert_usd) + " at floor" });
+  }
+  if (!eintraege.length) return;
+
+  const bauen = (aktiv, ton) => {
+    const gewaehlt = eintraege.filter((e) => aktiv.has(e.id));
+    if (!gewaehlt.length) return "Pick at least one line for the post.";
+    const summe = gewaehlt.reduce((a, e) => a + e.wert, 0);
+    const mitNft = gewaehlt.some((e) => e.id.startsWith("n:"));
+    const kopf = {
+      proud: "This wallet is holding more than ETN.",
+      calm: "What one Electroneum wallet actually holds.",
+      funny: "Somebody really likes the Electroneum ecosystem.",
+    }[ton] ?? "Inside one Electroneum wallet.";
+    const schluss = {
+      proud: "Every balance on this chain is public. Look this one up 👇",
+      calm: "Balances, tokens and NFTs, all from the chain 👇",
+      funny: "Yes, you can look this up yourself 👇",
+    }[ton] ?? "Look it up on ETN Radar 👇";
+    return [
+      (BESTAND_TON.find((x) => x[0] === ton)?.[1] ?? ((k) => k))(kopf),
+      "",
+      gewaehlt.map((e) => e.zeile).join("\n"),
+      "",
+      "Total " + dollar(summe) + (mitNft ? " (NFTs at floor price)" : ""),
+      "🔑 " + d.address,
+      "",
+      schluss,
+    ].join("\n");
+  };
+
+  shareTextOeffnen({
+    titel: "📢 Share these holdings",
+    varianten: BESTAND_TON.map(([ton]) => [ton, "", null]),
+    auswahl: { eintraege, aktiv: new Set(eintraege.map((e) => e.id)), bauen },
+    url: location.origin + "/wallet/" + d.address,
+  });
+}
+
+el("invTokens").addEventListener("click", (e) => {
+  if (e.target.closest("[data-teilen-bestand]")) bestandTeilen();
+});
 
 function zeichneWallet() {
   if (!WV.address) return;
