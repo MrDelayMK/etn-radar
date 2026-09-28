@@ -335,3 +335,14 @@ CREATE TABLE IF NOT EXISTS wallet_wert (
   tokens_usd REAL NOT NULL,
   PRIMARY KEY (address, tag)
 );
+
+-- Bestand je Token und Tag. ElectroSwap liefert nur das Heute, darum halten
+-- wir bei jedem Abruf fest, was drin lag - ab dem ersten Besuch rechnet die
+-- Wertkurve mit echten Mengen statt mit der Menge von heute.
+CREATE TABLE IF NOT EXISTS wallet_token_tage (
+  address TEXT NOT NULL,
+  tag     TEXT NOT NULL,
+  token   TEXT NOT NULL,
+  menge   REAL NOT NULL,
+  PRIMARY KEY (address, tag, token)
+);

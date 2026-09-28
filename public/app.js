@@ -4624,6 +4624,18 @@ function tokenWertReihe(mitEtn) {
  *   Tokens $ Wert der Tokens und wie viele es sind
  *   Total $  beides zusammen
  */
+/**
+ * ElectroSwap kennt nur den heutigen Bestand. Seit dem ersten Besuch schreiben
+ * wir die Mengen mit, ab da rechnet die Kurve mit dem Bestand von damals.
+ */
+function tokenKurvenHinweis() {
+  const ab = WV.tokens?.echt_ab;
+  const heute = heuteTag();
+  if (!ab || ab >= heute) return "Past days use today\u2019s token balance at the price of that day - ElectroSwap does not keep past balances.";
+  const datum = new Date(ab + "T00:00:00Z").toLocaleDateString(LOC, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return "Real balances recorded since " + datum + " - before that, today\u2019s balance at the price of that day.";
+}
+
 function wertKopf() {
   const p1 = preisJetzt();
   const tokenWert = WV.tokens?.gesamt_usd ?? 0;
@@ -4652,8 +4664,7 @@ function wertKopf() {
     if (!tokenAnzahl) return gross('<span class="dim3">No listed tokens in this wallet</span>');
     return gross("Tokens worth " + stark(dollar(tokenWert)) +
       ' <span class="dim3">in ' + tokenAnzahl + (tokenAnzahl === 1 ? " token" : " tokens") + "</span>") +
-      '<div class="wertteile"><span class="dim3">Past days use today\u2019s token balance at the price of that day - ' +
-      "ElectroSwap does not keep past balances.</span></div>";
+      '<div class="wertteile"><span class="dim3">' + tokenKurvenHinweis() + "</span></div>";
   }
 
   if (WV.modus === "total") {
@@ -4662,7 +4673,7 @@ function wertKopf() {
     return gross("Total " + stark(dollar(etnWert + tokenWert))) +
       '<div class="wertteile"><span>ETN <b class="num">' + dollar(etnWert) + "</b></span>" +
       '<span>Tokens <b class="num">' + dollar(tokenWert) + "</b></span>" +
-      (tokenAnzahl ? '<span class="dim3">token history uses today\u2019s balance</span>' : "") + "</div>";
+      (tokenAnzahl ? '<span class="dim3">' + tokenKurvenHinweis() + "</span>" : "") + "</div>";
   }
 
   // ETN $ - der Wert des ETN-Bestands, wie bisher mit der 30-Tage-Aufteilung.

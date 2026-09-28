@@ -179,4 +179,22 @@ abrufe.length = 0;
 await kurvenKerzen(db, env, [BOLT], basis + 4.2 * 86400000);
 pruef(abrufe.length === 0, "am selben Tag wird dieselbe Reihe nicht zweimal geholt");
 
+// --- Bestand mitschreiben: die Kurve rechnet mit den Mengen von damals ------
+// ElectroSwap liefert nur das Heute. Was wir bei frueheren Besuchen gesehen
+// haben, muss schwerer wiegen als der heutige Bestand.
+const walletB = "0x" + "c".repeat(40);
+const basisB = basis + 10 * 86400000;
+for (let n = 0; n <= 6; n++) setzKerze(BOLT, tagVor(n, basisB), 0.001);
+db.db.prepare("INSERT OR REPLACE INTO wallet_token_tage (address, tag, token, menge) VALUES (?,?,?,?)")
+  .run(walletB, tagVor(5, basisB), BOLT, 1000);
+
+const wb = await walletTokenWerte(db, env, walletB, basisB);
+const punkt = (n) => wb.verlauf.find((p) => p.tag === tagVor(n, basisB));
+pruef(wb.echt_ab === tagVor(5, basisB), "die Antwort sagt, ab wann mit echten Mengen gerechnet wird");
+pruef(Math.abs(punkt(4).tokens_usd - 1) < 1e-6, "aufgezeichnete Menge schlaegt die Menge von heute");
+pruef(punkt(6).tokens_usd > 1000, "vor der ersten Aufzeichnung gilt weiter der heutige Bestand");
+const heutigeZeile = db.db.prepare("SELECT menge FROM wallet_token_tage WHERE address = ? AND tag = ? AND token = ?")
+  .get(walletB, tagVor(0, basisB), BOLT);
+pruef(Math.abs(heutigeZeile.menge - 15000000) < 1, "der heutige Bestand wird fuer morgen festgehalten");
+
 ende();

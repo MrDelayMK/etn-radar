@@ -240,6 +240,14 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
     .prepare('INSERT INTO wallet_wert (address, tag, tokens_usd) VALUES (?,?,?)' +
       ' ON CONFLICT(address, tag) DO UPDATE SET tokens_usd = excluded.tokens_usd')
     .bind(adr, tag, gesamt).run().catch(() => {});
+  // Und die Mengen selbst: damit ist der Verlauf ab heute echt und haengt nicht
+  // mehr davon ab, was gerade im Wallet liegt.
+  if (liste.length) {
+    await db.batch(liste.map((t) =>
+      db.prepare("INSERT INTO wallet_token_tage (address, tag, token, menge) VALUES (?,?,?,?)" +
+        " ON CONFLICT(address, tag, token) DO UPDATE SET menge = excluded.menge")
+        .bind(adr, tag, t.address, t.menge))).catch(() => {});
+  }
   // Wertkurve: heutiger Bestand, bewertet mit den Tageskursen der Vergangenheit.
   // Der Bestand von damals ist bei ElectroSwap nicht abrufbar - darum steht in
   // der Oberflaeche dabei, dass die Menge von heute gerechnet wird.
@@ -250,7 +258,27 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
   // uebersteigt die Luecke ein Zwanzigstel des Depots, faellt der Tag raus.
   // Sonst begaenne die Kurve scheinbar bei null und stiege nur deshalb an,
   // weil nach und nach Tokens einen Kurs bekommen.
+  // Aufgezeichnete Mengen: ab dem ersten Tag, an dem dieses Wallet schon einmal
+  // offen war, rechnet die Kurve mit dem Bestand VON DAMALS. Davor bleibt nur
+  // die Menge von heute - anders ist die Vergangenheit nicht zu bekommen.
+  const mengen = new Map();
+  let echtAb = null;
+  for (const z of (((await db
+    .prepare("SELECT tag, token, menge FROM wallet_token_tage WHERE address = ? AND tag >= ? ORDER BY tag")
+    .bind(adr, abTag).all().catch(() => ({ results: [] }))).results ?? []))) {
+    if (!mengen.has(z.token)) mengen.set(z.token, []);
+    mengen.get(z.token).push({ tag: z.tag, menge: z.menge });
+    if (!echtAb || z.tag < echtAb) echtAb = z.tag;
+  }
+  const mengeAm = (token, t, heuteMenge) => {
+    if (!echtAb || t < echtAb) return heuteMenge;
+    let menge = 0;
+    for (const p of mengen.get(token) ?? []) { if (p.tag > t) break; menge = p.menge; }
+    return menge;
+  };
+
   const reihen = liste.map((t) => ({
+    token: t.address,
     menge: t.menge,
     heute: t.wert_usd ?? 0,
     kerzen: (kerzen.get(t.address) ?? []).filter((k) => k.tag >= abTag),
@@ -268,7 +296,7 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
         kurs = k.schluss;
       }
       if (kurs == null) fehlt += reihe.heute;
-      else wert += kurs * reihe.menge;
+      else wert += kurs * mengeAm(reihe.token, t, reihe.menge);
     }
     if (fehlt <= luecke) verlauf.push({ tag: t, tokens_usd: wert });
   }
@@ -283,6 +311,8 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
     stand: stand ?? new Date(jetzt).toISOString(),
     // Wie viele Tokens ohne Preis dabei sind - ehrlicher als sie stumm wegzulassen.
     ohne_preis: liste.filter((t) => t.wert_usd == null).length,
+    // Ab diesem Tag steckt der aufgezeichnete Bestand in der Kurve, davor der heutige.
+    echt_ab: echtAb,
   };
 }
 
@@ -359,7 +389,9 @@ export async function kerzenAuffrischen(db, env, adressen, jetzt = Date.now()) {
     // Alte Kurse bleiben liegen: sie sind die Wertkurve der Wallets, kosten
     // nach dem ersten Abruf nichts mehr und waeren spaeter nicht mehr zu haben.
     // Erst nach gut einem Jahr faellt raus, was keine Ansicht mehr zeigt.
-    zeilen.push(db.prepare("DELETE FROM token_kerzen WHERE tag < ?").bind(new Date(jetzt - KURSE_BEHALTEN * 86400000).toISOString().slice(0, 10)));
+    const grenze = new Date(jetzt - KURSE_BEHALTEN * 86400000).toISOString().slice(0, 10);
+    zeilen.push(db.prepare("DELETE FROM token_kerzen WHERE tag < ?").bind(grenze));
+    zeilen.push(db.prepare("DELETE FROM wallet_token_tage WHERE tag < ?").bind(grenze));
     await db.batch(zeilen);
   }
   return { gefragt: geholt, kerzen: zeilen.length };
