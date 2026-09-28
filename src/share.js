@@ -69,6 +69,10 @@ export const SHARE_SONDER = {
   "week-whale": "A whale made waves this week.",
   "week-busy": "Electroneum got busier this week.",
   "week-radar": "The week in numbers.",
+  "month-bridge": "A big month at the migration bridge.",
+  "month-whale": "The whales were busy this month.",
+  "month-busy": "Electroneum picked up speed this month.",
+  "month-radar": "The month in numbers.",
   "whatif-scale": "Not a forecast. Just math.",
   "whatif-dream": "What if ETN were that big?",
   "whatif-napkin": "Napkin math for ETN.",
@@ -81,6 +85,7 @@ const SONDER_ART = {
   week: ["\u{1F5D3}", "This week", "This week on Electroneum - the full recap on ETN Radar", "/"],
   whatif: ["\u{1F9EE}", "What if", "What would one ETN cost? Do the math on ETN Radar", "/whatif"],
   price: ["\u{1F4B0}", "ETN price", "The ETN price, live on ETN Radar", "/"],
+  month: ["\u{1F4C5}", "This month", "The month on Electroneum - the full recap on ETN Radar", "/"],
 };
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

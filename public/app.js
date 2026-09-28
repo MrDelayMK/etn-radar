@@ -1501,7 +1501,7 @@ async function ladeBridgeVerlauf() {
 // ---------- Chain ----------
 // Liest nur /api/chain (src/index.js, chain()). Daraus kommen der
 // Wochenrueckblick - der steht in der Overview - sowie Tokens und Contracts.
-const CHAIN = { daten: null, text: "", bild: "week-radar" };
+const CHAIN = { daten: null, text: "", bild: "week-radar", monatText: "", monatBild: "month-radar" };
 // Overview und Chain-Reiter brauchen dieselbe Antwort: einmal holen, beide
 // zeichnen lassen. /api/chain liegt ohnehin eine Stunde im Edge-Zwischenspeicher.
 let chainLaeuft = null;
@@ -1517,6 +1517,7 @@ async function ladeChain() {
     return;
   }
   zeichneChainWoche();
+  zeichneChainMonat();
   zeichneChainTokens();
   zeichneChainNeu();
 }
@@ -1687,6 +1688,107 @@ function sparkPfad(werte, breite = 108, hoehe = 30) {
     return (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
   }).join(" ");
 }
+
+/**
+ * Monatsrueckblick. Bis zum 7. eines Monats steht hier der eben abgeschlossene
+ * Monat (fertig zum Posten), danach der laufende - dann mit dem Hinweis
+ * "so far", damit niemand eine Halbzeit fuer das Endergebnis haelt.
+ */
+function monatsBild(m) {
+  if ((m.migriert ?? 0) >= 50e6) return "month-bridge";
+  if (Math.abs(m.bewegung?.etn ?? 0) >= 50e6) return "month-whale";
+  if ((m.tx ?? 0) >= 50e6) return "month-busy";
+  return "month-radar";
+}
+
+function zeichneChainMonat() {
+  const m = CHAIN.daten?.monat;
+  const wrap = el("monatWrap");
+  if (!m || (!m.tx && !m.migriert && !m.preis)) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  el("monatTitel").textContent = m.name;
+  el("monatHinweis").textContent = m.abgeschlossen
+    ? "the full month"
+    : "so far, " + chainDatum(m.von) + " - " + chainDatum(m.bis);
+
+  const fakten = [];
+  if (m.preis) {
+    const p = ((m.preis.ende - m.preis.start) / m.preis.start) * 100;
+    const flach = Math.abs(p) < 0.1;
+    const wert = (flach ? "" : p > 0 ? "▲ +" : "▼ -") + nf(Math.abs(p), 1) + "%";
+    fakten.push(["💰",
+      "ETN <b>" + wiPreis(m.preis.ende) + "</b> · " +
+        (flach ? '<span class="dim3">unchanged</span>' : '<span class="' + (p > 0 ? "up" : "down") + '">' + wert + "</span>") +
+        ' <span class="dim3">(low ' + wiPreis(m.preis.tief) + ", high " + wiPreis(m.preis.hoch) + ")</span>",
+      "ETN " + wiPreis(m.preis.ende) + (flach ? ", unchanged" : " (" + wert + ")")]);
+  }
+  if (m.tx) {
+    const txt = kurz(m.tx) + " transactions";
+    fakten.push(["📈", "<b>" + txt + "</b>", txt]);
+  }
+  if (m.migriert) {
+    const txt = kurz(m.migriert) + " ETN migrated out of the bridge";
+    fakten.push(["🌉", "<b>" + kurz(m.migriert) + " ETN</b> migrated out of the bridge", txt]);
+  }
+  if (m.boersen && Math.abs(m.boersen.netto) >= 10000) {
+    const n = m.boersen.netto;
+    const txt = kurz(Math.abs(n)) + " ETN " + (n > 0 ? "moved onto exchanges" : "left the exchanges") + " (net)";
+    fakten.push(["🏦", "<b>" + txt + "</b>", txt]);
+  }
+  if (m.bewegung) {
+    const b = m.bewegung;
+    const verb = b.etn < 0 ? "moved out" : "received";
+    const betrag = kurz(Math.abs(b.etn)) + " ETN";
+    fakten.push(["🐋",
+      'Biggest move: <a href="/wallet/' + esc(b.address) + '" data-wallet="' + esc(b.address) + '">' +
+        (b.label ? esc(b.label) : kurzAdr(b.checksum_hash ?? b.address)) + "</a> " + verb + " <b>" + betrag + "</b>",
+      "Biggest move: " + (b.label ?? b.address.slice(0, 8) + "…" + b.address.slice(-6)) + " " + verb + " " + betrag]);
+  }
+  if (m.contracts) {
+    const txt = nf(m.contracts) + " contracts verified";
+    fakten.push(["🧱", "<b>" + nf(m.contracts) + "</b> contracts verified", txt]);
+  }
+  if (m.token) {
+    const txt = m.token.symbol + " gained the most holders: +" + nf(m.token.holders_plus);
+    fakten.push(["💎", "<b>" + esc(m.token.symbol) + "</b> gained the most holders: <b>+" + nf(m.token.holders_plus) + "</b>", txt]);
+  }
+
+  CHAIN.monatBild = monatsBild(m);
+  CHAIN.monatText = [
+    "📅 " + m.name + " on Electroneum" + (m.abgeschlossen ? "" : " (so far)"),
+    "",
+    fakten.map((x) => x[0] + " " + x[2]).join("\n"),
+    "",
+    "One month, one chain, all of it public.",
+    "",
+    "Watch it live on ETN Radar 👇",
+  ].join("\n");
+
+  el("monatKarte").innerHTML = '<ul class="wochefakten">' +
+    fakten.map((x) => "<li><i>" + x[0] + "</i><span>" + x[1] + "</span></li>").join("") + "</ul>" +
+    '<div class="sharebar"><button data-teilen>📢 Share ' + esc(m.name.split(" ")[0]) + "</button></div>";
+}
+
+el("monatKarte").addEventListener("click", (e) => {
+  const w = e.target.closest("a[data-wallet]");
+  if (w) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    investigateAddress(w.dataset.wallet);
+    return;
+  }
+  if (!e.target.closest("[data-teilen]") || !CHAIN.monatText) return;
+  const bilder = ["bridge", "whale", "busy", "radar"];
+  shareTextOeffnen({
+    titel: "📢 Share the month",
+    varianten: bilder.map((b) => [b, CHAIN.monatText, "month-" + b]),
+    wahl: Math.max(0, bilder.indexOf(CHAIN.monatBild.replace("month-", ""))),
+    url: location.origin + "/",
+  });
+});
 
 function zeichneChainTokens() {
   const liste = CHAIN.daten?.tokens ?? [];
@@ -3872,6 +3974,10 @@ const GAL_SONDER = [
   ["week", "week-whale", "A whale made waves this week"],
   ["week", "week-busy", "Electroneum got busier this week"],
   ["week", "week-radar", "The week in numbers"],
+  ["month", "month-bridge", "A big month at the migration bridge"],
+  ["month", "month-whale", "The whales were busy this month"],
+  ["month", "month-busy", "Electroneum picked up speed this month"],
+  ["month", "month-radar", "The month in numbers"],
   ["whatif", "whatif-scale", "Not a forecast. Just math."],
   ["whatif", "whatif-dream", "What if ETN were that big?"],
   ["whatif", "whatif-napkin", "Napkin math for ETN"],
@@ -3880,8 +3986,8 @@ const GAL_SONDER = [
   ["price", "price-napkin", "Napkin math on ETN"],
 ];
 const GAL_GRUPPEN = [
-  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["whatif", "🧮 What if"],
-  ["price", "💰 ETN price"], ["banner", "📡 Banner"],
+  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["month", "📅 Monthly recap"],
+  ["whatif", "🧮 What if"], ["price", "💰 ETN price"], ["banner", "📡 Banner"],
 ];
 const GAL = { filter: "alle" };
 

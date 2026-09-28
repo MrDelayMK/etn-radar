@@ -25,7 +25,23 @@ export async function chain(db, env) {
   const vorwoche = { von: tagVor(14), bis: tagVor(8) };
 
   const vor7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse, kursJetzt, kursVor7, boersen] = await Promise.all([
+  // Monatsrueckblick: bis zum 7. eines Monats der eben abgeschlossene Monat,
+  // danach der laufende bis gestern. So steht Anfang Oktober der September da,
+  // und mitten im Monat sieht man, wie er laeuft.
+  const heuteD = new Date(heute + "T00:00:00Z");
+  const frischerMonat = heuteD.getUTCDate() <= 7;
+  const monatsStart = new Date(Date.UTC(heuteD.getUTCFullYear(), heuteD.getUTCMonth() - (frischerMonat ? 1 : 0), 1));
+  const monatsEnde = frischerMonat
+    ? new Date(Date.UTC(heuteD.getUTCFullYear(), heuteD.getUTCMonth(), 0))
+    : new Date(Date.parse(heute) - 86400000);
+  const monat = {
+    von: monatsStart.toISOString().slice(0, 10),
+    bis: monatsEnde.toISOString().slice(0, 10),
+    name: monatsStart.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
+    abgeschlossen: frischerMonat,
+  };
+  const [tage, tokenZeilen, contracts, bridgeTage, bewegung, kurse, kursJetzt, kursVor7, boersen,
+    boersenMonat, bewegungMonat, monatsKurse, monatsToken] = await Promise.all([
     alle("SELECT day, tx_count FROM chain_tage WHERE day >= ? ORDER BY day", tagVor(92)),
     alle(
       "SELECT day, address, holders, transfers, supply FROM token_tage WHERE day >= ? ORDER BY day",
@@ -36,7 +52,8 @@ export async function chain(db, env) {
         " WHERE verified_at >= ? ORDER BY verified_at",
       tagVor(92)
     ),
-    alle("SELECT day, abfluss_wei FROM bridge_tage WHERE day >= ?", vorwoche.von),
+    alle("SELECT day, abfluss_wei FROM bridge_tage WHERE day >= ?",
+      monat.von < vorwoche.von ? monat.von : vorwoche.von),
     // Die groesste einzelne Bewegung der Woche, ohne die Bridge selbst.
     alle(
       "SELECT e.address, e.delta_etn, a.label, a.checksum_hash FROM events e" +
@@ -64,6 +81,29 @@ export async function chain(db, env) {
     ),
     // Netto auf bzw. von den gelabelten Boersen, gleiche Rechnung wie in Activity.
     exchange_flow(db, new URL("https://x/?from=" + woche.von + "&to=" + woche.bis)).catch(() => null),
+    exchange_flow(db, new URL("https://x/?from=" + monat.von + "&to=" + monat.bis)).catch(() => null),
+    // Groesste Einzelbewegung des Monats, ohne die Bridge.
+    alle(
+      "SELECT e.address, e.delta_etn, a.label, a.checksum_hash FROM events e" +
+        " LEFT JOIN addresses a ON a.hash = e.address" +
+        " WHERE e.detected_at >= ? AND e.detected_at < ? AND e.type IN ('gain','loss')" +
+        " AND e.address != ? ORDER BY abs(e.delta_etn) DESC LIMIT 1",
+      monat.von + "T00:00:00Z",
+      monat.bis + "T23:59:59Z",
+      bridge
+    ),
+    // Tageskurse des Monats fuer Anfang, Ende, Hoch und Tief.
+    alle(
+      "SELECT day, etn_price FROM network_daily WHERE day >= ? AND day <= ? AND etn_price > 0 ORDER BY day",
+      monat.von,
+      monat.bis
+    ),
+    // Holder der Ecosystem-Tokens am Monatsanfang, fuer den Monatsgewinner.
+    alle(
+      "SELECT day, address, holders FROM token_tage WHERE day >= ? AND day <= ? ORDER BY day",
+      monat.von,
+      monat.bis
+    ),
   ]);
 
   // Summe einer Tagesreihe ueber einen Zeitraum samt Zahl der Tage mit Wert:
@@ -183,8 +223,50 @@ export async function chain(db, env) {
     ? { start: vorher, ende: jetzt, hoch: Math.max(...alleKurse), tief: Math.min(...alleKurse) }
     : null;
 
+  // ---- Monatsrueckblick -----------------------------------------------------
+  const imMonat = (reihe, feld = "day") => reihe.filter((z) => z[feld] >= monat.von && z[feld] <= monat.bis);
+  const bm = bewegungMonat[0];
+  const monatsKurs = monatsKurse.length >= 2
+    ? {
+        start: monatsKurse[0].etn_price,
+        ende: monatsKurse[monatsKurse.length - 1].etn_price,
+        hoch: Math.max(...monatsKurse.map((k) => k.etn_price)),
+        tief: Math.min(...monatsKurse.map((k) => k.etn_price)),
+      }
+    : null;
+  // Welcher Token hat im Monat die meisten Halter dazugewonnen?
+  let tokenGewinner = null;
+  for (const t of CHAIN_TOKENS) {
+    const zeilen = monatsToken.filter((z) => z.address === t.address.toLowerCase() && z.holders != null);
+    if (zeilen.length < 2) continue;
+    const plus = zeilen[zeilen.length - 1].holders - zeilen[0].holders;
+    if (plus > 0 && (!tokenGewinner || plus > tokenGewinner.holders_plus)) {
+      tokenGewinner = { symbol: t.symbol, holders_plus: plus, holders: zeilen[zeilen.length - 1].holders };
+    }
+  }
+  const monatsDaten = {
+    ...monat,
+    tx: imMonat(tx).reduce((a, p) => a + p.n, 0) || null,
+    migriert: bridgeTage.length ? imMonat(bridgeTage).reduce((a, t) => a + inEtn(t.abfluss_wei), 0) : null,
+    contracts: contracts.filter((c) => c.verified_at.slice(0, 10) >= monat.von && c.verified_at.slice(0, 10) <= monat.bis).length,
+    preis: monatsKurs,
+    boersen: boersenMonat?.boersen_gezaehlt
+      ? {
+          netto: boersenMonat.netto_etn,
+          groesste: boersenMonat.pro_boerse[0]
+            ? { label: boersenMonat.pro_boerse[0].label, netto: boersenMonat.pro_boerse[0].netto_etn }
+            : null,
+        }
+      : null,
+    bewegung: bm
+      ? { address: bm.address, checksum_hash: bm.checksum_hash, label: bm.label, etn: bm.delta_etn }
+      : null,
+    token: tokenGewinner,
+  };
+
   const b = bewegung[0];
   return {
+    monat: monatsDaten,
     woche,
     preis,
     // Groesster Einzelposten dazu: am 18.09. stammten 427 Mio. von 479 Mio. aus
