@@ -497,9 +497,14 @@ function zeichneChart(svg, punkte, totalSupply) {
   // Ueber mehr als ein Jahr hinweg sagt der Monat samt Jahr mehr als der Tag.
   const ueberJahr =
     Date.parse(daten[daten.length - 1].day) - Date.parse(daten[0].day) > 330 * 86400000;
-  const marken = Math.max(2, Math.min(6, Math.floor((W - PL - PR) / 130)));
+  // Nie mehr Marken als Punkte: bei drei Tagen stand "Sep 24" sonst doppelt
+  // uebereinander, weil mehrere Marken auf denselben Punkt fielen.
+  const marken = Math.max(1, Math.min(6, Math.floor((W - PL - PR) / 130), daten.length - 1));
+  const gesetzt = new Set();
   const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
     const i = Math.round((n / marken) * (daten.length - 1));
+    if (gesetzt.has(i)) return "";
+    gesetzt.add(i);
     const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
     return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
       'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
@@ -4505,8 +4510,56 @@ function tokenWertReihe(mitEtn) {
 // Woher die Veraenderung der letzten 30 Tage kommt: vom Kurs oder vom Bestand.
 // Kurs-Anteil = alter Bestand x Kursdifferenz, Bestands-Anteil = Mengendifferenz
 // x heutiger Kurs - zusammen genau die Wertdifferenz.
+/**
+ * Kopfzeile ueber dem Chart - sie gehoert zur gewaehlten Ansicht:
+ *
+ *   ETN      Bestand in ETN und was sich in 30 Tagen bewegt hat
+ *   ETN $    Wert des ETN-Bestands, aufgeteilt in Kurs- und Bestandsanteil
+ *   Tokens $ Wert der Tokens und wie viele es sind
+ *   Total $  beides zusammen
+ */
 function wertKopf() {
   const p1 = preisJetzt();
+  const tokenWert = WV.tokens?.gesamt_usd ?? 0;
+  const tokenAnzahl = WV.tokens?.tokens?.length ?? 0;
+  const gross = (text) => '<div class="wertjetzt">' + text + "</div>";
+  const stark = (v) => '<b class="num">' + v + "</b>";
+
+  if (WV.modus === "etn") {
+    const tag0 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const b0 = bestandAm(tag0);
+    let zeile = "";
+    if (b0 !== undefined) {
+      const diff = WV.etn - b0;
+      const pz = b0 > 0 ? " (" + (diff >= 0 ? "▲ +" : "▼ -") + nf(Math.abs(diff / b0) * 100, 1) + "%)" : "";
+      zeile = '<div class="wertteile"><span>Last 30 days: ' +
+        (Math.abs(diff) < 0.000001
+          ? '<b class="num dim3">no change</b>'
+          : '<b class="num ' + (diff >= 0 ? "up" : "down") + '">' + (diff >= 0 ? "+" : "") + nf(diff, 0) + " ETN</b>" + pz) +
+        "</span></div>";
+    }
+    return gross("Holding " + stark(nf(WV.etn, 0) + " ETN") +
+      (p1 > 0 ? ' <span class="dim3">worth ' + dollar(WV.etn * p1) + "</span>" : "")) + zeile;
+  }
+
+  if (WV.modus === "tokens") {
+    if (!tokenAnzahl) return gross('<span class="dim3">No listed tokens in this wallet</span>');
+    return gross("Tokens worth " + stark(dollar(tokenWert)) +
+      ' <span class="dim3">in ' + tokenAnzahl + (tokenAnzahl === 1 ? " token" : " tokens") + "</span>") +
+      '<div class="wertteile"><span class="dim3">Past days use today\u2019s token balance at the price of that day - ' +
+      "ElectroSwap does not keep past balances.</span></div>";
+  }
+
+  if (WV.modus === "total") {
+    if (!(p1 > 0)) return "";
+    const etnWert = WV.etn * p1;
+    return gross("Total " + stark(dollar(etnWert + tokenWert))) +
+      '<div class="wertteile"><span>ETN <b class="num">' + dollar(etnWert) + "</b></span>" +
+      '<span>Tokens <b class="num">' + dollar(tokenWert) + "</b></span>" +
+      (tokenAnzahl ? '<span class="dim3">token history uses today\u2019s balance</span>' : "") + "</div>";
+  }
+
+  // ETN $ - der Wert des ETN-Bestands, wie bisher mit der 30-Tage-Aufteilung.
   if (!(p1 > 0)) return "";
   const b1 = WV.etn, jetzt = b1 * p1;
   const tag0 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -4525,7 +4578,7 @@ function wertKopf() {
           '<span>from the balance <b class="num ' + farbe(bestand) + '">' + (bestand >= 0 ? "+" : "") + dollar(bestand) + "</b></span>") +
       "</div>";
   }
-  return '<div class="wertjetzt">Worth <b class="num">' + dollar(jetzt) + '</b> <span class="dim3">at ' + wiPreis(p1) + " per ETN</span></div>" + zeile;
+  return gross("Worth " + stark(dollar(jetzt)) + ' <span class="dim3">at ' + wiPreis(p1) + " per ETN</span>") + zeile;
 }
 
 // Tokens, die im Wallet liegen: Menge, Preis und Wert. Ohne Treffer bleibt der

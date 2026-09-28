@@ -222,14 +222,33 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
   const gesamt = liste.reduce((s, t) => s + (t.wert_usd ?? 0), 0);
   // Tageswert mitschreiben: ElectroSwap kennt nur das Heute, die Kurve entsteht
   // erst dadurch, dass wir bei jedem Abruf einen Punkt sichern.
+  // Kursverlauf der gehaltenen Tokens besorgen - damit gibt es die Kurve sofort
+  // und nicht erst ab dem naechsten Tag.
+  await kurvenKerzen(db, env, liste.map((t) => t.address), jetzt).catch(() => {});
   const tag = new Date(jetzt).toISOString().slice(0, 10);
   await db
     .prepare('INSERT INTO wallet_wert (address, tag, tokens_usd) VALUES (?,?,?)' +
       ' ON CONFLICT(address, tag) DO UPDATE SET tokens_usd = excluded.tokens_usd')
     .bind(adr, tag, gesamt).run().catch(() => {});
-  const verlauf = ((await db
-    .prepare('SELECT tag, tokens_usd FROM wallet_wert WHERE address = ? ORDER BY tag')
-    .bind(adr).all().catch(() => ({ results: [] }))).results ?? []);
+  // Wertkurve: heutiger Bestand, bewertet mit den Tageskursen der Vergangenheit.
+  // Der Bestand von damals ist bei ElectroSwap nicht abrufbar - darum steht in
+  // der Oberflaeche dabei, dass die Menge von heute gerechnet wird.
+  const kerzen = await kerzenLesen(db);
+  const abTag = new Date(jetzt - KURVE_TAGE * 86400000).toISOString().slice(0, 10);
+  const proTag = new Map();
+  for (const t of liste) {
+    const reihe = (kerzen.get(t.address) ?? []).filter((k) => k.tag >= abTag);
+    if (!reihe.length) continue;
+    for (const k of reihe) {
+      proTag.set(k.tag, (proTag.get(k.tag) ?? 0) + k.schluss * t.menge);
+    }
+  }
+  const verlauf = [...proTag.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([t, wert]) => ({ tag: t, tokens_usd: wert }));
+  // Heute immer mit dem aktuellen Preis, nicht mit der Tageskerze.
+  if (verlauf.length && verlauf[verlauf.length - 1].tag === tag) verlauf[verlauf.length - 1].tokens_usd = gesamt;
+  else verlauf.push({ tag, tokens_usd: gesamt });
   return {
     verlauf,
     tokens: liste,
@@ -249,6 +268,9 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
  * gelesen: Zeit aus t/time/timestamp/start, Schlusskurs aus c/close.
  */
 const KERZEN_TAGE = 8;
+// Fuer die Wertkurve eines Wallets: 90 Tage je Token, einmal am Tag geholt und
+// dann von allen Besuchern geteilt (100 + 1 je Kerze = rund 190 Credits).
+const KURVE_TAGE = 90;
 
 function kerzeLesen(k) {
   if (Array.isArray(k)) return { zeit: k[0], schluss: Number(k[4] ?? k[1]) };
@@ -308,6 +330,59 @@ export async function kerzenAuffrischen(db, env, adressen, jetzt = Date.now()) {
     await db.batch(zeilen);
   }
   return { gefragt: geholt, kerzen: zeilen.length };
+}
+
+/**
+ * Genug Kerzen fuer die 90-Tage-Wertkurve der Tokens eines Wallets. Geholt wird
+ * nur, was fehlt: je Token hoechstens einmal am Tag, danach liegt die Reihe in
+ * token_kerzen und gilt fuer alle Besucher.
+ */
+export async function kurvenKerzen(db, env, adressen, jetzt = Date.now()) {
+  if (!env.ELECTROSWAP_API_KEY || !adressen.length || (await pause(db, jetzt))) return { gefragt: 0 };
+  const abTag = new Date(jetzt - KURVE_TAGE * 86400000).toISOString().slice(0, 10);
+  const platz = adressen.map(() => "?").join(",");
+  const vorhanden = new Map(((await db
+    .prepare(
+      "SELECT address, count(*) n, max(tag) neuste FROM token_kerzen WHERE address IN (" + platz + ")" +
+        " AND tag >= ? GROUP BY address"
+    )
+    .bind(...adressen, abTag)
+    .all().catch(() => ({ results: [] }))).results ?? []).map((z) => [z.address, z]));
+
+  const heute = new Date(jetzt).toISOString().slice(0, 10);
+  const gestern = new Date(jetzt - 86400000).toISOString().slice(0, 10);
+  let geholt = 0;
+  for (const adresse of adressen) {
+    const da = vorhanden.get(adresse);
+    // Genug Punkte und von heute oder gestern: nichts zu tun.
+    if (da && da.n >= 30 && da.neuste >= gestern) continue;
+    const r = await holen(
+      env,
+      "/tokens/" + KETTE + "/" + pruefsummenAdresse(adresse) + "/candles?limit=" + KURVE_TAGE + "&bucket=1d&currency=USD"
+    );
+    if (r.fehler === "bremse") {
+      await pauseSetzen(db, jetzt + r.warten * 1000);
+      break;
+    }
+    const kerzen = Array.isArray(r.daten) ? r.daten : r.daten?.candles;
+    if (!Array.isArray(kerzen) || !kerzen.length) continue;
+    geholt++;
+    const zeilen = [];
+    for (const k of kerzen) {
+      const { zeit, schluss } = kerzeLesen(k);
+      const tag = alsTag(zeit);
+      if (!tag || !(schluss > 0)) continue;
+      zeilen.push(
+        db.prepare(
+          "INSERT INTO token_kerzen (address, tag, schluss) VALUES (?,?,?)" +
+            " ON CONFLICT(address, tag) DO UPDATE SET schluss = excluded.schluss"
+        ).bind(adresse, tag, schluss)
+      );
+    }
+    if (zeilen.length) await db.batch(zeilen);
+    void heute;
+  }
+  return { gefragt: geholt };
 }
 
 /** Kerzen je Token, aelteste zuerst: Map Adresse -> [{ tag, schluss }]. */
