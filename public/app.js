@@ -4727,7 +4727,56 @@ function zeichneBestandRahmen() {
   const nft = el("invNftsWrap").style.display !== "none";
   el("invBestandWrap").style.display = tok || nft ? "" : "none";
   el("invBestandShare").hidden = !(tok || nft);
+  if (!(tok || nft)) return;
+
+  // Die Leiste sagt, worueber der Post ginge - sonst steht der Knopf nur da.
+  const p1 = preisJetzt();
+  const etnWert = p1 > 0 ? WV.etn * p1 : 0;
+  const tokenWert = tok ? WV.tokens?.gesamt_usd ?? 0 : 0;
+  const nftListe = nft ? (WV.nfts?.sammlungen ?? []).filter((x) => x.wert_usd != null) : [];
+  const nftWert = nftListe.reduce((a, x) => a + x.wert_usd, 0);
+  const stueck = nftListe.reduce((a, x) => a + x.anzahl, 0);
+  const teile = [kurz(WV.etn) + " ETN"];
+  const anzahl = tok ? WV.tokens.tokens.length : 0;
+  if (anzahl) teile.push(anzahl + (anzahl === 1 ? " token" : " tokens"));
+  if (stueck) teile.push(stueck + (stueck === 1 ? " NFT" : " NFTs") + " at floor");
+  el("invBestandSumme").innerHTML =
+    "<b>" + (etnWert + tokenWert + nftWert > 0 ? dollar(etnWert + tokenWert + nftWert) : "This wallet") +
+    " in this wallet</b><span>" + esc(teile.join(" · ")) + "</span>";
+  nftHoeheAngleichen();
 }
+
+/**
+ * Die NFT-Karte darf nicht hoeher werden als die Tokenkarte daneben: liegen
+ * zwei Tokens im Wallet, sind auch zwei NFT-Zeilen zu sehen, der Rest wird
+ * gescrollt. Nebeneinander stehen die Karten erst ab 900 Pixeln.
+ */
+function nftHoeheAngleichen() {
+  const box = el("invNftsBox"), karte = el("invTokens");
+  const liste = box?.querySelector(".nftrollen");
+  if (!liste || !box) return;
+  const nebeneinander = window.matchMedia("(min-width:901px)").matches;
+  if (!nebeneinander || !box.open || el("invTokensWrap").style.display === "none") {
+    liste.style.maxHeight = "";
+    return;
+  }
+  const stil = getComputedStyle(box);
+  const polster = parseFloat(stil.paddingTop) + parseFloat(stil.paddingBottom);
+  const kopf = box.querySelector("summary")?.getBoundingClientRect().height ?? 0;
+  const fuss = box.querySelector(".tokfuss")?.getBoundingClientRect().height ?? 0;
+  const platz = karte.getBoundingClientRect().height - kopf - fuss - polster - 4;
+  // Auf ganze Zeilen abrunden: eine halb abgeschnittene Zeile sieht nach Fehler
+  // aus, zwei ganze nach Absicht. Weniger als zwei Zeilen nie.
+  const zeile = liste.querySelector(".tokzeile")?.getBoundingClientRect().height ?? 44;
+  liste.style.maxHeight = Math.round(Math.max(2, Math.floor(platz / zeile)) * zeile) + "px";
+}
+
+el("invNftsBox").addEventListener("toggle", nftHoeheAngleichen);
+let hoehenTakt = null;
+addEventListener("resize", () => {
+  clearTimeout(hoehenTakt);
+  hoehenTakt = setTimeout(nftHoeheAngleichen, 120);
+});
 
 function zeichneWalletTokens() {
   const wrap = el("invTokensWrap");
@@ -4774,7 +4823,7 @@ function zeichneWalletNfts() {
     "<span>" + stueck + (stueck === 1 ? " NFT in " : " NFTs in ") + mitPreis.length +
     (mitPreis.length === 1 ? " collection" : " collections") + "</span>" +
     '<b class="num">' + dollar(summe) + "</b>";
-  el("invNfts").innerHTML = mitPreis.map((s) => {
+  el("invNfts").innerHTML = '<div class="nftrollen">' + mitPreis.map((s) => {
     const bild = s.bild
       ? '<img class="toklogo" src="' + esc(s.bild) + '" alt="" width="26" height="26" loading="lazy">'
       : '<span class="toklogo platzhalter">🖼️</span>';
@@ -4783,7 +4832,7 @@ function zeichneWalletNfts() {
       (s.floor_etn ? '<span class="dim3"> floor ' + kurz(s.floor_etn) + " ETN</span>" : "") + "</span>" +
       '<span class="num menge">' + s.anzahl + (s.anzahl === 1 ? " NFT" : " NFTs") + "</span>" +
       '<span class="num wert">' + dollar(s.wert_usd) + "</span></a>";
-  }).join("") +
+  }).join("") + "</div>" +
     '<div class="tokfuss"><b>Sum ' + dollar(summe) + "</b>" +
     '<span class="dim3"> · at floor price, not a valuation</span></div>';
 }

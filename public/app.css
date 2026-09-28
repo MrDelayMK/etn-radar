@@ -1243,8 +1243,19 @@ details.auswahl[open] summary{border-bottom:1px solid var(--line);padding-bottom
 .bestandgrid .spalte{min-width:0}
 .bestandgrid h2{margin-bottom:11px}
 @media (max-width:900px){.bestandgrid{grid-template-columns:1fr}}
-.bestandshare{justify-content:center;border-top:none;padding-top:0}
-.bestandshare[hidden]{display:none}
+.bestandleiste{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  margin-top:14px;padding:13px 17px;border:1px solid var(--line);border-radius:14px;
+  background:linear-gradient(90deg,rgba(91,156,255,.14),rgba(52,211,153,.07) 62%,transparent)}
+.bestandleiste[hidden]{display:none}
+.bestandleiste .txt b{font-size:15.5px;font-weight:640}
+.bestandleiste .txt span{display:block;font-size:12.5px;color:var(--tx2);margin-top:2px}
+.bestandleiste button{padding:9px 17px;font-size:13px}
+/* NFT-Liste scrollt, sobald sie hoeher waere als die Tokenkarte daneben.
+   Die Summenzeile bleibt stehen, sie gehoert nicht in den Rollbereich. */
+.nftrollen{overflow-y:auto;overscroll-behavior:contain}
+.nftrollen::-webkit-scrollbar{width:8px}
+.nftrollen::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px}
+@media (max-width:620px){.bestandleiste{flex-direction:column;align-items:stretch}.bestandleiste button{width:100%;justify-content:center}}
 
 /* Investigate: Ansicht und Zeitraum ueber dem Wallet-Chart */
 .wertwahl{display:flex;flex-direction:column;gap:7px;align-items:flex-end}
