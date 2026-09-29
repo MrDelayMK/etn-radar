@@ -2,6 +2,7 @@
 //   public/assets/share/<name>-card.jpg    Link-Vorschau 1200x630: Bild links, Satz rechts
 //   public/assets/share/<name>-square.jpg  gerahmtes 1:1-Bild 1080x1080 zum Posten
 //   public/assets/share/<name>-thumb.jpg   360x360 fuer die Galerie (Bilder-Reiter)
+//   public/assets/share/<name>-cardthumb.jpg 480x252, dieselbe Galerie als Karte
 //   public/assets/share/banner.jpg         Startseite 1200x630 mit Rahmen
 //
 // Laeuft nur lokal (Windows-Schriften, sharp als devDependency):
@@ -223,8 +224,10 @@ for (const datei of readdirSync(ROH).sort()) {
   if (!kopf) { console.log("uebersprungen (kein Satz):", name); continue; }
   await karte(quelle, kopf, kopf[3], AUS + name + "-card.jpg");
   await gerahmt(quelle, 1080, 1080, kopf[2], AUS + name + "-square.jpg");
-  // Kleines Vorschaubild fuer die Galerie im Bilder-Reiter.
+  // Kleine Vorschaubilder fuer die Galerie im Bilder-Reiter - beide Fassungen,
+  // die Galerie kann zwischen Quadrat und Karte umschalten.
   await sharp(AUS + name + "-square.jpg").resize(360, 360).jpeg({ quality: 78, mozjpeg: true }).toFile(AUS + name + "-thumb.jpg");
+  await sharp(AUS + name + "-card.jpg").resize(480, 252).jpeg({ quality: 78, mozjpeg: true }).toFile(AUS + name + "-cardthumb.jpg");
   fertig.push(name);
 }
 console.log(fertig.length + " Bilder gebaut: " + fertig.join(", "));

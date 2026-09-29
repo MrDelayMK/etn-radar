@@ -4170,14 +4170,31 @@ const GAL_SONDER = [
   ["price", "price-next", "Where does ETN go from here?"],
   ["price", "price-napkin", "Napkin math on ETN"],
 ];
+// Reihenfolge der Galerie: erst das Titelbild, dann die Bilder zu dem, was
+// gerade passiert (Kurs, Woche, Monat, Vergleich), zuletzt die 33 Stufenbilder.
 const GAL_GRUPPEN = [
-  ["alle", "All"], ["tiers", "🐋 Tiers"], ["week", "🗓️ Weekly recap"], ["month", "📅 Monthly recap"],
-  ["whatif", "🧮 What if"], ["price", "💰 ETN price"], ["banner", "📡 Banner"],
+  ["alle", "All"], ["banner", "📡 Banner"], ["price", "💰 ETN price"], ["week", "🗓️ Weekly recap"],
+  ["month", "📅 Monthly recap"], ["whatif", "🧮 What if"], ["tiers", "🐋 Tiers"],
 ];
-const GAL = { filter: "alle" };
+// Ueberschrift und Farbe je Gruppe - die Farbe ist dieselbe wie auf dem Bild.
+const GAL_ART = {
+  banner: ["📡 Banner", "#a78bfa"],
+  price: ["💰 ETN price", "#22d3a7"],
+  week: ["🗓️ Weekly recap", "#5b9cff"],
+  month: ["📅 Monthly recap", "#a78bfa"],
+  whatif: ["🧮 What if", "#fbbf24"],
+  tiers: ["🐋 Wallet tiers", "#5b9cff"],
+};
+const GAL = { filter: "alle", format: "karte" };
 
 function galEintraege() {
-  const liste = [];
+  const liste = [{ gruppe: "banner", id: "banner", farbe: GAL_ART.banner[1], titel: "📡 ETN Radar",
+    unter: "Banner", satz: "Whale and migration tracker for the Electroneum Smart Chain." }];
+  for (const [gruppe, id, satz] of GAL_SONDER) {
+    liste.push({ gruppe, id, farbe: GAL_ART[gruppe][1], titel: GAL_ART[gruppe][0],
+      // "week-bridge" -> "Bridge": sagt, zu welcher Nachricht das Bild gehoert.
+      unter: id.split("-")[1].replace(/^./, (c) => c.toUpperCase()), satz });
+  }
   for (const [tier, saetze] of Object.entries(SHARE_SAETZE)) {
     for (const [ton, satz] of saetze) {
       const id = tier + "-" + ton;
@@ -4186,32 +4203,57 @@ function galEintraege() {
         unter: SHARE_TON[ton], satz: satz.charAt(0).toUpperCase() + satz.slice(1) });
     }
   }
-  for (const [gruppe, id, satz] of GAL_SONDER) {
-    liste.push({ gruppe, id, farbe: gruppe === "week" ? "#5b9cff" : "#fbbf24",
-      titel: gruppe === "week" ? "🗓️ Weekly recap" : "🧮 What if", unter: "", satz });
-  }
-  liste.push({ gruppe: "banner", id: "banner", farbe: "#a78bfa", titel: "📡 ETN Radar", unter: "Banner", satz: "" });
-  return liste;
+  // Gruppen in der Reihenfolge der Filterleiste.
+  const rang = Object.fromEntries(GAL_GRUPPEN.map(([k], i) => [k, i]));
+  return liste.sort((a, b) => rang[a.gruppe] - rang[b.gruppe]);
 }
 
+/**
+ * Jedes Bild gibt es zweimal: als Quadrat (das Bild selbst) und als breite
+ * Karte mit dem Satz daneben. Die Karte ist genau das, was X und Telegram
+ * zeigen, wenn man den Link /s/<bild> postet - darum steht der Link mit dabei.
+ * Ohne ihn bliebe nur das Bild als Datei, und dann ist es eben ein Quadrat.
+ */
+const galLink = (id) => location.origin + (id === "banner" ? "/" : "/s/" + id);
+
 function zeichneGalerie() {
+  const liste = galEintraege();
+  const zaehler = {};
+  for (const b of liste) zaehler[b.gruppe] = (zaehler[b.gruppe] ?? 0) + 1;
   el("galFilter").innerHTML = GAL_GRUPPEN.map(([k, t]) =>
-    '<button class="ghost' + (GAL.filter === k ? " on" : "") + '" data-g="' + k + '">' + t + "</button>").join("");
+    '<button class="ghost' + (GAL.filter === k ? " on" : "") + '" data-g="' + k + '">' + t +
+    '<i class="anz">' + (k === "alle" ? liste.length : zaehler[k] ?? 0) + "</i></button>").join("");
+  el("galFormat").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.f === GAL.format));
+
   const pfad = (datei) => "/assets/share/" + datei;
   const laden = (datei, text) =>
     '<a class="galknopf" href="' + pfad(datei) + '" download="etn-radar-' + datei + '">' + text + "</a>";
-  el("galerie").innerHTML = galEintraege()
-    .filter((b) => GAL.filter === "alle" || b.gruppe === GAL.filter)
+
+  const gezeigt = liste.filter((b) => GAL.filter === "alle" || b.gruppe === GAL.filter);
+  let letzte = null;
+  el("galerie").innerHTML = gezeigt
     .map((b) => {
-      const breit = b.id === "banner";
-      const vorschau = breit ? "banner-thumb.jpg" : b.id + "-thumb.jpg";
-      const knoepfe = breit
+      // Bei "All" trennen Ueberschriften die Gruppen - 47 Bilder am Stueck
+      // sind sonst nur eine Wand.
+      const kopf = GAL.filter === "alle" && b.gruppe !== letzte
+        ? '<h3 class="galgruppe" style="--f:' + GAL_ART[b.gruppe][1] + '">' + GAL_ART[b.gruppe][0] +
+          '<span>' + (zaehler[b.gruppe] ?? 0) + "</span></h3>"
+        : "";
+      letzte = b.gruppe;
+      const breit = GAL.format === "karte" || b.id === "banner";
+      const vorschau = b.id === "banner"
+        ? "banner-thumb.jpg"
+        : breit ? b.id + "-cardthumb.jpg" : b.id + "-thumb.jpg";
+      const gross = b.id === "banner" ? "banner.jpg" : breit ? b.id + "-card.jpg" : b.id + "-square.jpg";
+      const knoepfe = (b.id === "banner"
         ? laden("banner.jpg", "⬇️ Banner")
-        : laden(b.id + "-square.jpg", "⬇️ Square") + laden(b.id + "-card.jpg", "⬇️ Wide");
-      return '<figure class="galbild' + (breit ? " breit" : "") + '" style="--f:' + b.farbe + '">' +
-        '<a href="' + pfad(breit ? "banner.jpg" : b.id + "-square.jpg") + '" target="_blank" rel="noopener">' +
+        : laden(b.id + "-square.jpg", "⬇️ Square") + laden(b.id + "-card.jpg", "⬇️ Wide")) +
+        '<button type="button" class="galknopf" data-galllink="' + esc(b.id) + '">🔗 Link</button>';
+      return kopf +
+        '<figure class="galbild' + (breit ? " breit" : "") + '" style="--f:' + b.farbe + '">' +
+        '<a href="' + pfad(gross) + '" target="_blank" rel="noopener">' +
         '<img src="' + pfad(vorschau) + '" alt="' + esc(b.titel + (b.satz ? ": " + b.satz : "")) +
-        '" loading="lazy" width="360" height="' + (breit ? 189 : 360) + '"></a>' +
+        '" loading="lazy" width="' + (breit ? 480 : 360) + '" height="' + (breit ? 252 : 360) + '"></a>' +
         "<figcaption><div class=\"galkopf\"><b>" + b.titel + "</b>" +
         (b.unter ? "<span>" + esc(b.unter) + "</span>" : "") + "</div>" +
         (b.satz ? '<div class="galsatz">' + esc(b.satz) + "</div>" : "") +
@@ -4225,6 +4267,21 @@ el("galFilter").addEventListener("click", (e) => {
   if (!b) return;
   GAL.filter = b.dataset.g;
   zeichneGalerie();
+});
+
+el("galFormat").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-f]");
+  if (!b || b.dataset.f === GAL.format) return;
+  GAL.format = b.dataset.f;
+  zeichneGalerie();
+});
+
+// Der Link zum Bild: gepostet zeigen X und Telegram die breite Karte, der
+// Klick landet auf ETN Radar. Kein Wallet noetig.
+el("galerie").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-galllink]");
+  if (!b) return;
+  linkKopieren(b, galLink(b.dataset.galllink));
 });
 
 // --- Eigener Rahmen ---------------------------------------------------------
@@ -4834,27 +4891,38 @@ function zeichneBestandRahmen() {
 }
 
 /**
- * Die NFT-Karte darf nicht hoeher werden als die Tokenkarte daneben: liegen
- * zwei Tokens im Wallet, sind auch zwei NFT-Zeilen zu sehen, der Rest wird
- * gescrollt. Nebeneinander stehen die Karten erst ab 900 Pixeln.
+ * Tokens und NFTs stehen nebeneinander und bekommen deshalb dieselbe feste
+ * Hoehe: Platz fuer fuenf Zeilen, alles darueber wird gescrollt. Sonst haengt
+ * die Form der Seite davon ab, was zufaellig im Wallet liegt - ein Token neben
+ * neun Sammlungen sah aus, als waere etwas kaputt. Untereinander (Handy)
+ * waechst jede Karte wieder mit ihrem Inhalt.
  */
+const BESTAND_ZEILEN = 5;
+
 function nftHoeheAngleichen() {
-  const box = el("invNftsBox"), karte = el("invTokens");
-  const liste = box?.querySelector(".nftrollen");
-  if (!liste || !box) return;
+  const karten = [el("invTokens"), el("invNftsBox")].filter(Boolean);
+  if (!karten.length) return;
   const nebeneinander = window.matchMedia("(min-width:901px)").matches;
-  if (!nebeneinander || el("invTokensWrap").style.display === "none") {
-    liste.style.maxHeight = "";
+  if (!nebeneinander) {
+    for (const k of karten) { k.style.height = ""; k.querySelector(".tokrollen,.nftrollen") && (k.querySelector(".tokrollen,.nftrollen").style.height = ""); }
     return;
   }
-  const stil = getComputedStyle(box);
-  const polster = parseFloat(stil.paddingTop) + parseFloat(stil.paddingBottom);
-  const fuss = box.querySelector(".tokfuss")?.getBoundingClientRect().height ?? 0;
-  const platz = karte.getBoundingClientRect().height - fuss - polster - 4;
-  // Auf ganze Zeilen abrunden: eine halb abgeschnittene Zeile sieht nach Fehler
-  // aus, zwei ganze nach Absicht. Weniger als zwei Zeilen nie.
-  const zeile = liste.querySelector(".tokzeile")?.getBoundingClientRect().height ?? 44;
-  liste.style.maxHeight = Math.round(Math.max(2, Math.floor(platz / zeile)) * zeile) + "px";
+  // Die hoechste Zeile und die hoechste Fusszeile geben das Mass vor, damit
+  // beide Karten wirklich gleich hoch werden und nicht nur ungefaehr.
+  let zeile = 0, fuss = 0, polster = 0;
+  for (const k of karten) {
+    zeile = Math.max(zeile, k.querySelector(".tokzeile")?.getBoundingClientRect().height ?? 0);
+    fuss = Math.max(fuss, k.querySelector(".tokfuss")?.getBoundingClientRect().height ?? 0);
+    const stil = getComputedStyle(k);
+    polster = Math.max(polster, parseFloat(stil.paddingTop) + parseFloat(stil.paddingBottom));
+  }
+  if (!zeile) zeile = 45;
+  const hoehe = Math.round(BESTAND_ZEILEN * zeile + fuss + polster + 10);
+  for (const k of karten) {
+    k.style.height = hoehe + "px";
+    const liste = k.querySelector(".tokrollen,.nftrollen");
+    if (liste) liste.style.height = "";
+  }
 }
 
 let hoehenTakt = null;
@@ -4881,7 +4949,7 @@ function zeichneWalletTokens() {
   }).join("");
   // Tokens und ETN zusammen: der Chart daneben zeigt nur ETN, die Summe gehoert hierher.
   const etnWert = preisJetzt() > 0 ? WV.etn * preisJetzt() : null;
-  el("invTokens").innerHTML = zeilen +
+  el("invTokens").innerHTML = '<div class="tokrollen">' + zeilen + "</div>" +
     '<div class="tokfuss">' +
     '<b>Tokens ' + dollar(d.gesamt_usd) + "</b>" +
     (etnWert != null
