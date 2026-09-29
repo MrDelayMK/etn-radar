@@ -49,6 +49,9 @@ const SONDER = {
   "price-hype": ["ETN price", "Electroneum", "#22d3a7", "Electroneum is on the move."],
   "price-next": ["ETN price", "Electroneum", "#22d3a7", "Where does ETN go from here?"],
   "price-napkin": ["ETN price", "Electroneum", "#22d3a7", "Napkin math on ETN."],
+  "hold-proud": ["Holdings", "Electroneum", "#34d399", "More than just ETN in there."],
+  "hold-calm": ["Holdings", "Electroneum", "#34d399", "What one Electroneum wallet holds."],
+  "hold-funny": ["Holdings", "Electroneum", "#34d399", "Collecting the whole ecosystem."],
 };
 // Die Saetze kommen aus SHARE_SAETZE in public/app.js - so steht auf dem Bild
 // immer genau der Satz, den der Teilen-Dialog daneben anbietet.
@@ -209,9 +212,13 @@ async function karte(quelle, [tierName, ab, farbe], satz, ziel) {
 }
 
 mkdirSync(AUS, { recursive: true });
+// Ohne Argument alles, mit Argumenten nur diese Bilder - so schreibt ein
+// Nachzuegler nicht alle 47 Dateien neu.
+const nur = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 const fertig = [];
 for (const datei of readdirSync(ROH).sort()) {
   const name = datei.replace(/\.(jpe?g|png|webp)$/i, "");
+  if (nur.length && !nur.includes(name)) continue;
   const quelle = ROH + datei;
   if (name === "banner") {
     await gerahmt(quelle, 1200, 630, "#8b8cf8", AUS + "banner.jpg");

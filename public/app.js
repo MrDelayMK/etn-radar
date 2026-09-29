@@ -3873,7 +3873,12 @@ function shareInhaltRoh(weg) {
       : SHARE_FREMD.varianten?.[SHARE_WAHL]?.[1] ?? SHARE_FREMD.text;
     // Als Karte fuehrt der Link ueber /s/<bild>, damit X und Telegram genau
     // dieses Bild als Vorschau zeigen; als Foto geht die Datei selbst raus.
-    if (format === "karte" && weg === "link") return { text, url: location.origin + "/s/" + shareBildId() };
+    if (format === "karte" && weg === "link") {
+      // Haengt eine Wallet am Post (Bestaende), nimmt der Link sie mit: die
+      // Vorschau zeigt das Bild, der Klick oeffnet genau dieses Wallet.
+      const w = SHARE_AUSWAHL?.opt?.adresse && CUR_WALLET ? "?w=" + CUR_WALLET.address : "";
+      return { text, url: location.origin + "/s/" + shareBildId() + w };
+    }
     if (format !== "text") return { text, url: "" };
     return { text, url: SHARE_FREMD.url };
   }
@@ -4166,6 +4171,9 @@ const GAL_SONDER = [
   ["whatif", "whatif-scale", "Not a forecast. Just math."],
   ["whatif", "whatif-dream", "What if ETN were that big?"],
   ["whatif", "whatif-napkin", "Napkin math for ETN"],
+  ["hold", "hold-proud", "More than just ETN in there"],
+  ["hold", "hold-calm", "What one Electroneum wallet holds"],
+  ["hold", "hold-funny", "Collecting the whole ecosystem"],
   ["price", "price-hype", "Electroneum is on the move"],
   ["price", "price-next", "Where does ETN go from here?"],
   ["price", "price-napkin", "Napkin math on ETN"],
@@ -4173,13 +4181,14 @@ const GAL_SONDER = [
 // Reihenfolge der Galerie: erst das Titelbild, dann die Bilder zu dem, was
 // gerade passiert (Kurs, Woche, Monat, Vergleich), zuletzt die 33 Stufenbilder.
 const GAL_GRUPPEN = [
-  ["alle", "All"], ["banner", "📡 Banner"], ["price", "💰 ETN price"], ["week", "🗓️ Weekly recap"],
-  ["month", "📅 Monthly recap"], ["whatif", "🧮 What if"], ["tiers", "🐋 Tiers"],
+  ["alle", "All"], ["banner", "📡 Banner"], ["price", "💰 ETN price"], ["hold", "💼 Holdings"],
+  ["week", "🗓️ Weekly recap"], ["month", "📅 Monthly recap"], ["whatif", "🧮 What if"], ["tiers", "🐋 Tiers"],
 ];
 // Ueberschrift und Farbe je Gruppe - die Farbe ist dieselbe wie auf dem Bild.
 const GAL_ART = {
   banner: ["📡 Banner", "#a78bfa"],
   price: ["💰 ETN price", "#22d3a7"],
+  hold: ["💼 Holdings", "#34d399"],
   week: ["🗓️ Weekly recap", "#5b9cff"],
   month: ["📅 Monthly recap", "#a78bfa"],
   whatif: ["🧮 What if", "#fbbf24"],
@@ -5077,7 +5086,7 @@ function bestandTeilen() {
 
   shareTextOeffnen({
     titel: "📢 Share these holdings",
-    varianten: BESTAND_TON.map(([ton]) => [ton, "", null]),
+    varianten: BESTAND_TON.map(([ton]) => [ton, "", "hold-" + ton]),
     auswahl: { eintraege, aktiv: new Set(eintraege.map((e) => e.id)), bauen,
       opt: { mein: false, preis: true, adresse: true, urlMit: location.origin + "/wallet/" + d.address } },
     url: location.origin + "/wallet/" + d.address,
