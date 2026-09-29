@@ -2073,19 +2073,31 @@ const WI = { daten: null, coin: null, nurMigriert: false };
 
 // [Stimmung, Bild, Rechenzeile, Schlusszeile vor dem Link]
 // Aufbau wie bei allen Posts: Haken, Zahlen je Zeile, ein Satz, Schlusszeile.
-// zahl(coin, neuerPreis, faktor, heute) baut den mittleren Block.
+// zahl(k) baut den mittleren Block aus { c Name, s Kuerzel, rang, cap, p
+// neuer Preis, x Faktor, h heutiger Preis, er Rang von ETN }. Der Rang des
+// anderen Coins steht bewusst mit drin: ohne ihn sagt "Cardanos Marktkapi-
+// talisierung" nichts darueber, wie weit weg das eigentlich ist.
 const WI_TEXTE = [
   ["calm", "whatif-scale",
-    (c, p, x, h) => ["📊 What if ETN had " + c + "'s market cap?", "",
-      "💰 " + h + " per ETN today", "🎯 With " + c + "'s cap: " + p + " per ETN", "✖️ That is ×" + x + " from here"].join("\n"),
+    (k) => ["📊 What if ETN had " + k.c + "'s market cap?", "",
+      "💰 " + k.h + " per ETN today" + (k.er ? " · rank #" + k.er : ""),
+      "🏅 " + k.c + " is rank #" + k.rang + " at " + k.cap,
+      "🎯 With that cap: " + k.p + " per ETN",
+      "✖️ That is ×" + k.x + " from here"].join("\n"),
     "Not a forecast, just math. Try any coin on ETN Radar 👇"],
   ["proud", "whatif-dream",
-    (c, p, x, h) => ["🔭 Imagine ETN as big as " + c + ".", "",
-      "💰 " + h + " per ETN today", "📈 At " + c + "'s size: " + p + " per ETN", "✖️ ×" + x + " from where we are"].join("\n"),
+    (k) => ["🔭 Imagine ETN as big as " + k.c + ".", "",
+      "💰 " + k.h + " per ETN today" + (k.er ? ", sitting at #" + k.er : ""),
+      "🏆 " + k.c + " holds #" + k.rang + " with " + k.cap,
+      "📈 At that size: " + k.p + " per ETN",
+      "✖️ ×" + k.x + " from where we are"].join("\n"),
     "Dreaming is free, the math is on ETN Radar 👇"],
   ["funny", "whatif-napkin",
-    (c, p, x, h) => ["🧮 Napkin math, " + c + " edition.", "",
-      "💰 ETN today: " + h, "🎯 At " + c + "'s market cap: " + p, "✖️ That is a ×" + x + " napkin"].join("\n"),
+    (k) => ["🧮 Napkin math, " + k.c + " edition.", "",
+      "💰 ETN today: " + k.h + (k.er ? " (#" + k.er + ")" : ""),
+      "🏅 " + k.c + ": #" + k.rang + ", " + k.cap,
+      "🎯 Same cap, spread over ETN: " + k.p,
+      "✖️ That is a ×" + k.x + " napkin"].join("\n"),
     "My calculator needed a minute. Do yours on ETN Radar 👇"],
 ];
 
@@ -2307,9 +2319,17 @@ el("wiErgebnis").addEventListener("click", (e) => {
   if (!r) return;
   // Der Hinweis gehoert zur Zahl, nicht hinter die Aufforderung vor dem Link.
   const zusatz = WI.nurMigriert ? "\nCounting migrated ETN only - an estimate." : "";
+  const k = {
+    c: r.coin.n,
+    rang: nf(r.coin.r),
+    cap: wiCap(r.coin.c),
+    p: wiPreis(r.preis),
+    x: wiFaktor(r.faktor),
+    h: wiPreis(WI.daten.etn.preis),
+    er: WI.daten.etn.rang ? nf(WI.daten.etn.rang) : null,
+  };
   const varianten = WI_TEXTE.map(([ton, bild, zahl, schluss]) =>
-    [ton, zahl(r.coin.n, wiPreis(r.preis), wiFaktor(r.faktor), wiPreis(WI.daten.etn.preis)) +
-      zusatz + "\n\n" + schluss, bild]);
+    [ton, zahl(k) + zusatz + "\n\n" + schluss, bild]);
   shareTextOeffnen({
     titel: "📢 Share this comparison",
     varianten,
