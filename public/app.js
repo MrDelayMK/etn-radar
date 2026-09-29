@@ -461,7 +461,10 @@ function zeichneChart(svg, punkte, totalSupply) {
   // Reicht die Zeichnung bis zum Stichtag, braucht der rechte Rand Platz fuer
   // die beiden Endstaende.
   const prog = svg._prognose;
-  const PT = 18, PB = 34, PL = svg._totalSupply ? 104 : 74, PR = prog ? 58 : 14;
+  const eng = W < 430;
+  const PT = 18, PB = 34;
+  const PL = svg._totalSupply ? (eng ? 68 : 104) : eng ? 58 : 74;
+  const PR = prog && !eng ? 58 : 14;
   // Wallet-Chart im Dollar-Modus: dieselbe Kurve, Werte in USD, gruen statt gold.
   const usd = !!svg._usd;
   const farbe = usd ? "#34d399" : "#fbbf24";
@@ -515,11 +518,13 @@ function zeichneChart(svg, punkte, totalSupply) {
       strich(yTyp, "#f4635e", "2 4", 2) +
       '<line x1="' + xE.toFixed(1) + '" y1="' + PT + '" x2="' + xE.toFixed(1) + '" y2="' + (H - PB) +
       '" stroke="#f4635e" stroke-width="1" stroke-dasharray="3 4" opacity=".55"/>' +
-      '<text x="' + (xE - 6) + '" y="' + (PT + 11) + '" fill="#f4635e" font-size="11" text-anchor="end" ' +
-      'letter-spacing=".08em">DEADLINE</text>' +
-      marke(yPace, prog.rest, "#fbbf24") +
-      // Liegen beide Enden aufeinander, wuerde die zweite Zahl die erste ueberschreiben.
-      (Math.abs(yTyp - yPace) > 13 ? marke(yTyp, prog.restTypisch, "#f4635e") : "");
+      // Auf schmalen Schirmen steht unter der Linie ohnehin das Datum, und das
+      // Wort liegt dort genau auf der Prognoselinie.
+      (eng ? "" : '<text x="' + (xE - 6) + '" y="' + (PT + 11) + '" fill="#f4635e" font-size="11" ' +
+        'text-anchor="end" letter-spacing=".08em">DEADLINE</text>') +
+      (eng ? "" : marke(yPace, prog.rest, "#fbbf24") +
+        // Liegen beide Enden aufeinander, wuerde die zweite Zahl die erste ueberschreiben.
+        (Math.abs(yTyp - yPace) > 13 ? marke(yTyp, prog.restTypisch, "#f4635e") : ""));
   }
 
   // Werteachse links, ausserhalb der Zeichenflaeche - dadurch ueberlagert die
@@ -527,7 +532,7 @@ function zeichneChart(svg, punkte, totalSupply) {
   const linien = [0, .25, .5, .75, 1].map((f) => {
     const y = PT + f * (H - PT - PB);
     const wert = hi - f * (hi - lo);
-    const pctLbl = svg._totalSupply ? " (" + nf(wert / svg._totalSupply * 100, 1) + "%)" : "";
+    const pctLbl = svg._totalSupply && !eng ? " (" + nf(wert / svg._totalSupply * 100, 1) + "%)" : "";
     return '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y +
       '" stroke="#1e293b" stroke-width="1"/>' +
       '<text x="' + (PL - 10) + '" y="' + (y + 4) + '" fill="#7d8ba3" font-size="12.5" ' +
