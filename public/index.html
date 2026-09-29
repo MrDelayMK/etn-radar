@@ -238,8 +238,12 @@
         </div>
         <div class="stats" id="migStats">
           <div class="fact"><div class="k">Days to deadline</div><div class="v num" id="daysLeft">&mdash;</div></div>
-          <div class="fact"><div class="k">Migrating / day</div><div class="v num" id="perDay">&mdash;</div></div>
-          <div class="fact"><div class="k">Needed / day</div><div class="v num" id="perDayNeeded">&mdash;</div></div>
+          <div class="fact"><div class="k">Migrating / day</div><div class="v num" id="perDay">&mdash;</div>
+            <div class="s" id="perDaySub"></div></div>
+          <div class="fact"><div class="k">Typical day</div><div class="v num" id="perDayTyp">&mdash;</div>
+            <div class="s">median of that window</div></div>
+          <div class="fact"><div class="k">Needed / day</div><div class="v num" id="perDayNeeded">&mdash;</div>
+            <div class="s">to empty the bridge in time</div></div>
           <div class="fact"><div class="k">Already migrated</div><div class="v num" id="circ">&mdash;</div></div>
         </div>
       </div>
@@ -262,6 +266,12 @@
           <svg class="chart" id="bridgeChart"></svg>
           <div class="tip" id="chartTip"></div>
         </div>
+        <div class="miglegende" id="migLegende" hidden>
+          <span><i class="ist"></i>what really crossed</span>
+          <span><i class="pace"></i>if the last <b id="legFenster">120</b> days repeat</span>
+          <span><i class="typ"></i>at a typical day's pace</span>
+          <span><i class="soll"></i>needed to finish in time</span>
+        </div>
       </div>
 
       <div class="migbar"><i class="done" id="migDone" style="width:0%"></i><i class="rest"></i>
@@ -279,10 +289,11 @@
       <div class="burnhead">
         <span class="tag-burn">Deadline forecast</span>
         <span class="dim3" id="burnDeadline">&mdash;</span>
-        <button class="infoBtn" data-info="Straight-line projection: today's amount still to migrate, minus the recent daily migration rate, times the days left. It assumes the pace stays exactly as it is - it will not. Treat it as 'what if nothing changes', not as a prediction.">ⓘ</button>
+        <button class="infoBtn" data-info="Straight-line projection, drawn as a range. The low end takes the average daily outflow of the last 120 days and assumes it repeats until the deadline - that average is lifted by single huge migrations. The high end uses the median day of the same window, so one big transfer does not count. Neither is a prediction; both answer 'what if nothing changes'.">ⓘ</button>
       </div>
       <div class="burnbig num" id="burnEtn">&mdash;</div>
       <div class="burnsub" id="burnSub">&mdash;</div>
+      <div class="burnbasis" id="burnBasis"></div>
       <div class="burnbar"><i id="burnBarDone"></i><i class="burn"></i></div>
       <div class="burnverdict" id="burnVerdict">&mdash;</div>
     </div>

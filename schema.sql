@@ -680,15 +680,6 @@ CREATE TABLE IF NOT EXISTS wallet_nfts (
   PRIMARY KEY (address, sammlung)
 );
 
--- Tageswert der Tokens eines Wallets. ElectroSwap kennt nur den heutigen
--- Bestand, darum schreiben wir bei jedem Abruf mit - die Kurve waechst ab dem
--- ersten Besuch.
-CREATE TABLE IF NOT EXISTS wallet_wert (
-  address    TEXT NOT NULL,
-  tag        TEXT NOT NULL,
-  tokens_usd REAL NOT NULL,
-  PRIMARY KEY (address, tag)
-);
 
 -- Bestand je Token und Tag. ElectroSwap liefert nur das Heute, darum halten
 -- wir bei jedem Abruf fest, was drin lag - ab dem ersten Besuch rechnet die

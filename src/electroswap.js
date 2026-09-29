@@ -230,18 +230,12 @@ export async function walletTokenWerte(db, env, adresse, jetzt = Date.now()) {
   });
   liste.sort((a, b) => (b.wert_usd ?? -1) - (a.wert_usd ?? -1));
   const gesamt = liste.reduce((s, t) => s + (t.wert_usd ?? 0), 0);
-  // Tageswert mitschreiben: ElectroSwap kennt nur das Heute, die Kurve entsteht
-  // erst dadurch, dass wir bei jedem Abruf einen Punkt sichern.
   // Kursverlauf der gehaltenen Tokens besorgen - damit gibt es die Kurve sofort
   // und nicht erst ab dem naechsten Tag.
   await kurvenKerzen(db, env, liste.map((t) => t.address), jetzt).catch(() => {});
   const tag = new Date(jetzt).toISOString().slice(0, 10);
-  await db
-    .prepare('INSERT INTO wallet_wert (address, tag, tokens_usd) VALUES (?,?,?)' +
-      ' ON CONFLICT(address, tag) DO UPDATE SET tokens_usd = excluded.tokens_usd')
-    .bind(adr, tag, gesamt).run().catch(() => {});
-  // Und die Mengen selbst: damit ist der Verlauf ab heute echt und haengt nicht
-  // mehr davon ab, was gerade im Wallet liegt.
+  // Bestand je Token festhalten: ElectroSwap kennt nur das Heute, die echte
+  // Kurve entsteht erst dadurch, dass wir bei jedem Abruf mitschreiben.
   if (liste.length) {
     await db.batch(liste.map((t) =>
       db.prepare("INSERT INTO wallet_token_tage (address, tag, token, menge) VALUES (?,?,?,?)" +

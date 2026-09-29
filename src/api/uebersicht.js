@@ -57,17 +57,35 @@ export async function overview(db, env) {
   ).results;
 
   let proTag = null;
+  let typischProTag = null;
   let restBeiDeadline = null;
+  let restTypisch = null;
   let tageBisDeadline = null;
+  let groesster = null;
+  let fensterTage = null;
   if (bReihe.length >= 2) {
     const a = bReihe[0];
     const b = bReihe[bReihe.length - 1];
     const tage = Math.max(1, (Date.parse(b.day) - Date.parse(a.day)) / 86400000);
     const diff = a.etn - b.etn;
     proTag = diff / tage;
+    fensterTage = Math.round(tage);
     const dl = Date.parse(env.MIGRATION_DEADLINE + "T00:00:00Z");
     tageBisDeadline = Math.max(0, Math.round((dl - Date.now()) / 86400000));
     restBeiDeadline = Math.max(0, bridgeEtn - proTag * tageBisDeadline);
+
+    // Der Schnitt haengt an einzelnen Riesen-Migrationen: EIN Tag mit 2,19 Mrd.
+    // hebt ihn um das Zehnfache. Der Median sagt daneben, was an einem
+    // gewoehnlichen Tag wirklich ueber die Bruecke geht - erst beide zusammen
+    // sind eine ehrliche Spanne statt einer Zahl, die nach Plan aussieht.
+    const tages = [];
+    for (let i = 1; i < bReihe.length; i++) {
+      tages.push({ tag: bReihe[i].day, etn: Math.max(0, bReihe[i - 1].etn - bReihe[i].etn) });
+    }
+    const sortiert = tages.map((t) => t.etn).sort((a, b) => a - b);
+    typischProTag = sortiert.length ? sortiert[Math.floor(sortiert.length / 2)] : 0;
+    groesster = tages.reduce((a, t) => (a && a.etn >= t.etn ? a : t), null);
+    restTypisch = Math.max(0, bridgeEtn - typischProTag * tageBisDeadline);
   }
 
   // Tier-Verteilung.
@@ -240,6 +258,12 @@ export async function overview(db, env) {
       abfluss_pro_tag: proTag,
       rest_bei_deadline: restBeiDeadline,
       anteil_bei_deadline: supply && restBeiDeadline != null ? restBeiDeadline / supply : null,
+      // Zweites, vorsichtigeres Tempo: der Median der Tagesabfluesse.
+      abfluss_typisch: typischProTag,
+      rest_bei_deadline_typisch: restTypisch,
+      anteil_bei_deadline_typisch: supply && restTypisch != null ? restTypisch / supply : null,
+      fenster_tage: fensterTage,
+      groesster_tag: groesster && groesster.etn > 0 ? groesster : null,
     },
     holder: {
       ueber_1m: heute?.holders_1m ?? null,

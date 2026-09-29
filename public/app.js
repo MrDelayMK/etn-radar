@@ -458,7 +458,10 @@ function zeichneChart(svg, punkte, totalSupply) {
     return;
   }
 
-  const PT = 18, PB = 34, PL = svg._totalSupply ? 104 : 74, PR = 14;
+  // Reicht die Zeichnung bis zum Stichtag, braucht der rechte Rand Platz fuer
+  // die beiden Endstaende.
+  const prog = svg._prognose;
+  const PT = 18, PB = 34, PL = svg._totalSupply ? 104 : 74, PR = prog ? 58 : 14;
   // Wallet-Chart im Dollar-Modus: dieselbe Kurve, Werte in USD, gruen statt gold.
   const usd = !!svg._usd;
   const farbe = usd ? "#34d399" : "#fbbf24";
@@ -466,20 +469,58 @@ function zeichneChart(svg, punkte, totalSupply) {
   const ys = daten.map((p) => p.etn);
   const min = Math.min(...ys), max = Math.max(...ys);
   const spanne = max - min || Math.abs(max) * 0.02 || 1;
-  // Nie unter null: ein Bestand oder Wert kann nicht negativ werden.
-  const lo = min >= 0 ? Math.max(0, min - spanne * 0.12) : min - spanne * 0.12;
+  // Nie unter null: ein Bestand oder Wert kann nicht negativ werden. Mit
+  // Prognose bis null, sonst haengt die Soll-Linie ausserhalb des Bildes.
+  const lo = prog ? 0 : min >= 0 ? Math.max(0, min - spanne * 0.12) : min - spanne * 0.12;
   // Mehr als die gesamte Menge kann nie in der Bridge liegen - sonst stuende
   // bei der ganzen Historie "106 %" an der obersten Linie.
   const hi = svg._totalSupply
     ? Math.min(max + spanne * 0.12, Math.max(max, svg._totalSupply))
     : max + spanne * 0.12;
 
-  const X = (i) => PL + (i / (daten.length - 1)) * (W - PL - PR);
+  // Die x-Achse zaehlt Schritte, nicht Punkte: hinter dem letzten Tag liegen
+  // bei der Migration noch die Tage bis zum Stichtag.
+  const bisStichtag = prog
+    ? Math.round((Date.parse(prog.deadline + "T00:00:00Z") - Date.parse(daten[daten.length - 1].day)) / 86400000)
+    : 0;
+  const schritte = daten.length - 1 + Math.max(0, bisStichtag);
+  const X = (i) => PL + (i / schritte) * (W - PL - PR);
   const Y = (v) => H - PB - ((v - lo) / (hi - lo)) * (H - PT - PB);
+  const tagBei = (i) => i < daten.length
+    ? daten[i].day
+    : new Date(Date.parse(daten[daten.length - 1].day) + (i - daten.length + 1) * 86400000)
+        .toISOString().slice(0, 10);
 
   let d = "";
   daten.forEach((p, i) => { d += (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.etn).toFixed(1); });
   const flaeche = d + "L" + X(daten.length - 1) + " " + (H - PB) + "L" + PL + " " + (H - PB) + "Z";
+
+  // Prognose: von heute bis zum Stichtag. Zwei Tempi spannen die Flaeche auf,
+  // die gruene Linie zeigt, wo es hingehen muesste.
+  let zukunft = "";
+  if (prog && bisStichtag > 0) {
+    const x0 = X(daten.length - 1), y0 = Y(ys[ys.length - 1]), xE = X(schritte);
+    const yPace = Y(Math.max(0, prog.rest)), yTyp = Y(Math.max(0, prog.restTypisch)), yNull = Y(0);
+    const strich = (y, farbe, muster, breite) =>
+      '<path d="M' + x0.toFixed(1) + " " + y0.toFixed(1) + "L" + xE.toFixed(1) + " " + y.toFixed(1) +
+      '" fill="none" stroke="' + farbe + '" stroke-width="' + breite + '" stroke-dasharray="' + muster + '"/>';
+    const marke = (y, wert, farbe) =>
+      '<text x="' + (xE + 6) + '" y="' + Math.min(H - PB - 2, Math.max(PT + 10, y + 4)) + '" fill="' + farbe +
+      '" font-size="11.5" font-family="ui-monospace,monospace">' + kurz(wert) + "</text>";
+    zukunft =
+      '<path d="M' + x0.toFixed(1) + " " + y0.toFixed(1) + "L" + xE.toFixed(1) + " " + yPace.toFixed(1) +
+      "L" + xE.toFixed(1) + " " + yTyp.toFixed(1) + 'Z" fill="#f4635e" opacity=".13"/>' +
+      strich(yNull, "#34d399", "7 5", 2) +
+      strich(yPace, "#fbbf24", "7 5", 2) +
+      strich(yTyp, "#f4635e", "2 4", 2) +
+      '<line x1="' + xE.toFixed(1) + '" y1="' + PT + '" x2="' + xE.toFixed(1) + '" y2="' + (H - PB) +
+      '" stroke="#f4635e" stroke-width="1" stroke-dasharray="3 4" opacity=".55"/>' +
+      '<text x="' + (xE - 6) + '" y="' + (PT + 11) + '" fill="#f4635e" font-size="11" text-anchor="end" ' +
+      'letter-spacing=".08em">DEADLINE</text>' +
+      marke(yPace, prog.rest, "#fbbf24") +
+      // Liegen beide Enden aufeinander, wuerde die zweite Zahl die erste ueberschreiben.
+      (Math.abs(yTyp - yPace) > 13 ? marke(yTyp, prog.restTypisch, "#f4635e") : "");
+  }
 
   // Werteachse links, ausserhalb der Zeichenflaeche - dadurch ueberlagert die
   // Beschriftung die Kurve nicht mehr.
@@ -499,16 +540,16 @@ function zeichneChart(svg, punkte, totalSupply) {
     Date.parse(daten[daten.length - 1].day) - Date.parse(daten[0].day) > 330 * 86400000;
   // Nie mehr Marken als Punkte: bei drei Tagen stand "Sep 24" sonst doppelt
   // uebereinander, weil mehrere Marken auf denselben Punkt fielen.
-  const marken = Math.max(1, Math.min(6, Math.floor((W - PL - PR) / 130), daten.length - 1));
+  const marken = Math.max(1, Math.min(6, Math.floor((W - PL - PR) / 130), schritte));
   const gesetzt = new Set();
   const datumTexte = Array.from({ length: marken + 1 }, (_, n) => {
-    const i = Math.round((n / marken) * (daten.length - 1));
+    const i = Math.round((n / marken) * schritte);
     if (gesetzt.has(i)) return "";
     gesetzt.add(i);
     const anker = n === 0 ? "start" : n === marken ? "end" : "middle";
     return '<text x="' + X(i) + '" y="' + (H - 11) + '" fill="#7d8ba3" font-size="12.5" ' +
       'text-anchor="' + anker + '" font-family="ui-monospace,monospace">' +
-      new Date(daten[i].day).toLocaleDateString(LOC,
+      new Date(tagBei(i)).toLocaleDateString(LOC,
         ueberJahr ? { month: "short", year: "numeric" } : { month: "short", day: "numeric" }) + "</text>";
   }).join("");
 
@@ -516,7 +557,7 @@ function zeichneChart(svg, punkte, totalSupply) {
     '<defs><linearGradient id="' + verlaufId + '" x1="0" y1="0" x2="0" y2="1">' +
     '<stop offset="0%" stop-color="' + farbe + '" stop-opacity=".3"/>' +
     '<stop offset="100%" stop-color="' + farbe + '" stop-opacity="0"/></linearGradient></defs>' +
-    linien + datumTexte +
+    linien + datumTexte + zukunft +
     '<path d="' + flaeche + '" fill="url(#' + verlaufId + ')"/>' +
     '<path d="' + d + '" fill="none" stroke="' + farbe + '" stroke-width="2.4" ' +
     'stroke-linejoin="round" stroke-linecap="round"/>' +
@@ -534,7 +575,7 @@ function zeichneChart(svg, punkte, totalSupply) {
     const r = holder.getBoundingClientRect();
     const x = ev.clientX - r.left;
     const i = Math.max(0, Math.min(daten.length - 1,
-      Math.round(((x - PL) / (W - PL - PR)) * (daten.length - 1))));
+      Math.round(((x - PL) / (W - PL - PR)) * schritte)));
     const p = daten[i];
 
     cross.style.display = "";
@@ -752,6 +793,8 @@ function zeichneMigration() {
   tip.style.right = "";
   const takt = MIG_TAKTE[MIG.sicht];
   if (takt) {
+    el("migLegende").hidden = true;
+    svg._prognose = null;
     el("migTitel").textContent =
       "Leaving the bridge, per " + (takt === "monat" ? "month" : "week");
     zeichneTempoChart(svg, MIG.punkte, {
@@ -761,7 +804,16 @@ function zeichneMigration() {
     });
   } else {
     el("migTitel").textContent = "Still to migrate";
-    zeichneChart(svg, MIG.punkte, MIG.opts?.totalSupply);
+    // Die Verlaengerung bis zum Stichtag: zwei Tempi als Spanne und die Linie,
+    // die noetig waere. Ohne sie endet der Chart heute und die Frist, um die es
+    // auf dieser Seite geht, kommt im Bild gar nicht vor.
+    const o = MIG.opts;
+    svg._prognose = o?.tageBisDeadline > 0 && o.rest != null
+      ? { tage: o.tageBisDeadline, rest: o.rest, restTypisch: o.restTypisch ?? o.rest, deadline: o.deadline }
+      : null;
+    el("migLegende").hidden = !svg._prognose;
+    if (o?.fensterTage) el("legFenster").textContent = o.fensterTage;
+    zeichneChart(svg, MIG.punkte, o?.totalSupply);
   }
 }
 
@@ -848,6 +900,8 @@ async function ladeOverview() {
   el("deadlinePill").textContent = "Deadline " +
     new Date(m.deadline).toLocaleDateString(LOC, { day: "2-digit", month: "short", year: "numeric" });
   el("perDay").textContent = kurz(m.abfluss_pro_tag);
+  el("perDaySub").textContent = m.fenster_tage ? m.fenster_tage + "-day average" : "";
+  el("perDayTyp").textContent = m.abfluss_typisch != null ? kurz(m.abfluss_typisch) : "—";
   el("daysLeft").textContent = m.tage_bis_deadline ?? "—";
   el("circ").textContent = kurz(d.zirkulierend);
   // Das noetige Tempo gehoert direkt neben das tatsaechliche: nebeneinander
@@ -865,6 +919,11 @@ async function ladeOverview() {
     deadline: m.deadline,
     totalSupply: d.total_supply,
     proTag: m.abfluss_pro_tag ?? 0,
+    // Fuer die gestrichelte Verlaengerung bis zum Stichtag.
+    tageBisDeadline: m.tage_bis_deadline ?? 0,
+    rest: m.rest_bei_deadline,
+    restTypisch: m.rest_bei_deadline_typisch,
+    fensterTage: m.fenster_tage,
   };
   migSchalter();
   zeichneMigration();
@@ -922,12 +981,33 @@ function zeichneBurnKarte(d, m) {
   const noetig = d.bridge_etn / tage;
   const faktor = noetig / (m.abfluss_pro_tag || 1);
   const anteil = m.anteil_bei_deadline * 100;
+  // Zweite Zahl: nur der gewoehnliche Tag. Der Schnitt der letzten Monate haengt
+  // an einzelnen Riesen-Migrationen, und eine Prognose, die daran haengt, waere
+  // eine Prognose auf einen Zufall.
+  const restTyp = m.rest_bei_deadline_typisch;
+  const spanne = restTyp != null && restTyp > rest * 1.05;
+  const anteilTyp = (m.anteil_bei_deadline_typisch ?? 0) * 100;
+  const faktorTyp = noetig / (m.abfluss_typisch || 1);
 
-  el("burnEtn").innerHTML = kurz(rest) +
+  el("burnEtn").innerHTML = (spanne ? kurz(rest) + " - " + kurz(restTyp) : kurz(rest)) +
     ' <span style="font-size:.42em;font-weight:600;color:var(--tx2)">ETN would miss the deadline</span>';
-  el("burnSub").innerHTML =
-    "At today's pace that's what is still waiting on " + deadline + " - <b>" +
-    nf(anteil, 1) + "%</b> of every ETN in existence, held by people who never made the move.";
+  el("burnSub").innerHTML = spanne
+    ? "That is <b>" + nf(anteil, 1) + "% to " + nf(anteilTyp, 1) + "%</b> of every ETN in existence, " +
+      "still sitting in the bridge on " + deadline + ", held by people who never made the move."
+    : "At today's pace that's what is still waiting on " + deadline + " - <b>" +
+      nf(anteil, 1) + "%</b> of every ETN in existence, held by people who never made the move.";
+
+  // Woher die beiden Enden kommen - sonst steht da eine Spanne ohne Herkunft.
+  const grossTag = m.groesster_tag;
+  el("burnBasis").innerHTML = spanne
+    ? "<span>Low end: the last " + (m.fenster_tage ?? 120) + " days repeat (<b>" + kurz(m.abfluss_pro_tag) +
+      " ETN</b> a day" +
+      (grossTag && grossTag.etn > m.abfluss_pro_tag * 10
+        ? ", lifted by a single <b>" + kurz(grossTag.etn) + " ETN</b> transfer on " +
+          new Date(grossTag.tag).toLocaleDateString(LOC, { day: "numeric", month: "short", year: "numeric" })
+        : "") + ").</span>" +
+      "<span>High end: only what crosses on a normal day (<b>" + kurz(m.abfluss_typisch) + " ETN</b>).</span>"
+    : "";
 
   // Balken: geretteter Anteil vs. verbrennender Anteil, gemessen an der
   // Menge, die HEUTE noch in der Bridge liegt.
@@ -941,8 +1021,10 @@ function zeichneBurnKarte(d, m) {
   } else {
     // Bewusst nur der Faktor: er ist nachrechenbar (noetiges Tempo geteilt
     // durch aktuelles) und braucht keine ausgedachte Zusatzgroesse daneben.
-    urteil.innerHTML = "🔥 Migration would have to run <b>" + nf(faktor, 1) +
-      "× faster</b> than today for all of it to make it across.";
+    urteil.innerHTML = "🔥 Migration would have to run <b>" + nf(faktor, 1) + "× faster</b> than the last " +
+      (m.fenster_tage ?? 120) + " days" +
+      (spanne && isFinite(faktorTyp) ? ", or <b>" + nf(faktorTyp, 0) + "× faster</b> than a normal day," : "") +
+      " for all of it to make it across.";
     urteil.style.color = faktor > 3 ? "var(--down)" : "var(--warn)";
   }
 }
