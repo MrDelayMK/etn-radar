@@ -17,6 +17,7 @@ import { chain } from "./api/chain.js";
 import { whatif } from "./api/whatif.js";
 import { walletTokenWerte, walletNftWerte } from "./electroswap.js";
 import { shareSeite } from "./share.js";
+import { snapshotWaechter } from "./waechter.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
@@ -24,6 +25,17 @@ import { shareSeite } from "./share.js";
 const SEITEN_PFAD = /^\/(migration|tiers|leaderboard|activity|chain|whatif|images|clusters|investigate|about|wallet\/[^/]+)\/?$/;
 
 export default {
+  // Cloudflare ruft den Worker nach Zeitplan auf (wrangler.toml, [triggers]):
+  // einmal nachsehen, ob der Snapshot noch frisch ist, und sonst den
+  // GitHub-Lauf nachholen. Siehe src/waechter.js.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      snapshotWaechter(env.DB, env)
+        .then((r) => console.log("waechter:", JSON.stringify(r)))
+        .catch((e) => console.log("waechter-fehler:", String(e)))
+    );
+  },
+
   async fetch(request, env, ctx) {
     const u = new URL(request.url);
     const pfad = u.pathname;
