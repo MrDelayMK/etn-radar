@@ -78,9 +78,11 @@ binding = "DB"
 database_name = "etn-tracker"
 database_id = "b1f4fc13-62ca-4a5f-a5f7-c0862cbb460c"
 
-# Cloudflare ruft den Worker selbst alle 15 Minuten auf. Er liest dann eine
+# Cloudflare ruft den Worker selbst alle 10 Minuten auf. Er liest dann eine
 # Zeile aus D1 und stoesst den GitHub-Snapshot nach, falls GitHub seinen
-# eigenen Zeitplan ausgelassen hat (src/waechter.js). Cron-Trigger sind im
-# Gratis-Tarif enthalten.
+# eigenen Zeitplan ausgelassen hat (src/waechter.js). Zehn Minuten, weil der
+# Waechter beim ersten Aufruf nach der Schwelle (28 Minuten) anstoesst: so
+# trifft er den 30-Minuten-Takt, mit 15 Minuten Abstand wurde daraus ein
+# Stundentakt. Cron-Trigger sind im Gratis-Tarif enthalten.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/10 * * * *"]

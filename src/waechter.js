@@ -12,14 +12,19 @@
 // 30-Minuten-Takt hinaus - es holt nur nach, was ohnehin stattfinden sollte,
 // und belastet den Explorer damit nicht stärker als geplant.
 
-// Ab wann gilt ein Snapshot als überfällig. Der Takt ist 30 Minuten, GitHub
-// startet regelmäßig ein paar Minuten später - 45 Minuten ist deshalb die
-// erste Zahl, bei der wirklich etwas ausgefallen ist.
-export const SNAPSHOT_ALT_MS = 45 * 60 * 1000;
-// Nach einem Anstoß Ruhe: der Lauf selbst braucht ein bis zwei Minuten, und
-// wenn er scheitert, soll nicht alle 15 Minuten ein neuer hinterhergeworfen
-// werden.
-export const WAECHTER_SPERRE_MS = 20 * 60 * 1000;
+// Ab wann gilt ein Snapshot als ueberfaellig.
+//
+// Die Schwelle und der Zeitplan des Waechters haengen zusammen: angestossen
+// wird beim ersten Aufruf NACH Ablauf der Schwelle. Mit 45 Minuten Schwelle
+// und einem Aufruf alle 15 Minuten fiel das auf den Aufruf bei 59 Minuten -
+// die Seite stand damit dauerhaft auf einem Stundentakt statt auf 30 Minuten.
+// Mit 28 Minuten Schwelle und einem Aufruf alle 10 Minuten greift es bei 29
+// Minuten, also genau im gewollten Takt. Mehr Laeufe als die geplanten 48 am
+// Tag entstehen dadurch nicht - der Explorer sieht dieselbe Last wie vorgesehen.
+export const SNAPSHOT_ALT_MS = 28 * 60 * 1000;
+// Nach einem Anstoss Ruhe: der Lauf selbst braucht ein bis zwei Minuten, und
+// ein gescheiterter Lauf soll nicht sofort den naechsten nach sich ziehen.
+export const WAECHTER_SPERRE_MS = 15 * 60 * 1000;
 const NAME = "snapshot_waechter";
 
 /**
