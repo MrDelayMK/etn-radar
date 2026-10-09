@@ -38,7 +38,16 @@ pruef((await hol("/api/overview", { ...env, DONATE_ADDRESS: "0x123" })).daten?.s
 pruef((await hol("/api/overview", { ...env, DONATE_ADDRESS: "" })).daten?.spenden_adresse === null, "ohne Adresse bleibt das Feld leer");
 
 // --- Kursverlauf und entfernte Endpunkte -------------------------------------
-pruef(((await hol("/api/price?period=30d")).daten?.punkte ?? []).length > 0, "Kursverlauf liefert Punkte");
+// Die Kopie in data/etn.db altert: liegt ihr letzter Tag laenger zurueck als
+// der abgefragte Zeitraum, kann die Kurve gar keine Punkte haben. Dann sagt
+// der Test nichts ueber den Code und wird uebersprungen statt rot zu werden.
+const letzterTag = (await db.prepare("SELECT max(day) AS tag FROM price_history").first())?.tag;
+const kopieTageAlt = letzterTag ? (Date.now() - Date.parse(letzterTag + "T00:00:00Z")) / 86400000 : 1e9;
+if (kopieTageAlt < 25) {
+  pruef(((await hol("/api/price?period=30d")).daten?.punkte ?? []).length > 0, "Kursverlauf liefert Punkte");
+} else {
+  console.log("  uebersprungen - lokale Kopie endet am " + letzterTag + " (" + Math.round(kopieTageAlt) + " Tage alt)");
+}
 pruef((await hol("/api/tiers")).status === 404, "/api/tiers bleibt entfernt");
 
 // --- 7-Tage-Veraenderung je Tier ---------------------------------------------
