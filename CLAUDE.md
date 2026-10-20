@@ -160,6 +160,13 @@ vor dem Suchen normalisieren.
   "nicht migriert").
 - Spendenadresse endgültig festlegen.
 - Verhalten nach dem 31.01.2027 einmal im Echtbetrieb prüfen (siehe Abschnitt 2).
+- **Farmen und Pools von ElectroSwap** (Idee vom 20.10.2026, "machen wir später
+  mal"). `GET /farms/52014` listet alle aktiven Farmen, 3.000 Credits pauschal,
+  als "heavy" eingestuft; `GET /pools/52014?limit=100&version=2|3` die Pools,
+  200 + 5 je Pool. Beides ohne Filter: keine einzelne Farm, kein Konto-Filter -
+  "was habe ich in der BOLT/DYNO-Farm" beantwortet die v1 nicht, das ginge nur
+  über den Blockexplorer. Welche Felder kommen, ist nicht dokumentiert (nur
+  "Envelope"), also vor dem Bauen einmal echt abrufen lassen.
 
 Alles andere aus der To-do-Liste ist gebaut und live. MrDelayMK am 29.09.2026:
 "die webseite ist fertig, für den moment."
