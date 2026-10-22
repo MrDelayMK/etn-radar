@@ -46,8 +46,12 @@ export async function kursPunkt(db, env, jetzt = Date.now()) {
   const api = env.EXPLORER_API;
   if (!api) return { ok: false, grund: "kein_explorer" };
 
-  const r = await fetch(api + "/stats", { headers: { accept: "application/json" } }).catch(() => null);
-  if (!r?.ok) return { ok: false, grund: "explorer", status: r?.status ?? 0 };
+  // Mit Kennung: eine Anfrage ohne User-Agent sieht fuer manche Schutzschichten
+  // nach Bot aus und wird abgewiesen - der Explorer soll wissen, wer fragt.
+  const r = await fetch(api + "/stats", {
+    headers: { accept: "application/json", "user-agent": "etn-radar (+https://etn-radar.galacticsl.com)" },
+  }).catch((e) => ({ ok: false, status: 0, fehler: String(e) }));
+  if (!r?.ok) return { ok: false, grund: "explorer", status: r?.status ?? 0, details: r?.fehler ?? null };
   const s = await r.json().catch(() => null);
   const preis = Number(s?.coin_price);
   if (!(preis > 0)) return { ok: false, grund: "kein_preis" };
@@ -87,6 +91,15 @@ export async function kursPunkt(db, env, jetzt = Date.now()) {
  * Gibt immer ein Ergebnis zurück statt zu werfen - ein Wächter, der den Worker
  * umbringt, wäre schlimmer als ein alter Snapshot.
  */
+export async function statusMerken(db, schluessel, ergebnis, jetzt = Date.now()) {
+  await db
+    .prepare("INSERT INTO worker_status (schluessel, wert, zeit) VALUES (?,?,?)" +
+      " ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert, zeit = excluded.zeit")
+    .bind(schluessel, JSON.stringify(ergebnis).slice(0, 500), new Date(jetzt).toISOString())
+    .run()
+    .catch(() => {});
+}
+
 export async function snapshotWaechter(db, env, jetzt = Date.now()) {
   const snap = await db
     .prepare("SELECT taken_at FROM snapshots ORDER BY id DESC LIMIT 1")

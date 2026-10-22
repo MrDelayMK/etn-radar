@@ -344,3 +344,13 @@ CREATE TABLE IF NOT EXISTS kurs_punkte (
   preis REAL NOT NULL,
   cap   REAL
 );
+
+-- Was die Zeitplan-Laeufe des Workers zuletzt gemacht haben. Logs von
+-- Cloudflare sieht man nur mit Zugang zum Konto; hier steht es in der
+-- Datenbank und laesst sich mit einer Abfrage nachlesen - gerade in Zeiten,
+-- in denen niemand aktiv am Projekt arbeitet.
+CREATE TABLE IF NOT EXISTS worker_status (
+  schluessel TEXT PRIMARY KEY,   -- 'waechter' | 'kurspunkt'
+  wert       TEXT NOT NULL,      -- JSON des letzten Ergebnisses
+  zeit       TEXT NOT NULL
+);

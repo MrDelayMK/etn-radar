@@ -17,7 +17,7 @@ import { chain } from "./api/chain.js";
 import { whatif } from "./api/whatif.js";
 import { walletTokenWerte, walletNftWerte } from "./electroswap.js";
 import { shareSeite } from "./share.js";
-import { snapshotWaechter, kursPunkt } from "./waechter.js";
+import { snapshotWaechter, kursPunkt, statusMerken } from "./waechter.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
@@ -29,16 +29,18 @@ export default {
   // einmal nachsehen, ob der Snapshot noch frisch ist, und sonst den
   // GitHub-Lauf nachholen. Siehe src/waechter.js.
   async scheduled(event, env, ctx) {
+    // Beide Ergebnisse landen in worker_status: ohne Zugang zum Cloudflare-Konto
+    // sieht man sonst nicht, ob und warum ein Lauf nichts getan hat.
     ctx.waitUntil(
       snapshotWaechter(env.DB, env)
-        .then((r) => console.log("waechter:", JSON.stringify(r)))
-        .catch((e) => console.log("waechter-fehler:", String(e)))
+        .catch((e) => ({ ok: false, grund: "ausnahme", details: String(e) }))
+        .then((r) => statusMerken(env.DB, "waechter", r))
     );
     // Dabei den Kurs mitnehmen: so haengt die Kurve nicht am Snapshot-Takt.
     ctx.waitUntil(
       kursPunkt(env.DB, env)
-        .then((r) => console.log("kurspunkt:", JSON.stringify(r)))
-        .catch((e) => console.log("kurspunkt-fehler:", String(e)))
+        .catch((e) => ({ ok: false, grund: "ausnahme", details: String(e) }))
+        .then((r) => statusMerken(env.DB, "kurspunkt", r))
     );
   },
 
