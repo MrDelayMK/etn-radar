@@ -11,6 +11,24 @@ import { tagVor, kennzahlen } from "./grundlagen.js";
  * stattdessen im Takt alles neu ziehen, kostete jeder offene Tab zehn
  * Abfragen pro Minute.
  */
+/**
+ * Der juengste bekannte Kurs.
+ *
+ * Der Snapshot bringt alle 30 Minuten einen mit, der Waechter alle zehn. Wer
+ * den Kurs anzeigt, will den neueren von beiden - sonst steht auf der Seite
+ * eine halbe Stunde lang eine Zahl, die der Markt laengst hinter sich hat.
+ * Eine Indexzeile, und beide Endpunkte liegen ohnehin im Zwischenspeicher.
+ */
+export async function neuesterKurs(db, snapZeit, snapPreis) {
+  const p = await db
+    .prepare("SELECT zeit, preis, cap FROM kurs_punkte ORDER BY zeit DESC LIMIT 1")
+    .first()
+    .catch(() => null);
+  if (!(p?.preis > 0)) return { preis: snapPreis ?? null, cap: null, zeit: snapZeit ?? null };
+  if (snapZeit && snapPreis > 0 && snapZeit > p.zeit) return { preis: snapPreis, cap: null, zeit: snapZeit };
+  return { preis: p.preis, cap: p.cap ?? null, zeit: p.zeit };
+}
+
 export async function stand(db) {
   const r = await db
     .prepare("SELECT id, taken_at FROM snapshots WHERE status='ok' ORDER BY id DESC LIMIT 1")
@@ -237,10 +255,13 @@ export async function overview(db, env) {
     .first()
     .catch(() => null);
 
+  const kurs = await neuesterKurs(db, snap.taken_at, snap.etn_price);
+
   return {
     snapshot: snap,
     census_wallets: censusListe?.von != null ? censusListe.bis - censusListe.von + 1 : 0,
-    preis: snap.etn_price,
+    preis: kurs.preis,
+    preis_zeit: kurs.zeit,
     telegram_bot: env.TELEGRAM_BOT_USERNAME ?? null,
     // Optional wie der Telegram-Bot: ohne Variable bleibt der Spendenknopf
     // unsichtbar. Geprueft, damit ein Tippfehler in der Konfiguration nie als
@@ -593,6 +614,10 @@ export async function network(db, env) {
     .reverse()
     .map((d) => ({ day: d.date, tx: zahl(d.transaction_count) }));
 
+  // Kurs und Marktkapitalisierung kommen aus dem juengsten Punkt, der Rest der
+  // Kacheln aus dem Snapshot - Blockhoehe und Gaspreis vertragen die halbe Stunde.
+  const kurs = await neuesterKurs(db, kz?.erstellt_am ?? null, zahl(s.coin_price));
+
   return {
     blockhoehe: zahl(s.total_blocks),
     transaktionen: zahl(s.total_transactions),
@@ -602,8 +627,9 @@ export async function network(db, env) {
     auslastung: zahl(s.network_utilization_percentage),
     gas_used_heute: zahl(s.gas_used_today),
     gaspreis: zahl(s.gas_prices?.average),
-    preis: zahl(s.coin_price),
-    marktkapitalisierung: zahl(s.market_cap),
+    preis: kurs.preis ?? zahl(s.coin_price),
+    preis_zeit: kurs.zeit,
+    marktkapitalisierung: kurs.cap ?? zahl(s.market_cap),
     tx_verlauf: tage,
     tx_schnitt: tage.length ? tage.reduce((a, b) => a + b.tx, 0) / tage.length : null,
   };
