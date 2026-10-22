@@ -360,12 +360,19 @@ export async function preisverlauf(db, env, u) {
   const p = u.searchParams.get("period") ?? "30d";
   const tage = KURS_ZEITRAUM[p] ?? 30;
 
+  // Snapshots (halbstuendlich) und die Zwischenpunkte des Waechters (alle zehn
+  // Minuten, nur bei Aenderung) sind dieselbe Quelle - der Kurs des Explorers.
+  // Zusammen ergeben sie die feine Kurve; getrennt saehe man eine Treppe.
   const snapshots = async (abZeit) =>
     (
       await db
         .prepare(
-          "SELECT taken_at AS zeit, etn_price AS preis FROM snapshots" +
-            " WHERE etn_price IS NOT NULL AND taken_at >= ? ORDER BY taken_at ASC"
+          "SELECT zeit, preis FROM (" +
+            "  SELECT taken_at AS zeit, etn_price AS preis FROM snapshots" +
+            "   WHERE etn_price IS NOT NULL AND taken_at >= ?1" +
+            "  UNION ALL" +
+            "  SELECT zeit, preis FROM kurs_punkte WHERE zeit >= ?1" +
+            ") ORDER BY zeit ASC"
         )
         .bind(abZeit)
         .all()

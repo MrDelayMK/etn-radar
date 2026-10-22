@@ -17,7 +17,7 @@ import { chain } from "./api/chain.js";
 import { whatif } from "./api/whatif.js";
 import { walletTokenWerte, walletNftWerte } from "./electroswap.js";
 import { shareSeite } from "./share.js";
-import { snapshotWaechter } from "./waechter.js";
+import { snapshotWaechter, kursPunkt } from "./waechter.js";
 
 // Saubere Seitenadressen (/migration, /leaderboard, /wallet/0x...) sind alle
 // dieselbe Seite - welcher Bereich sichtbar ist, entscheidet index.html anhand
@@ -33,6 +33,12 @@ export default {
       snapshotWaechter(env.DB, env)
         .then((r) => console.log("waechter:", JSON.stringify(r)))
         .catch((e) => console.log("waechter-fehler:", String(e)))
+    );
+    // Dabei den Kurs mitnehmen: so haengt die Kurve nicht am Snapshot-Takt.
+    ctx.waitUntil(
+      kursPunkt(env.DB, env)
+        .then((r) => console.log("kurspunkt:", JSON.stringify(r)))
+        .catch((e) => console.log("kurspunkt-fehler:", String(e)))
     );
   },
 

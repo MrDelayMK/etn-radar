@@ -691,3 +691,14 @@ CREATE TABLE IF NOT EXISTS wallet_token_tage (
   menge   REAL NOT NULL,
   PRIMARY KEY (address, tag, token)
 );
+
+-- Kurspunkte zwischen den Snapshots. Der Waechter im Worker laeuft ohnehin
+-- alle 10 Minuten; er schreibt dabei den Explorer-Kurs mit, wenn er sich
+-- geaendert hat. Dadurch ist die Kurve fuer kurze Zeitraeume nicht mehr an
+-- den halbstuendlichen Snapshot gebunden. Aelteres als eine Woche faellt
+-- raus - fuer laengere Zeitraeume gibt es die Tagesreihe.
+CREATE TABLE IF NOT EXISTS kurs_punkte (
+  zeit  TEXT PRIMARY KEY,   -- ISO8601 UTC
+  preis REAL NOT NULL,
+  cap   REAL
+);

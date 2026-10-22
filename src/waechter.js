@@ -26,6 +26,61 @@ export const SNAPSHOT_ALT_MS = 28 * 60 * 1000;
 // ein gescheiterter Lauf soll nicht sofort den naechsten nach sich ziehen.
 export const WAECHTER_SPERRE_MS = 15 * 60 * 1000;
 const NAME = "snapshot_waechter";
+// So lange bleiben die Zwischenpunkte liegen. Darueber hinaus zeigt die Kurve
+// ohnehin die Tagesreihe, und die Tabelle bliebe klein genug fuer jede Abfrage.
+export const KURS_BEHALTEN_TAGE = 7;
+
+/**
+ * Kurs zwischen zwei Snapshots mitschreiben.
+ *
+ * Der Explorer bewegt seinen Kurs unabhängig von unserem Takt: gemessen am
+ * 22.10.2026 lag der Live-Wert 1,1 Prozent über dem letzten Punkt der Kurve,
+ * keine halbe Stunde nach dem Snapshot. Weil der Wächter ohnehin alle zehn
+ * Minuten läuft, nimmt er den Kurs gleich mit - eine Explorer-Anfrage je Lauf,
+ * also 144 am Tag, gegenüber einem Limit von 4 pro Minute für Live-Abrufe.
+ *
+ * Geschrieben wird nur, was sich geändert hat; sonst stünden dort 144 gleiche
+ * Zeilen am Tag.
+ */
+export async function kursPunkt(db, env, jetzt = Date.now()) {
+  const api = env.EXPLORER_API;
+  if (!api) return { ok: false, grund: "kein_explorer" };
+
+  const r = await fetch(api + "/stats", { headers: { accept: "application/json" } }).catch(() => null);
+  if (!r?.ok) return { ok: false, grund: "explorer", status: r?.status ?? 0 };
+  const s = await r.json().catch(() => null);
+  const preis = Number(s?.coin_price);
+  if (!(preis > 0)) return { ok: false, grund: "kein_preis" };
+
+  // Der zuletzt bekannte Kurs kann aus einem Zwischenpunkt ODER aus dem
+  // Snapshot stammen - je nachdem, was später war.
+  const [letzter, letzterSnap] = await Promise.all([
+    db.prepare("SELECT zeit, preis FROM kurs_punkte ORDER BY zeit DESC LIMIT 1").first().catch(() => null),
+    db.prepare("SELECT taken_at AS zeit, etn_price AS preis FROM snapshots WHERE status='ok' ORDER BY id DESC LIMIT 1")
+      .first().catch(() => null),
+  ]);
+  const juenger = [letzter, letzterSnap].filter((x) => x?.zeit && x.preis > 0)
+    .sort((a, b) => (a.zeit < b.zeit ? 1 : -1))[0];
+  if (juenger && Math.abs(preis - juenger.preis) < juenger.preis * 1e-6) {
+    return { ok: true, grund: "unveraendert", preis };
+  }
+
+  await db
+    .prepare("INSERT INTO kurs_punkte (zeit, preis, cap) VALUES (?,?,?)" +
+      " ON CONFLICT(zeit) DO UPDATE SET preis = excluded.preis, cap = excluded.cap")
+    .bind(new Date(jetzt).toISOString(), preis, Number(s?.market_cap) || null)
+    .run();
+
+  // Aufräumen einmal zur vollen Stunde, nicht bei jedem Lauf.
+  if (new Date(jetzt).getUTCMinutes() < 10) {
+    await db
+      .prepare("DELETE FROM kurs_punkte WHERE zeit < ?")
+      .bind(new Date(jetzt - KURS_BEHALTEN_TAGE * 86400000).toISOString())
+      .run()
+      .catch(() => {});
+  }
+  return { ok: true, grund: "geschrieben", preis };
+}
 
 /**
  * Prüft das Alter des letzten Snapshots und stößt bei Bedarf snapshot.yml an.

@@ -337,3 +337,10 @@ CREATE TABLE IF NOT EXISTS wallet_token_tage (
   menge   REAL NOT NULL,
   PRIMARY KEY (address, tag, token)
 );
+
+-- Kurspunkte zwischen den Snapshots (siehe schema.sql).
+CREATE TABLE IF NOT EXISTS kurs_punkte (
+  zeit  TEXT PRIMARY KEY,
+  preis REAL NOT NULL,
+  cap   REAL
+);

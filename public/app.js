@@ -1254,9 +1254,25 @@ function preisTexte(zusatz) {
   ];
 }
 
-el("prShare").addEventListener("click", async () => {
-  // Der Vergleichscoin darf den Dialog nicht aufhalten - ohne ihn eine Zeile weniger.
-  const varianten = preisTexte(await preisVergleich());
+el("prShare").addEventListener("click", async (ev) => {
+  // Der Kurs im Post soll der von JETZT sein, nicht der vom Seitenaufruf: wer
+  // den Reiter eine Stunde offen hat, teilte sonst eine Stunde alte Zahl.
+  // Der Worker haelt die Antwort 120 Sekunden - der Explorer sieht also
+  // hoechstens alle zwei Minuten eine Anfrage, egal wie viele Leute teilen.
+  const knopf = ev.currentTarget;
+  knopf.disabled = true;
+  let netz = null, vergleich = null;
+  try {
+    [netz, vergleich] = await Promise.all([
+      hole("/api/network", true).catch(() => null),
+      // Der Vergleichscoin darf den Dialog nicht aufhalten - ohne ihn eine Zeile weniger.
+      preisVergleich(),
+    ]);
+  } finally {
+    knopf.disabled = false;
+  }
+  if (netz?.preis > 0) fuellePreiskarte(netz);
+  const varianten = preisTexte(vergleich);
   if (!varianten) return;
   shareTextOeffnen({
     titel: "\ud83d\udce2 Share the ETN price",
